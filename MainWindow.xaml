@@ -1,11 +1,56 @@
 ﻿<Window x:Class="SoundBar.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:SoundBar"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="SoundBar" Height="450" Width="400"
+        Background="#2D2D30">
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Volume Mixer" 
+                   Foreground="White" 
+                   FontSize="18" 
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,20"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Apps}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding Name}" 
+                                       Foreground="White"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+
+                            <Slider Grid.Column="1" 
+                                    Minimum="0.0" 
+                                    Maximum="1.0" 
+                                    Value="{Binding Volume}"
+                                    Margin="10,0"
+                                    IsMoveToPointEnabled="True"/>
+
+                            <TextBlock Grid.Column="2" 
+                                       Foreground="#AAAAAA"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right">
+                                <TextBlock.Text>
+                                    <Binding Path="Volume" StringFormat="P0"/>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
     </Grid>
 </Window>
