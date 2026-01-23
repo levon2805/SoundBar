@@ -34,13 +34,24 @@ namespace SoundBar.Services
                             // Some system sounds don't have PID
                             if (process == null) continue;
 
+                            // Try to get icon path, if access denied catch error and set to null
+                            string? safeIconPath = null;
+                            try
+                            {
+                                safeIconPath = process.MainModule?.FileName;
+                            }
+                            catch (System.ComponentModel.Win32Exception)
+                            {
+                                // Ignore and keep going
+                            }
+
                             apps.Add(new AudioAppModel
                             {
                                 ProcessId = process.Id,
                                 Name = process.ProcessName,
                                 Volume = simpleVolume.MasterVolume,
                                 IsMuted = simpleVolume.IsMuted,
-                                IconPath = process.MainModule?.FileName
+                                IconPath = safeIconPath
                             });
                         }
                     }
