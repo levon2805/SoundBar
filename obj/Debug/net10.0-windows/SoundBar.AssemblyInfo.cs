@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SoundBar")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6390f678dcb34f048a45960a6d6186cc60286e84")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7327467c0676857f99da0e4c25003b50f5b09b77")]
 [assembly: System.Reflection.AssemblyProductAttribute("SoundBar")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SoundBar")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
