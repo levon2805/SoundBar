@@ -1,4 +1,4 @@
-﻿using QuickMixer.Models;
+﻿using SoundBar.Models;
 using System.Collections.Generic;
 
 

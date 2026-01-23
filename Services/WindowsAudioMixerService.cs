@@ -1,10 +1,13 @@
-﻿using System;
+﻿using CSCore.CoreAudioAPI;
+using SoundBar.Models;
+using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Diagnostics;
 
 namespace SoundBar.Services
 {
-    internal class WindowsAudioMixerService
+    internal class WindowsAudioMixerService : IAudioMixerService
     {
+
     }
 }

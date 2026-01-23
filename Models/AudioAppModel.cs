@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace QuickMixer.Models
+namespace SoundBar.Models
 { 
     // Interface that tells UI the value has changed and needs updating
     public class AudioAppModel : INotifyPropertyChanged
