@@ -3,6 +3,8 @@ using SoundBar.Services;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Windows;
 
 namespace SoundBar.ViewModels
 {
@@ -27,15 +29,36 @@ namespace SoundBar.ViewModels
 
         public void LoadApps()
         {
-            // Get fresh list from the backend
-            var sessions = _audioService.GetActiveAudioSessions();
-
-            // Clear old list and add new items
-            Apps.Clear();
-            foreach (var app in sessions)
+            // Create the thread
+            var thread = new Thread(() =>
             {
-                Apps.Add(app);
-            }
+                try
+                {
+                    // Get fresh list from the backend
+                    var sessions = _audioService.GetActiveAudioSessions();
+
+                    // Update UI thread safely
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // Clear old list and add new items
+                        Apps.Clear();
+                        foreach (var app in sessions)
+                        {
+                            Apps.Add(app);
+                        }
+                    });
+                }
+                catch (System.Exception)
+                {
+                    // Ignore errors for now
+                }
+            });
+
+            // Force thread to be MTA
+            thread.SetApartmentState(ApartmentState.MTA);
+
+            // Start the thread
+            thread.Start();
         }
 
         // Standard for MVVM updates
