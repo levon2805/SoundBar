@@ -1,6 +1,4 @@
 ﻿using SoundBar.Models;
-using System.Collections.Generic;
-
 
 namespace SoundBar.Services
 {

@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 
 namespace SoundBar.Models
-{ 
+{
     // Interface that tells UI the value has changed and needs updating
     public class AudioAppModel : INotifyPropertyChanged
     {
@@ -12,11 +12,12 @@ namespace SoundBar.Models
         // The display name
         public string Name { get; set; }
 
-        // Path to the .exe 
+        // Path to the .exe
         public string IconPath { get; set; }
 
         // The Volume level (0.0 to 1.0)
         private float _volume;
+
         public float Volume
         {
             get => _volume;
@@ -34,6 +35,7 @@ namespace SoundBar.Models
 
         // Whether the app is muted
         private bool _isMuted;
+
         public bool IsMuted
         {
             get => _isMuted;
@@ -49,6 +51,7 @@ namespace SoundBar.Models
 
         // Code required by INotifyPropertyChanged
         public event PropertyChangedEventHandler PropertyChanged;
+
         protected void OnPropertyChanged([CallerMemberName] string name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

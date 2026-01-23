@@ -1,6 +1,4 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
+﻿using System.Windows;
 
 namespace SoundBar
 {
@@ -10,5 +8,4 @@ namespace SoundBar
     public partial class App : Application
     {
     }
-
 }

@@ -1,8 +1,23 @@
 {
   "version": 2,
-  "dgSpecHash": "reeMIKff4aE=",
+  "dgSpecHash": "JAbB/alCA/Q=",
   "success": true,
   "projectFilePath": "C:\\Personal Projects\\SoundBar\\SoundBar.csproj",
-  "expectedPackageFiles": [],
-  "logs": []
+  "expectedPackageFiles": [
+    "C:\\Users\\UKGC\\.nuget\\packages\\cscore\\1.2.1.2\\cscore.1.2.1.2.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1701",
+      "level": "Warning",
+      "message": "Package 'CSCore 1.2.1.2' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0-windows7.0'. This package may not be fully compatible with your project.",
+      "projectPath": "C:\\Personal Projects\\SoundBar\\SoundBar.csproj",
+      "warningLevel": 1,
+      "filePath": "C:\\Personal Projects\\SoundBar\\SoundBar.csproj",
+      "libraryId": "CSCore",
+      "targetGraphs": [
+        "net10.0-windows7.0"
+      ]
+    }
+  ]
 }
