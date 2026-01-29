@@ -13,6 +13,9 @@ namespace SoundBar.Services
         {
             var apps = new List<AudioAppModel>();
 
+            // Track which IDs we have processed to prevent duplicates
+            var addedProcessIds = new HashSet<int>();
+
             // Get the default audio device
             using (var enumerator = new MMDeviceEnumerator())
             using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
@@ -32,8 +35,15 @@ namespace SoundBar.Services
                         using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                         {
                             var process = sessionControl.Process;
-                            // Some system sounds don't have PID
-                            if (process == null) continue;
+
+                            // Ignore Idle (ID 0) and dead processes
+                            if (process == null || process.Id == 0) continue;
+
+                            // Ignore Inactive sessions
+                            if (sessionControl.SessionState != AudioSessionState.AudioSessionStateActive) continue;
+
+                            // If we already have a slider for this App ID, skip it to prevent duplicates
+                            if (addedProcessIds.Contains(process.Id)) continue;
 
                             // Try to get icon path, if access denied catch error and set to null
                             string? safeIconPath = null;
@@ -46,7 +56,6 @@ namespace SoundBar.Services
                                 // Ignore and keep going
                             }
 
-                            // Pass this to the constructor
                             var newApp = new AudioAppModel(this)
                             {
                                 ProcessId = process.Id,
@@ -55,7 +64,11 @@ namespace SoundBar.Services
                                 IsMuted = simpleVolume.IsMuted,
                                 IconPath = safeIconPath
                             };
+
                             apps.Add(newApp);
+
+                            // Mark this ID as added
+                            addedProcessIds.Add(process.Id);
                         }
                     }
                 }
@@ -65,7 +78,6 @@ namespace SoundBar.Services
 
         public void SetVolume(int processId, float level)
         {
-            // Reuse helper method for finding specific session and applying changes
             PerformActionOnSession(processId, (volumeControl) =>
             {
                 volumeControl.MasterVolume = level;
@@ -83,7 +95,7 @@ namespace SoundBar.Services
         // Helper method as SetVolume and SetMute need to find the session first
         private void PerformActionOnSession(int targetProcessId, Action<SimpleAudioVolume> action)
         {
-            // Run on background thread
+            // Run this on a background thread (MTA) automatically
             Task.Run(() =>
             {
                 try
