@@ -1,7 +1,9 @@
 ﻿using SoundBar.Models;
 using SoundBar.Services;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows;
@@ -23,42 +25,73 @@ namespace SoundBar.ViewModels
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
 
-            // Load the initial data
-            LoadApps();
+            // Start the monitoring loop
+            StartPolling();
         }
 
-        public void LoadApps()
+        public void StartPolling()
         {
             // Create the thread
             var thread = new Thread(() =>
             {
-                try
+                // Loop forever to keep checking for changes
+                while (true)
                 {
-                    // Get fresh list from the backend
-                    var sessions = _audioService.GetActiveAudioSessions();
-
-                    // Update UI thread safely
-                    Application.Current.Dispatcher.Invoke(() =>
+                    try
                     {
-                        // Clear old list and add new items
-                        Apps.Clear();
-                        foreach (var app in sessions)
+                        // Get fresh list from the backend
+                        var sessions = _audioService.GetActiveAudioSessions();
+
+                        // Update UI thread safely
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
-                            Apps.Add(app);
-                        }
-                    });
-                }
-                catch (System.Exception)
-                {
-                    // Ignore errors for now
+                            UpdateCollection(sessions);
+                        });
+                    }
+                    catch (System.Exception)
+                    {
+                        // Ignore errors for now
+                    }
+
+                    // Wait 3 seconds before checking again
+                    Thread.Sleep(3000);
                 }
             });
 
             // Force thread to be MTA
             thread.SetApartmentState(ApartmentState.MTA);
 
+            // CRITICAL FIX: Make this a background thread so it dies when the App closes
+            thread.IsBackground = true;
+
             // Start the thread
             thread.Start();
+        }
+
+        private void UpdateCollection(List<AudioAppModel> latestSessions)
+        {
+            // Remove apps that are no longer running
+            // Loop backwards so we can remove items safely
+            for (int i = Apps.Count - 1; i >= 0; i--)
+            {
+                var existingApp = Apps[i];
+
+                // If existing app is NOT in the new list...
+                if (!latestSessions.Any(x => x.ProcessId == existingApp.ProcessId))
+                {
+                    Apps.RemoveAt(i);
+                }
+            }
+
+            // Add new apps that just started
+            foreach (var newApp in latestSessions)
+            {
+                // If new app is NOT in our current list...
+                if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
+                {
+                    Apps.Add(newApp);
+                }
+            }
         }
 
         // Standard for MVVM updates
