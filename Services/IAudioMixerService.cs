@@ -12,5 +12,11 @@ namespace SoundBar.Services
 
         // Mutes or unmutes specific app
         void SetMute(int processID, bool isMuted);
+
+        // Master volume controls
+        float GetMasterVolume();
+        void SetMasterVolume(float level);
+        bool GetMasterMute();
+        void SetMasterMute(bool isMuted);
     }
 }
