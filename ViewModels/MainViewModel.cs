@@ -17,6 +17,24 @@ namespace SoundBar.ViewModels
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
+        // Master Volume Property
+        private float _masterVolume;
+        public float MasterVolume
+        {
+            get => _masterVolume;
+            set
+            {
+                if (_masterVolume != value)
+                {
+                    _masterVolume = value;
+                    OnPropertyChanged();
+
+                    // Send command to Windows
+                    _audioService.SetMasterVolume(_masterVolume);
+                }
+            }
+        }
+
         public MainViewModel()
         {
             // Setup data container
@@ -24,6 +42,9 @@ namespace SoundBar.ViewModels
 
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
+
+            // Initial load of master volume
+            _masterVolume = _audioService.GetMasterVolume();
 
             // Start the monitoring loop
             StartPolling();
@@ -42,10 +63,20 @@ namespace SoundBar.ViewModels
                         // Get fresh list from the backend
                         var sessions = _audioService.GetActiveAudioSessions();
 
+                        // Get System Volume
+                        var systemVol = _audioService.GetMasterVolume();
+
                         // Update UI thread safely
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             UpdateCollection(sessions);
+
+                            // Sync Master Volume (Update backing field to avoid triggering setter loop)
+                            if (_masterVolume != systemVol)
+                            {
+                                _masterVolume = systemVol;
+                                OnPropertyChanged(nameof(MasterVolume));
+                            }
                         });
                     }
                     catch (System.Exception)
