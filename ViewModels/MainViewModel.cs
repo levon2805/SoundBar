@@ -61,7 +61,7 @@ namespace SoundBar.ViewModels
             // Force thread to be MTA
             thread.SetApartmentState(ApartmentState.MTA);
 
-            // CRITICAL FIX: Make this a background thread so it dies when the App closes
+            // Make this a background thread so it dies when the App closes
             thread.IsBackground = true;
 
             // Start the thread
@@ -76,7 +76,7 @@ namespace SoundBar.ViewModels
             {
                 var existingApp = Apps[i];
 
-                // If existing app is NOT in the new list...
+                // If existing app is not in the new list
                 if (!latestSessions.Any(x => x.ProcessId == existingApp.ProcessId))
                 {
                     Apps.RemoveAt(i);
@@ -86,7 +86,7 @@ namespace SoundBar.ViewModels
             // Add new apps that just started
             foreach (var newApp in latestSessions)
             {
-                // If new app is NOT in our current list...
+                // If new app is not in our current list
                 if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
                 {
                     Apps.Add(newApp);
