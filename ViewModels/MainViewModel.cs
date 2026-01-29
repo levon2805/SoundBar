@@ -53,8 +53,8 @@ namespace SoundBar.ViewModels
                         // Ignore errors for now
                     }
 
-                    // Wait 3 seconds before checking again
-                    Thread.Sleep(3000);
+                    // Poll every 1 second
+                    Thread.Sleep(1000);
                 }
             });
 
@@ -90,6 +90,27 @@ namespace SoundBar.ViewModels
                 if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
                 {
                     Apps.Add(newApp);
+                }
+            }
+
+            // Sync existing apps
+            // If the user changed volume in Windows, update our slider to match
+            foreach (var existingApp in Apps)
+            {
+                var match = latestSessions.FirstOrDefault(x => x.ProcessId == existingApp.ProcessId);
+                if (match != null)
+                {
+                    // Update volume if changed externally
+                    if (existingApp.Volume != match.Volume)
+                    {
+                        existingApp.Volume = match.Volume;
+                    }
+
+                    // Update mute state if changed externally
+                    if (existingApp.IsMuted != match.IsMuted)
+                    {
+                        existingApp.IsMuted = match.IsMuted;
+                    }
                 }
             }
         }
