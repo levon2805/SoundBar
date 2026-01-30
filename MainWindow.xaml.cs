@@ -1,6 +1,8 @@
 ﻿using SoundBar.ViewModels;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace SoundBar
 {
@@ -33,6 +35,28 @@ namespace SoundBar
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+        }
+
+        // Logic for the "Always on Top" pin
+        private void PinButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Toggle the Window property
+            this.Topmost = !this.Topmost;
+
+            // Change visual style of the button
+            if (sender is Button btn)
+            {
+                if (this.Topmost)
+                {
+                    // Bright White for active
+                    btn.Foreground = Brushes.White;
+                }
+                else
+                {
+                    // Dim Grey for inactive
+                    btn.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#555555"));
+                }
+            }
         }
     }
 }
