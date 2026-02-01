@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using SoundBar.Services;
 
@@ -19,6 +20,9 @@ namespace SoundBar.Models
         // Path to the .exe
         public string? IconPath { get; set; }
 
+        // Track when we last touched this slider
+        public DateTime LastModified { get; private set; } = DateTime.MinValue;
+
         // The Volume level (0.0 to 1.0)
         private float _volume;
 
@@ -31,6 +35,10 @@ namespace SoundBar.Models
                 if (_volume != value)
                 {
                     _volume = value;
+
+                    // Update timestamp so we know the user is interacting
+                    LastModified = DateTime.Now;
+
                     // This triggers the event that the UI listens for
                     OnPropertyChanged();
 
@@ -54,6 +62,10 @@ namespace SoundBar.Models
                 if (_isMuted != value)
                 {
                     _isMuted = value;
+
+                    // Update timestamp here too
+                    LastModified = DateTime.Now;
+
                     OnPropertyChanged();
 
                     // Actually mutes/unmutes
