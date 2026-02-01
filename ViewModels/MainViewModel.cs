@@ -1,5 +1,6 @@
 ﻿using SoundBar.Models;
 using SoundBar.Services;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -17,6 +18,9 @@ namespace SoundBar.ViewModels
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
+        // Timestamp for Master Volume
+        private DateTime _lastMasterVolumeChange = DateTime.MinValue;
+
         // Master Volume Property
         private float _masterVolume;
         public float MasterVolume
@@ -27,6 +31,10 @@ namespace SoundBar.ViewModels
                 if (_masterVolume != value)
                 {
                     _masterVolume = value;
+
+                    // Update timestamp on user interaction
+                    _lastMasterVolumeChange = DateTime.Now;
+
                     OnPropertyChanged();
 
                     // Send command to Windows
@@ -71,11 +79,15 @@ namespace SoundBar.ViewModels
                         {
                             UpdateCollection(sessions);
 
-                            // Sync Master Volume (Update backing field to avoid triggering setter loop)
-                            if (_masterVolume != systemVol)
+                            // Only update Master Volume if user hasn't touched it for 2 seconds
+                            if ((DateTime.Now - _lastMasterVolumeChange).TotalSeconds > 2)
                             {
-                                _masterVolume = systemVol;
-                                OnPropertyChanged(nameof(MasterVolume));
+                                // Sync Master Volume (Update backing field to avoid triggering setter loop)
+                                if (_masterVolume != systemVol)
+                                {
+                                    _masterVolume = systemVol;
+                                    OnPropertyChanged(nameof(MasterVolume));
+                                }
                             }
                         });
                     }
@@ -131,16 +143,20 @@ namespace SoundBar.ViewModels
                 var match = latestSessions.FirstOrDefault(x => x.ProcessId == existingApp.ProcessId);
                 if (match != null)
                 {
-                    // Update volume if changed externally
-                    if (existingApp.Volume != match.Volume)
+                    // Check if user is currently dragging (modified < 2 seconds ago)
+                    if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
                     {
-                        existingApp.Volume = match.Volume;
-                    }
+                        // Update volume if changed externally
+                        if (existingApp.Volume != match.Volume)
+                        {
+                            existingApp.Volume = match.Volume;
+                        }
 
-                    // Update mute state if changed externally
-                    if (existingApp.IsMuted != match.IsMuted)
-                    {
-                        existingApp.IsMuted = match.IsMuted;
+                        // Update mute state if changed externally
+                        if (existingApp.IsMuted != match.IsMuted)
+                        {
+                            existingApp.IsMuted = match.IsMuted;
+                        }
                     }
                 }
             }
