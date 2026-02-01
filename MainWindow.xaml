@@ -35,7 +35,8 @@
                                FontWeight="Bold"
                                VerticalAlignment="Center"/>
 
-                    <Button Grid.Column="1"
+                    <Button x:Name="PinButton"
+						    Grid.Column="1"
                             Content="📌" 
                             Width="30" Height="30"
                             Background="Transparent"
