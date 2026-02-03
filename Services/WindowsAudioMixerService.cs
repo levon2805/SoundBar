@@ -38,6 +38,10 @@ namespace SoundBar.Services
                             // Ignore Inactive sessions
                             if (sessionControl.SessionState != AudioSessionState.AudioSessionStateActive) continue;
 
+                            
+                            // This hides the background processes
+                            if (process.MainWindowHandle == IntPtr.Zero) continue;
+
                             // If we already have a slider for this App ID, skip it to prevent duplicates
                             if (addedProcessIds.Contains(process.Id)) continue;
 
