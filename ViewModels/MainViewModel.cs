@@ -75,7 +75,7 @@ namespace SoundBar.ViewModels
                         var systemVol = _audioService.GetMasterVolume();
 
                         // Update UI thread safely
-                        Application.Current.Dispatcher.Invoke(() =>
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             UpdateCollection(sessions);
 
