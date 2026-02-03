@@ -5,7 +5,8 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Icon="/Assets/SoundBar Logo.ico">
 
     <Border Background="#2D2D30" 
             CornerRadius="15" 
