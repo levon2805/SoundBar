@@ -39,7 +39,6 @@ namespace SoundBar.Services
                 {
                     LatestVersion = releaseInfo.TagName;
 
-                    // Temporary logic for testing: If versions are DIFFERENT, we consider it an update.
                     // Before actual release, change this to: if (IsNewerVersion(LatestVersion, CurrentVersion))
                     if (LatestVersion != CurrentVersion)
                     {

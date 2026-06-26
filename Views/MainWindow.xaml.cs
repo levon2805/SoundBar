@@ -188,6 +188,43 @@ namespace SoundBar.Views
             ViewModel.ApplyUpdate();
         }
 
+        private async void SavePresetButton_Click(object sender, RoutedEventArgs e)
+        {
+            var textBox = new TextBox { PlaceholderText = "e.g., Gaming Mode, Focus Mode", Margin = new Thickness(0, 10, 0, 0) };
+            
+            var dialog = new ContentDialog
+            {
+                Title = "Save New Audio Preset",
+                Content = new StackPanel 
+                { 
+                    Children = 
+                    { 
+                        new TextBlock { Text = "Enter a name for this preset to save your current active volumes:" },
+                        textBox
+                    }
+                },
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                ViewModel.SavePreset(textBox.Text);
+            }
+        }
+
+        private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.SelectedPreset != null)
+            {
+                ViewModel.DeletePreset(ViewModel.SelectedPreset);
+            }
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             SaveWindowSettings();

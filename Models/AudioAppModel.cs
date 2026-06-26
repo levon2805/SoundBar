@@ -44,9 +44,9 @@ namespace SoundBar.Models
                     OnPropertyChanged(nameof(VolumePercentage));
 
                     // Actually changes the volume
-                    if (_audioService != null)
+                    if (_audioService != null && !string.IsNullOrEmpty(Name))
                     {
-                        _audioService.SetVolume(ProcessId, _volume);
+                        _audioService.SetVolume(Name, _volume);
                     }
                 }
             }
@@ -56,9 +56,9 @@ namespace SoundBar.Models
         // Useful if the game destroyed its audio session and just recreated a new one
         public void PushVolumeToOS()
         {
-            if (_audioService != null)
+            if (_audioService != null && !string.IsNullOrEmpty(Name))
             {
-                _audioService.SetVolume(ProcessId, _volume);
+                _audioService.SetVolume(Name, _volume);
             }
         }
 
@@ -96,9 +96,9 @@ namespace SoundBar.Models
                     OnPropertyChanged();
 
                     // Actually mutes/unmutes
-                    if (_audioService != null)
+                    if (_audioService != null && !string.IsNullOrEmpty(Name))
                     {
-                        _audioService.SetMute(ProcessId, _isMuted);
+                        _audioService.SetMute(Name, _isMuted);
                     }
                 }
             }
