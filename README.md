@@ -12,6 +12,8 @@ The application is built as a completely self-contained, portable `.exe`. You do
 3. Extract the folder anywhere on your computer.
 4. Double click `SoundBar.exe` to run the app!
 
+> **Note on Windows SmartScreen:** Because this is a new open-source application, Windows may show a "Windows protected your PC" warning when you first run the app. This is completely normal for new independent software. To run the app, simply click **"More info"** and then **"Run anyway"**.
+
 ## 🛠️ Building for Release (For Developers)
 If you are compiling this project from source and want to generate the portable folder to upload to GitHub Releases, run the following command in your terminal:
 
