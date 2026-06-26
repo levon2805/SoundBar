@@ -14,6 +14,16 @@ namespace SoundBar.ViewModels
     public class MainViewModel : INotifyPropertyChanged
     {
         private readonly IAudioMixerService _audioService;
+        private readonly SettingsService _settingsService;
+
+        // List of hidden apps
+        public ObservableCollection<string> HiddenApps { get; set; }
+
+        // List of allowed background apps
+        public ObservableCollection<string> AllowedBackgroundApps { get; set; }
+
+        // List of raw system background apps for the UI to display
+        public ObservableCollection<string> SystemBackgroundApps { get; set; }
 
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
@@ -58,8 +68,9 @@ namespace SoundBar.ViewModels
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
 
         // Constructor
-        public MainViewModel()
+        public MainViewModel(SettingsService settingsService)
         {
+            _settingsService = settingsService;
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Setup data container
@@ -67,6 +78,12 @@ namespace SoundBar.ViewModels
 
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
+
+            // Load hidden apps from settings
+            var settings = _settingsService.Load();
+            HiddenApps = new ObservableCollection<string>(settings.HiddenApps ?? new List<string>());
+            AllowedBackgroundApps = new ObservableCollection<string>(settings.AllowedBackgroundApps ?? new List<string>());
+            SystemBackgroundApps = new ObservableCollection<string>();
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -147,6 +164,27 @@ namespace SoundBar.ViewModels
             // Add new apps that just started
             foreach (var newApp in latestSessions)
             {
+                if (string.IsNullOrEmpty(newApp.Name)) continue;
+
+                if (newApp.IsBackgroundApp)
+                {
+                    // If it's a background app but not allowed, add to system list and skip
+                    if (!AllowedBackgroundApps.Contains(newApp.Name))
+                    {
+                        if (!SystemBackgroundApps.Contains(newApp.Name))
+                        {
+                            SystemBackgroundApps.Add(newApp.Name);
+                        }
+                        continue;
+                    }
+                }
+
+                // Skip if this app is hidden by the user
+                if (HiddenApps.Contains(newApp.Name))
+                {
+                    continue;
+                }
+
                 // If new app is not in our current list
                 if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
                 {
@@ -178,6 +216,54 @@ namespace SoundBar.ViewModels
                     }
                 }
             }
+        }
+
+        // Hides an app from the main view
+        public void HideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Add(appName);
+            SaveHiddenApps();
+
+            // Immediately remove it from the active UI list
+            var appToRemove = Apps.FirstOrDefault(a => a.Name == appName);
+            if (appToRemove != null)
+            {
+                Apps.Remove(appToRemove);
+            }
+        }
+
+        // Unhides an app so it can be seen again
+        public void UnhideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || !HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Remove(appName);
+            SaveHiddenApps();
+
+            // The background poller will automatically pick it back up on the next tick
+        }
+
+        // Saves the current HiddenApps list to settings
+        private void SaveHiddenApps()
+        {
+            var settings = _settingsService.Load();
+            settings.HiddenApps = HiddenApps.ToList();
+            _settingsService.Save(settings);
+        }
+
+        // Allows a background app to be shown
+        public void AllowBackgroundApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Contains(appName)) return;
+
+            AllowedBackgroundApps.Add(appName);
+            SystemBackgroundApps.Remove(appName);
+
+            var settings = _settingsService.Load();
+            settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
+            _settingsService.Save(settings);
         }
 
         // Standard for MVVM updates

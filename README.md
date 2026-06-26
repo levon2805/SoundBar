@@ -1,10 +1,15 @@
 # SoundBar
 
-<img src="Assets/Soundbar.png" width="394" height="256" />
+## Features
+* **Individual App Control:** Granular volume control over every active application on your PC.
+* **Master Volume:** Dedicated slider for controlling your entire system's audio.
+* **Always-on-Top:** Pin the SoundBar overlay above all other windows.
+* **App Blacklist:** Hide specific applications from your mixer interface to reduce clutter.
+* **Background Audio Controls:** Automatically captures invisible background services (like System Sounds) and allows you to optionally expose and control them.
+* **State Persistence:** SoundBar securely remembers your window position, pinned state, and hidden apps across reboots.
+* **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek, dark-themed interface with custom window drag controls.
 
-Sound control windows application.
-
-## 📥 Download & Install (For Users)
+## Download & Install (For Users)
 The application is built as a completely self-contained, portable `.exe`. You do not need to install anything or download the Windows App SDK runtime!
 
 1. Go to the [Releases](../../releases) tab on the right side of this GitHub repository.
@@ -14,7 +19,7 @@ The application is built as a completely self-contained, portable `.exe`. You do
 
 > **Note on Windows SmartScreen:** Because this is a new open-source application, Windows may show a "Windows protected your PC" warning when you first run the app. This is completely normal for new independent software. To run the app, simply click **"More info"** and then **"Run anyway"**.
 
-## 🛠️ Building for Release (For Developers)
+## Building for Release (For Developers)
 If you are compiling this project from source and want to generate the portable folder to upload to GitHub Releases, run the following command in your terminal:
 
 ```bash

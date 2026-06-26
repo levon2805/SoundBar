@@ -62,6 +62,9 @@ namespace SoundBar.Models
             }
         }
 
+        // True if the app does not have a visible main window
+        public bool IsBackgroundApp { get; set; }
+
         // Whether the app is muted
         private bool _isMuted;
 
