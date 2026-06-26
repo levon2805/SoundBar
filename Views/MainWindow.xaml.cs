@@ -183,6 +183,11 @@ namespace SoundBar.Views
             }
         }
 
+        private void UpdateBanner_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ApplyUpdate();
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             SaveWindowSettings();

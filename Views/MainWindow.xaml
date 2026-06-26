@@ -25,9 +25,10 @@
                     <TextBlock Grid.Column="0"
                                Text="SoundBar" 
                                Foreground="White" 
-                               FontSize="18" 
-                               FontWeight="Bold"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" 
+                               Margin="10,0,0,0"
+                               FontSize="12"
+                               FontWeight="SemiBold"/>
 
                     <Button x:Name="PinButton"
                             Grid.Column="1"
@@ -66,6 +67,22 @@
                             FontSize="14"
                             Click="CloseButton_Click"/>
                 </Grid>
+
+                <Button Background="#1F6B2C" 
+                        Foreground="White" 
+                        BorderThickness="0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Margin="0,0,0,15"
+                        Padding="5"
+                        CornerRadius="4"
+                        Click="UpdateBanner_Click"
+                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE896;" VerticalAlignment="Center" />
+                        <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Button>
 
                 <TextBlock Text="Master Volume" 
                            Foreground="#DDDDDD" 

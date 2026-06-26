@@ -15,6 +15,7 @@ namespace SoundBar.ViewModels
     {
         private readonly IAudioMixerService _audioService;
         private readonly SettingsService _settingsService;
+        private readonly UpdateService _updateService;
 
         // List of hidden apps
         public ObservableCollection<string> HiddenApps { get; set; }
@@ -27,6 +28,55 @@ namespace SoundBar.ViewModels
 
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
+
+        // Update properties
+        private bool _updateAvailable;
+        public bool UpdateAvailable
+        {
+            get => _updateAvailable;
+            set
+            {
+                if (_updateAvailable != value)
+                {
+                    _updateAvailable = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerVisibility));
+                }
+            }
+        }
+
+        private string _latestVersion = string.Empty;
+        public string LatestVersion
+        {
+            get => _latestVersion;
+            set
+            {
+                if (_latestVersion != value)
+                {
+                    _latestVersion = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerText));
+                }
+            }
+        }
+
+        private bool _isUpdating;
+        public bool IsUpdating
+        {
+            get => _isUpdating;
+            set
+            {
+                if (_isUpdating != value)
+                {
+                    _isUpdating = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerText));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility UpdateBannerVisibility => UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public string UpdateBannerText => IsUpdating ? "Downloading Update..." : $"Update Available ({LatestVersion}) - Click to Install";
 
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
@@ -71,6 +121,7 @@ namespace SoundBar.ViewModels
         public MainViewModel(SettingsService settingsService)
         {
             _settingsService = settingsService;
+            _updateService = new UpdateService();
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Setup data container
@@ -90,6 +141,31 @@ namespace SoundBar.ViewModels
 
             // Start the monitoring loop
             StartPolling();
+
+            // Check for updates
+            CheckForUpdatesAsync();
+        }
+
+        private async void CheckForUpdatesAsync()
+        {
+            bool hasUpdate = await _updateService.CheckForUpdatesAsync();
+            if (hasUpdate)
+            {
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    LatestVersion = _updateService.LatestVersion;
+                    UpdateAvailable = true;
+                });
+            }
+        }
+
+        public async void ApplyUpdate()
+        {
+            if (IsUpdating) return;
+            
+            IsUpdating = true;
+            await _updateService.DownloadAndApplyUpdateAsync();
+            IsUpdating = false;
         }
 
         public void StartPolling()
