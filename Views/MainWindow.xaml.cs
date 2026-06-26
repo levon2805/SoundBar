@@ -174,6 +174,15 @@ namespace SoundBar.Views
             }
         }
 
+        // Triggered when clicking the Allow button inside the background apps menu
+        private void AllowBackgroundAppButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.DataContext is string appName)
+            {
+                ViewModel.AllowBackgroundApp(appName);
+            }
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             SaveWindowSettings();

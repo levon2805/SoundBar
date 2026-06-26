@@ -19,6 +19,12 @@ namespace SoundBar.ViewModels
         // List of hidden apps
         public ObservableCollection<string> HiddenApps { get; set; }
 
+        // List of allowed background apps
+        public ObservableCollection<string> AllowedBackgroundApps { get; set; }
+
+        // List of raw system background apps for the UI to display
+        public ObservableCollection<string> SystemBackgroundApps { get; set; }
+
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
@@ -76,6 +82,8 @@ namespace SoundBar.ViewModels
             // Load hidden apps from settings
             var settings = _settingsService.Load();
             HiddenApps = new ObservableCollection<string>(settings.HiddenApps ?? new List<string>());
+            AllowedBackgroundApps = new ObservableCollection<string>(settings.AllowedBackgroundApps ?? new List<string>());
+            SystemBackgroundApps = new ObservableCollection<string>();
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -156,8 +164,23 @@ namespace SoundBar.ViewModels
             // Add new apps that just started
             foreach (var newApp in latestSessions)
             {
+                if (string.IsNullOrEmpty(newApp.Name)) continue;
+
+                if (newApp.IsBackgroundApp)
+                {
+                    // If it's a background app but not allowed, add to system list and skip
+                    if (!AllowedBackgroundApps.Contains(newApp.Name))
+                    {
+                        if (!SystemBackgroundApps.Contains(newApp.Name))
+                        {
+                            SystemBackgroundApps.Add(newApp.Name);
+                        }
+                        continue;
+                    }
+                }
+
                 // Skip if this app is hidden by the user
-                if (!string.IsNullOrEmpty(newApp.Name) && HiddenApps.Contains(newApp.Name))
+                if (HiddenApps.Contains(newApp.Name))
                 {
                     continue;
                 }
@@ -227,6 +250,19 @@ namespace SoundBar.ViewModels
         {
             var settings = _settingsService.Load();
             settings.HiddenApps = HiddenApps.ToList();
+            _settingsService.Save(settings);
+        }
+
+        // Allows a background app to be shown
+        public void AllowBackgroundApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Contains(appName)) return;
+
+            AllowedBackgroundApps.Add(appName);
+            SystemBackgroundApps.Remove(appName);
+
+            var settings = _settingsService.Load();
+            settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
             _settingsService.Save(settings);
         }
 
