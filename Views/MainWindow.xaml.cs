@@ -18,6 +18,9 @@ namespace SoundBar.Views
 {
     public sealed partial class MainWindow : Window
     {
+        // View Model accessor
+        public MainViewModel ViewModel { get; }
+
         // Dependencies
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
@@ -28,7 +31,8 @@ namespace SoundBar.Views
             this.InitializeComponent();
 
             _settingsService = new SettingsService();
-            ((FrameworkElement)this.Content).DataContext = new MainViewModel();
+            ViewModel = new MainViewModel(_settingsService);
+            ((FrameworkElement)this.Content).DataContext = ViewModel;
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(null);
@@ -149,6 +153,24 @@ namespace SoundBar.Views
             {
                 _isDragging = false;
                 ((UIElement)sender).ReleasePointerCapture(e.Pointer);
+            }
+        }
+
+        // Triggered when clicking the Hide button next to an app
+        private void HideAppButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.DataContext is AudioAppModel app)
+            {
+                ViewModel.HideApp(app.Name ?? string.Empty);
+            }
+        }
+
+        // Triggered when clicking the Unhide button inside the hidden apps menu
+        private void UnhideAppButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.DataContext is string appName)
+            {
+                ViewModel.UnhideApp(appName);
             }
         }
 

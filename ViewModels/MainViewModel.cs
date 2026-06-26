@@ -14,6 +14,10 @@ namespace SoundBar.ViewModels
     public class MainViewModel : INotifyPropertyChanged
     {
         private readonly IAudioMixerService _audioService;
+        private readonly SettingsService _settingsService;
+
+        // List of hidden apps
+        public ObservableCollection<string> HiddenApps { get; set; }
 
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
@@ -58,8 +62,9 @@ namespace SoundBar.ViewModels
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
 
         // Constructor
-        public MainViewModel()
+        public MainViewModel(SettingsService settingsService)
         {
+            _settingsService = settingsService;
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Setup data container
@@ -67,6 +72,10 @@ namespace SoundBar.ViewModels
 
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
+
+            // Load hidden apps from settings
+            var settings = _settingsService.Load();
+            HiddenApps = new ObservableCollection<string>(settings.HiddenApps ?? new List<string>());
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -147,6 +156,12 @@ namespace SoundBar.ViewModels
             // Add new apps that just started
             foreach (var newApp in latestSessions)
             {
+                // Skip if this app is hidden by the user
+                if (!string.IsNullOrEmpty(newApp.Name) && HiddenApps.Contains(newApp.Name))
+                {
+                    continue;
+                }
+
                 // If new app is not in our current list
                 if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
                 {
@@ -178,6 +193,41 @@ namespace SoundBar.ViewModels
                     }
                 }
             }
+        }
+
+        // Hides an app from the main view
+        public void HideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Add(appName);
+            SaveHiddenApps();
+
+            // Immediately remove it from the active UI list
+            var appToRemove = Apps.FirstOrDefault(a => a.Name == appName);
+            if (appToRemove != null)
+            {
+                Apps.Remove(appToRemove);
+            }
+        }
+
+        // Unhides an app so it can be seen again
+        public void UnhideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || !HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Remove(appName);
+            SaveHiddenApps();
+
+            // The background poller will automatically pick it back up on the next tick
+        }
+
+        // Saves the current HiddenApps list to settings
+        private void SaveHiddenApps()
+        {
+            var settings = _settingsService.Load();
+            settings.HiddenApps = HiddenApps.ToList();
+            _settingsService.Save(settings);
         }
 
         // Standard for MVVM updates
