@@ -1,4 +1,4 @@
-﻿using SoundBar.Models;
+using SoundBar.Models;
 using SoundBar.Services;
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Windows;
+
 
 namespace SoundBar.ViewModels
 {
@@ -36,6 +36,7 @@ namespace SoundBar.ViewModels
                     _lastMasterVolumeChange = DateTime.Now;
 
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(MasterVolumePercentage));
 
                     // Send command to Windows
                     _audioService.SetMasterVolume(_masterVolume);
@@ -43,8 +44,24 @@ namespace SoundBar.ViewModels
             }
         }
 
+        // The master volume represented as a percentage (0 to 100)
+        public int MasterVolumePercentage
+        {
+            get => (int)Math.Round(_masterVolume * 100);
+            set
+            {
+                MasterVolume = value / 100f;
+            }
+        }
+
+        // Dispatcher to safely update UI from background threads
+        private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
+
+        // Constructor
         public MainViewModel()
         {
+            _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
             // Setup data container
             Apps = new ObservableCollection<AudioAppModel>();
 
@@ -75,7 +92,7 @@ namespace SoundBar.ViewModels
                         var systemVol = _audioService.GetMasterVolume();
 
                         // Update UI thread safely
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        _dispatcherQueue.TryEnqueue(() =>
                         {
                             UpdateCollection(sessions);
 
@@ -87,6 +104,7 @@ namespace SoundBar.ViewModels
                                 {
                                     _masterVolume = systemVol;
                                     OnPropertyChanged(nameof(MasterVolume));
+                                    OnPropertyChanged(nameof(MasterVolumePercentage));
                                 }
                             }
                         });
