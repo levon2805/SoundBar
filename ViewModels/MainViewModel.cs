@@ -157,7 +157,29 @@ namespace SoundBar.ViewModels
                 // If existing app is not in the new list
                 if (!latestSessions.Any(x => x.ProcessId == existingApp.ProcessId))
                 {
-                    Apps.RemoveAt(i);
+                    bool isProcessDead = true;
+                    try
+                    {
+                        var proc = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
+                        if (proc != null && !proc.HasExited)
+                        {
+                            // The game/app is still running, it just temporarily destroyed its audio session (e.g. tabbed out of a fullscreen game)
+                            isProcessDead = false;
+                        }
+                    }
+                    catch
+                    {
+                        // Process doesn't exist or we don't have access (it died)
+                    }
+
+                    if (isProcessDead)
+                    {
+                        Apps.RemoveAt(i);
+                    }
+                    else
+                    {
+                        existingApp.IsSessionAlive = false;
+                    }
                 }
             }
 
@@ -190,28 +212,30 @@ namespace SoundBar.ViewModels
                 {
                     Apps.Add(newApp);
                 }
-            }
-
-            // Sync existing apps
-            // If the user changed volume in Windows, update our slider to match
-            foreach (var existingApp in Apps)
-            {
-                var match = latestSessions.FirstOrDefault(x => x.ProcessId == existingApp.ProcessId);
-                if (match != null)
+                else
                 {
-                    // Check if user is currently dragging (modified < 2 seconds ago)
-                    if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
+                    // Update existing app
+                    var existingApp = Apps.First(x => x.ProcessId == newApp.ProcessId);
+
+                    // Check if the session just came back to life after being destroyed (e.g. tabbing back into a game)
+                    if (!existingApp.IsSessionAlive)
                     {
-                        // Update volume if changed externally
-                        if (existingApp.Volume != match.Volume)
+                        existingApp.IsSessionAlive = true;
+                        
+                        // Push our cached UI volume down to the new audio session
+                        existingApp.PushVolumeToOS();
+                    }
+                    else if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
+                    {
+                        // Sync the volume from the OS (only if user hasn't recently moved the slider)
+                        if (existingApp.Volume != newApp.Volume)
                         {
-                            existingApp.Volume = match.Volume;
+                            existingApp.Volume = newApp.Volume;
                         }
 
-                        // Update mute state if changed externally
-                        if (existingApp.IsMuted != match.IsMuted)
+                        if (existingApp.IsMuted != newApp.IsMuted)
                         {
-                            existingApp.IsMuted = match.IsMuted;
+                            existingApp.IsMuted = newApp.IsMuted;
                         }
                     }
                 }

@@ -52,6 +52,16 @@ namespace SoundBar.Models
             }
         }
 
+        // Forces the current UI volume down to the Windows Audio Service
+        // Useful if the game destroyed its audio session and just recreated a new one
+        public void PushVolumeToOS()
+        {
+            if (_audioService != null)
+            {
+                _audioService.SetVolume(ProcessId, _volume);
+            }
+        }
+
         // The volume represented as a percentage (0 to 100)
         public int VolumePercentage
         {
@@ -64,6 +74,9 @@ namespace SoundBar.Models
 
         // True if the app does not have a visible main window
         public bool IsBackgroundApp { get; set; }
+
+        // True if the Windows Audio Session is currently active/inactive (not destroyed)
+        public bool IsSessionAlive { get; set; } = true;
 
         // Whether the app is muted
         private bool _isMuted;
