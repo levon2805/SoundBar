@@ -14,9 +14,69 @@ namespace SoundBar.ViewModels
     public class MainViewModel : INotifyPropertyChanged
     {
         private readonly IAudioMixerService _audioService;
+        private readonly SettingsService _settingsService;
+        private readonly UpdateService _updateService;
+
+        // List of hidden apps
+        public ObservableCollection<string> HiddenApps { get; set; }
+
+        // List of allowed background apps
+        public ObservableCollection<string> AllowedBackgroundApps { get; set; }
+
+        // List of raw system background apps for the UI to display
+        public ObservableCollection<string> SystemBackgroundApps { get; set; }
 
         // Specia list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
+
+        // Update properties
+        private bool _updateAvailable;
+        public bool UpdateAvailable
+        {
+            get => _updateAvailable;
+            set
+            {
+                if (_updateAvailable != value)
+                {
+                    _updateAvailable = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerVisibility));
+                }
+            }
+        }
+
+        private string _latestVersion = string.Empty;
+        public string LatestVersion
+        {
+            get => _latestVersion;
+            set
+            {
+                if (_latestVersion != value)
+                {
+                    _latestVersion = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerText));
+                }
+            }
+        }
+
+        private bool _isUpdating;
+        public bool IsUpdating
+        {
+            get => _isUpdating;
+            set
+            {
+                if (_isUpdating != value)
+                {
+                    _isUpdating = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UpdateBannerText));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility UpdateBannerVisibility => UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public string UpdateBannerText => IsUpdating ? "Downloading Update..." : $"Update Available ({LatestVersion}) - Click to Install";
 
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
@@ -58,8 +118,10 @@ namespace SoundBar.ViewModels
         private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
 
         // Constructor
-        public MainViewModel()
+        public MainViewModel(SettingsService settingsService)
         {
+            _settingsService = settingsService;
+            _updateService = new UpdateService();
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Setup data container
@@ -68,11 +130,42 @@ namespace SoundBar.ViewModels
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
 
+            // Load hidden apps from settings
+            var settings = _settingsService.Load();
+            HiddenApps = new ObservableCollection<string>(settings.HiddenApps ?? new List<string>());
+            AllowedBackgroundApps = new ObservableCollection<string>(settings.AllowedBackgroundApps ?? new List<string>());
+            SystemBackgroundApps = new ObservableCollection<string>();
+
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
 
             // Start the monitoring loop
             StartPolling();
+
+            // Check for updates
+            CheckForUpdatesAsync();
+        }
+
+        private async void CheckForUpdatesAsync()
+        {
+            bool hasUpdate = await _updateService.CheckForUpdatesAsync();
+            if (hasUpdate)
+            {
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    LatestVersion = _updateService.LatestVersion;
+                    UpdateAvailable = true;
+                });
+            }
+        }
+
+        public async void ApplyUpdate()
+        {
+            if (IsUpdating) return;
+            
+            IsUpdating = true;
+            await _updateService.DownloadAndApplyUpdateAsync();
+            IsUpdating = false;
         }
 
         public void StartPolling()
@@ -140,44 +233,137 @@ namespace SoundBar.ViewModels
                 // If existing app is not in the new list
                 if (!latestSessions.Any(x => x.ProcessId == existingApp.ProcessId))
                 {
-                    Apps.RemoveAt(i);
+                    bool isProcessDead = true;
+                    try
+                    {
+                        var proc = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
+                        if (proc != null && !proc.HasExited)
+                        {
+                            // The game/app is still running, it just temporarily destroyed its audio session (e.g. tabbed out of a fullscreen game)
+                            isProcessDead = false;
+                        }
+                    }
+                    catch
+                    {
+                        // Process doesn't exist or we don't have access (it died)
+                    }
+
+                    if (isProcessDead)
+                    {
+                        Apps.RemoveAt(i);
+                    }
+                    else
+                    {
+                        existingApp.IsSessionAlive = false;
+                    }
                 }
             }
 
             // Add new apps that just started
             foreach (var newApp in latestSessions)
             {
+                if (string.IsNullOrEmpty(newApp.Name)) continue;
+
+                if (newApp.IsBackgroundApp)
+                {
+                    // If it's a background app but not allowed, add to system list and skip
+                    if (!AllowedBackgroundApps.Contains(newApp.Name))
+                    {
+                        if (!SystemBackgroundApps.Contains(newApp.Name))
+                        {
+                            SystemBackgroundApps.Add(newApp.Name);
+                        }
+                        continue;
+                    }
+                }
+
+                // Skip if this app is hidden by the user
+                if (HiddenApps.Contains(newApp.Name))
+                {
+                    continue;
+                }
+
                 // If new app is not in our current list
                 if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
                 {
                     Apps.Add(newApp);
                 }
-            }
-
-            // Sync existing apps
-            // If the user changed volume in Windows, update our slider to match
-            foreach (var existingApp in Apps)
-            {
-                var match = latestSessions.FirstOrDefault(x => x.ProcessId == existingApp.ProcessId);
-                if (match != null)
+                else
                 {
-                    // Check if user is currently dragging (modified < 2 seconds ago)
-                    if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
+                    // Update existing app
+                    var existingApp = Apps.First(x => x.ProcessId == newApp.ProcessId);
+
+                    // Check if the session just came back to life after being destroyed (e.g. tabbing back into a game)
+                    if (!existingApp.IsSessionAlive)
                     {
-                        // Update volume if changed externally
-                        if (existingApp.Volume != match.Volume)
+                        existingApp.IsSessionAlive = true;
+                        
+                        // Push our cached UI volume down to the new audio session
+                        existingApp.PushVolumeToOS();
+                    }
+                    else if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
+                    {
+                        // Sync the volume from the OS (only if user hasn't recently moved the slider)
+                        if (existingApp.Volume != newApp.Volume)
                         {
-                            existingApp.Volume = match.Volume;
+                            existingApp.Volume = newApp.Volume;
                         }
 
-                        // Update mute state if changed externally
-                        if (existingApp.IsMuted != match.IsMuted)
+                        if (existingApp.IsMuted != newApp.IsMuted)
                         {
-                            existingApp.IsMuted = match.IsMuted;
+                            existingApp.IsMuted = newApp.IsMuted;
                         }
                     }
                 }
             }
+        }
+
+        // Hides an app from the main view
+        public void HideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Add(appName);
+            SaveHiddenApps();
+
+            // Immediately remove it from the active UI list
+            var appToRemove = Apps.FirstOrDefault(a => a.Name == appName);
+            if (appToRemove != null)
+            {
+                Apps.Remove(appToRemove);
+            }
+        }
+
+        // Unhides an app so it can be seen again
+        public void UnhideApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || !HiddenApps.Contains(appName)) return;
+
+            HiddenApps.Remove(appName);
+            SaveHiddenApps();
+
+            // The background poller will automatically pick it back up on the next tick
+        }
+
+        // Saves the current HiddenApps list to settings
+        private void SaveHiddenApps()
+        {
+            var settings = _settingsService.Load();
+            settings.HiddenApps = HiddenApps.ToList();
+            _settingsService.Save(settings);
+        }
+
+        // Allows a background app to be shown
+        public void AllowBackgroundApp(string appName)
+        {
+            if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Contains(appName)) return;
+
+            AllowedBackgroundApps.Add(appName);
+            SystemBackgroundApps.Remove(appName);
+
+            var settings = _settingsService.Load();
+            settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
+            _settingsService.Save(settings);
         }
 
         // Standard for MVVM updates

@@ -25,9 +25,10 @@
                     <TextBlock Grid.Column="0"
                                Text="SoundBar" 
                                Foreground="White" 
-                               FontSize="18" 
-                               FontWeight="Bold"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" 
+                               Margin="10,0,0,0"
+                               FontSize="12"
+                               FontWeight="SemiBold"/>
 
                     <Button x:Name="PinButton"
                             Grid.Column="1"
@@ -67,6 +68,22 @@
                             Click="CloseButton_Click"/>
                 </Grid>
 
+                <Button Background="#1F6B2C" 
+                        Foreground="White" 
+                        BorderThickness="0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Margin="0,0,0,15"
+                        Padding="5"
+                        CornerRadius="4"
+                        Click="UpdateBanner_Click"
+                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE896;" VerticalAlignment="Center" />
+                        <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Button>
+
                 <TextBlock Text="Master Volume" 
                            Foreground="#DDDDDD" 
                            FontSize="14" 
@@ -95,11 +112,74 @@
 
                 <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
 
-                <TextBlock Text="Active Apps" 
-                           Foreground="#DDDDDD" 
-                           FontSize="14" 
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,10"/>
+                <Grid Margin="0,0,0,10">
+                    <TextBlock Text="Active Apps" 
+                               Foreground="#DDDDDD" 
+                               FontSize="14" 
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Background Apps" 
+                                Background="Transparent" 
+                                Foreground="#AAAAAA" 
+                                BorderThickness="0"
+                                Padding="5,0"
+                                Margin="0,0,5,0">
+                            <Button.Flyout>
+                                <Flyout>
+                                    <StackPanel Width="200">
+                                        <TextBlock Text="Background Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                        <ListView ItemsSource="{x:Bind ViewModel.SystemBackgroundApps, Mode=OneWay}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,5">
+                                                        <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="120" HorizontalAlignment="Left" />
+                                                        <Button Content="Allow" 
+                                                                Click="AllowBackgroundAppButton_Click" 
+                                                                HorizontalAlignment="Right" 
+                                                                Background="#333333" 
+                                                                Foreground="White" 
+                                                                BorderThickness="0"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <Button Content="Hidden Apps" 
+                                Background="Transparent" 
+                                Foreground="#AAAAAA" 
+                                BorderThickness="0"
+                                Padding="5,0">
+                            <Button.Flyout>
+                                <Flyout>
+                                    <StackPanel Width="200">
+                                        <TextBlock Text="Hidden Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                        <ListView ItemsSource="{x:Bind ViewModel.HiddenApps, Mode=OneWay}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,5">
+                                                        <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White"/>
+                                                        <Button Content="Unhide" 
+                                                                Click="UnhideAppButton_Click" 
+                                                                HorizontalAlignment="Right" 
+                                                                Background="#333333" 
+                                                                Foreground="White" 
+                                                                BorderThickness="0"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -108,23 +188,37 @@
                         <DataTemplate>
                             <Grid Margin="0,0,0,15">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="30"/>
+                                    <ColumnDefinition Width="100"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="40"/>
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock Text="{Binding Name}" 
+                                <Button Grid.Column="0" 
+                                        Content="&#xE74D;" 
+                                        FontFamily="Segoe Fluent Icons" 
+                                        Background="Transparent" 
+                                        Foreground="#777777" 
+                                        BorderThickness="0" 
+                                        Click="HideAppButton_Click" 
+                                        ToolTipService.ToolTip="Hide App" 
+                                        Padding="0" MinWidth="20" Height="20"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,5,0" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Name}" 
                                            Foreground="White"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
 
-                                <Slider Grid.Column="1" 
+                                <Slider Grid.Column="2" 
                                         Minimum="0" 
                                         Maximum="100" 
                                         Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                         Margin="10,0"/>
 
-                                <TextBlock Grid.Column="2" 
+                                <TextBlock Grid.Column="3" 
                                            Foreground="#AAAAAA"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Right">

@@ -1,4 +1,4 @@
-﻿using CSCore.CoreAudioAPI;
+using CSCore.CoreAudioAPI;
 using SoundBar.Models;
 using System;
 using System.Collections.Generic;
@@ -35,12 +35,11 @@ namespace SoundBar.Services
                             // Ignore Idle (ID 0) and dead processes
                             if (process == null || process.Id == 0) continue;
 
-                            // Ignore Inactive sessions
-                            if (sessionControl.SessionState != AudioSessionState.AudioSessionStateActive) continue;
+                            // Ignore expired sessions, but allow Inactive sessions so users can adjust volume of paused/silent apps (matches Windows Volume Mixer)
+                            if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
 
-                            
-                            // This hides the background processes
-                            if (process.MainWindowHandle == IntPtr.Zero) continue;
+                            // Identify if this is a background process
+                            bool isBackground = process.MainWindowHandle == IntPtr.Zero;
 
                             // If we already have a slider for this App ID, skip it to prevent duplicates
                             if (addedProcessIds.Contains(process.Id)) continue;
@@ -58,6 +57,7 @@ namespace SoundBar.Services
                             var newApp = new AudioAppModel(this)
                             {
                                 ProcessId = process.Id,
+                                IsBackgroundApp = isBackground,
                                 Name = process.ProcessName,
                                 Volume = simpleVolume.MasterVolume,
                                 IsMuted = simpleVolume.IsMuted,
