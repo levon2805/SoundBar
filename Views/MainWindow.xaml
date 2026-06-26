@@ -84,6 +84,51 @@
                     </StackPanel>
                 </Button>
 
+                <Grid Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <ComboBox Grid.Column="0"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Presets}"
+                              SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
+                              DisplayMemberPath="Name"
+                              PlaceholderText="Audio Presets..."
+                              Margin="0,0,5,0"
+                              Background="#333333"
+                              BorderThickness="1"
+                              BorderBrush="#555555"
+                              Foreground="#DDDDDD"/>
+
+                    <Button Grid.Column="1"
+                            Content="&#xE710;"
+                            FontFamily="Segoe Fluent Icons"
+                            Width="32" Height="32"
+                            Padding="0" MinWidth="0" MinHeight="0"
+                            Background="#333333"
+                            Foreground="#DDDDDD"
+                            BorderBrush="#555555"
+                            BorderThickness="1"
+                            Margin="0,0,5,0"
+                            ToolTipService.ToolTip="Save Current Volumes as Preset"
+                            Click="SavePresetButton_Click"/>
+
+                    <Button Grid.Column="2"
+                            Content="&#xE74D;"
+                            FontFamily="Segoe Fluent Icons"
+                            Width="32" Height="32"
+                            Padding="0" MinWidth="0" MinHeight="0"
+                            Background="#333333"
+                            Foreground="#E81123"
+                            BorderBrush="#555555"
+                            BorderThickness="1"
+                            ToolTipService.ToolTip="Delete Selected Preset"
+                            Click="DeletePresetButton_Click"/>
+                </Grid>
+
                 <TextBlock Text="Master Volume" 
                            Foreground="#DDDDDD" 
                            FontSize="14" 

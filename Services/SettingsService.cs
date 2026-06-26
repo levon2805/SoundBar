@@ -9,11 +9,19 @@ namespace SoundBar.Services
     {
         private readonly string _filePath;
 
+        public AppSettings Settings { get; private set; }
+
         public SettingsService()
         {
             // Save 'config.json' in the same folder as the executable
             string folder = AppDomain.CurrentDomain.BaseDirectory;
             _filePath = Path.Combine(folder, "config.json");
+            Settings = Load();
+        }
+
+        public void SaveSettings()
+        {
+            Save(Settings);
         }
 
         public AppSettings Load()

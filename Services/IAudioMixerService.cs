@@ -1,4 +1,4 @@
-﻿using SoundBar.Models;
+using SoundBar.Models;
 
 namespace SoundBar.Services
 {
@@ -7,11 +7,11 @@ namespace SoundBar.Services
         // Returns list of all apps currently making sound
         List<AudioAppModel> GetActiveAudioSessions();
 
-        // Update volume for specific app using PID
-        void SetVolume(int processID, float level);
+        // Update volume for specific app using Process Name
+        void SetVolume(string processName, float level);
 
         // Mutes or unmutes specific app
-        void SetMute(int processID, bool isMuted);
+        void SetMute(string processName, bool isMuted);
 
         // Master volume controls
         float GetMasterVolume();
