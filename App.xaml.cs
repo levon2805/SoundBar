@@ -1,11 +1,20 @@
-﻿using System.Windows;
+using Microsoft.UI.Xaml;
 
 namespace SoundBar
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
-    public partial class App : System.Windows.Application
+    public partial class App : Application
     {
+        public App()
+        {
+            this.InitializeComponent();
+        }
+
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        {
+            m_window = new SoundBar.Views.MainWindow();
+            m_window.Activate();
+        }
+
+        private Window? m_window;
     }
 }

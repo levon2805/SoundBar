@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using SoundBar.Services;
@@ -41,6 +41,7 @@ namespace SoundBar.Models
 
                     // This triggers the event that the UI listens for
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(VolumePercentage));
 
                     // Actually changes the volume
                     if (_audioService != null)
@@ -48,6 +49,16 @@ namespace SoundBar.Models
                         _audioService.SetVolume(ProcessId, _volume);
                     }
                 }
+            }
+        }
+
+        // The volume represented as a percentage (0 to 100)
+        public int VolumePercentage
+        {
+            get => (int)Math.Round(_volume * 100);
+            set
+            {
+                Volume = value / 100f;
             }
         }
 
