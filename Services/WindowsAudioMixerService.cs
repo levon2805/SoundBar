@@ -13,8 +13,8 @@ namespace SoundBar.Services
         {
             var apps = new List<AudioAppModel>();
 
-            // Track which IDs we have processed to prevent duplicates
-            var addedProcessIds = new HashSet<int>();
+            // Track which NAMES we have processed to prevent duplicates
+            var addedProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Get the default audio device
             using (var enumerator = new MMDeviceEnumerator())
@@ -38,11 +38,34 @@ namespace SoundBar.Services
                             // Ignore expired sessions, but allow Inactive sessions so users can adjust volume of paused/silent apps (matches Windows Volume Mixer)
                             if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
 
-                            // Identify if this is a background process
-                            bool isBackground = process.MainWindowHandle == IntPtr.Zero;
+                            string processName = process.ProcessName;
+                            if (string.IsNullOrEmpty(processName)) continue;
 
-                            // If we already have a slider for this App ID, skip it to prevent duplicates
-                            if (addedProcessIds.Contains(process.Id)) continue;
+                            // Identify if this is a background process
+                            // Check ALL processes with this name. If ANY have a main window, it's not a background app.
+                            // (E.g. Discord's audio engine is headless, but the main Discord.exe UI has a window)
+                            bool isBackground = true;
+                            try
+                            {
+                                string safeName = processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                                var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+                                foreach (var p in procs)
+                                {
+                                    if (p.MainWindowHandle != IntPtr.Zero)
+                                    {
+                                        isBackground = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Fallback if access is denied
+                                isBackground = process.MainWindowHandle == IntPtr.Zero;
+                            }
+
+                            // If we already have a slider for this App Name, skip it to prevent duplicates
+                            if (addedProcessNames.Contains(processName)) continue;
 
                             string? safeIconPath = null;
                             try
@@ -58,14 +81,14 @@ namespace SoundBar.Services
                             {
                                 ProcessId = process.Id,
                                 IsBackgroundApp = isBackground,
-                                Name = process.ProcessName,
+                                Name = processName,
                                 Volume = simpleVolume.MasterVolume,
                                 IsMuted = simpleVolume.IsMuted,
                                 IconPath = safeIconPath
                             };
 
                             apps.Add(newApp);
-                            addedProcessIds.Add(process.Id);
+                            addedProcessNames.Add(processName);
                         }
                     }
                 }
@@ -73,17 +96,17 @@ namespace SoundBar.Services
             return apps;
         }
 
-        public void SetVolume(int processId, float level)
+        public void SetVolume(string processName, float level)
         {
-            PerformActionOnSession(processId, (volumeControl) =>
+            PerformActionOnSession(processName, (volumeControl) =>
             {
                 volumeControl.MasterVolume = level;
             });
         }
 
-        public void SetMute(int processId, bool isMuted)
+        public void SetMute(string processName, bool isMuted)
         {
-            PerformActionOnSession(processId, (volumeControl) =>
+            PerformActionOnSession(processName, (volumeControl) =>
             {
                 volumeControl.IsMuted = isMuted;
             });
@@ -137,7 +160,7 @@ namespace SoundBar.Services
             });
         }
 
-        private void PerformActionOnSession(int targetProcessId, Action<SimpleAudioVolume> action)
+        private void PerformActionOnSession(string targetProcessName, Action<SimpleAudioVolume> action)
         {
             Task.Run(() =>
             {
@@ -153,11 +176,10 @@ namespace SoundBar.Services
                             using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                             using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                             {
-                                if (sessionControl.Process != null && sessionControl.Process.Id == targetProcessId)
+                                if (sessionControl.Process != null && string.Equals(sessionControl.Process.ProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    // If yes, execute
+                                    // Apply action to all matching sessions
                                     action(simpleVolume);
-                                    return; // Stop searching
                                 }
                             }
                         }

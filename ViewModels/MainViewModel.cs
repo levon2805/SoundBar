@@ -26,8 +26,29 @@ namespace SoundBar.ViewModels
         // List of raw system background apps for the UI to display
         public ObservableCollection<string> SystemBackgroundApps { get; set; }
 
-        // Specia list, add/remove items here the UI auto updates itself
+        // Special list, add/remove items here the UI auto updates itself
         public ObservableCollection<AudioAppModel> Apps { get; set; }
+
+        // Saved presets
+        public ObservableCollection<AudioPreset> Presets { get; set; }
+
+        private AudioPreset? _selectedPreset;
+        public AudioPreset? SelectedPreset
+        {
+            get => _selectedPreset;
+            set
+            {
+                if (_selectedPreset != value)
+                {
+                    _selectedPreset = value;
+                    OnPropertyChanged();
+                    if (_selectedPreset != null)
+                    {
+                        ApplyPreset(_selectedPreset);
+                    }
+                }
+            }
+        }
 
         // Update properties
         private bool _updateAvailable;
@@ -124,17 +145,15 @@ namespace SoundBar.ViewModels
             _updateService = new UpdateService();
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
-            // Setup data container
-            Apps = new ObservableCollection<AudioAppModel>();
-
             // Connect to audio service
             _audioService = new WindowsAudioMixerService();
 
-            // Load hidden apps from settings
-            var settings = _settingsService.Load();
-            HiddenApps = new ObservableCollection<string>(settings.HiddenApps ?? new List<string>());
-            AllowedBackgroundApps = new ObservableCollection<string>(settings.AllowedBackgroundApps ?? new List<string>());
+            // Setup data container
+            Apps = new ObservableCollection<AudioAppModel>();
+            HiddenApps = new ObservableCollection<string>(_settingsService.Settings.HiddenApps);
             SystemBackgroundApps = new ObservableCollection<string>();
+            AllowedBackgroundApps = new ObservableCollection<string>(_settingsService.Settings.AllowedBackgroundApps);
+            Presets = new ObservableCollection<AudioPreset>(_settingsService.Settings.Presets);
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -230,16 +249,17 @@ namespace SoundBar.ViewModels
             {
                 var existingApp = Apps[i];
 
-                // If existing app is not in the new list
-                if (!latestSessions.Any(x => x.ProcessId == existingApp.ProcessId))
+                // If existing app is not in the new list (match by Name since ProcessId might fluctuate for multi-process apps like Discord)
+                if (!latestSessions.Any(x => string.Equals(x.Name, existingApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     bool isProcessDead = true;
                     try
                     {
-                        var proc = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
-                        if (proc != null && !proc.HasExited)
+                        // Check if any process with this name is still running
+                        string safeName = existingApp.Name?.Replace(".exe", "", StringComparison.OrdinalIgnoreCase) ?? "";
+                        var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+                        if (procs.Length > 0)
                         {
-                            // The game/app is still running, it just temporarily destroyed its audio session (e.g. tabbed out of a fullscreen game)
                             isProcessDead = false;
                         }
                     }
@@ -324,9 +344,10 @@ namespace SoundBar.ViewModels
             if (string.IsNullOrEmpty(appName) || HiddenApps.Contains(appName)) return;
 
             HiddenApps.Add(appName);
-            SaveHiddenApps();
+            _settingsService.Settings.HiddenApps = HiddenApps.ToList();
+            _settingsService.SaveSettings();
 
-            // Immediately remove it from the active UI list
+            // Check if it's currently in the Apps list and remove it
             var appToRemove = Apps.FirstOrDefault(a => a.Name == appName);
             if (appToRemove != null)
             {
@@ -334,36 +355,95 @@ namespace SoundBar.ViewModels
             }
         }
 
-        // Unhides an app so it can be seen again
+        // Unhides an app
         public void UnhideApp(string appName)
         {
-            if (string.IsNullOrEmpty(appName) || !HiddenApps.Contains(appName)) return;
-
-            HiddenApps.Remove(appName);
-            SaveHiddenApps();
-
-            // The background poller will automatically pick it back up on the next tick
+            if (HiddenApps.Contains(appName))
+            {
+                HiddenApps.Remove(appName);
+                _settingsService.Settings.HiddenApps = HiddenApps.ToList();
+                _settingsService.SaveSettings();
+            }
         }
 
-        // Saves the current HiddenApps list to settings
-        private void SaveHiddenApps()
-        {
-            var settings = _settingsService.Load();
-            settings.HiddenApps = HiddenApps.ToList();
-            _settingsService.Save(settings);
-        }
-
-        // Allows a background app to be shown
+        // Allows a system background app to be shown
         public void AllowBackgroundApp(string appName)
         {
             if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Contains(appName)) return;
 
             AllowedBackgroundApps.Add(appName);
-            SystemBackgroundApps.Remove(appName);
+            _settingsService.Settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
+            _settingsService.SaveSettings();
 
-            var settings = _settingsService.Load();
-            settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
-            _settingsService.Save(settings);
+            if (SystemBackgroundApps.Contains(appName))
+            {
+                SystemBackgroundApps.Remove(appName);
+            }
+        }
+
+        // Presets Logic
+        public void SavePreset(string presetName)
+        {
+            if (string.IsNullOrWhiteSpace(presetName)) return;
+
+            var newPreset = new AudioPreset
+            {
+                Name = presetName,
+                MasterVolume = MasterVolumePercentage / 100f
+            };
+
+            foreach (var app in Apps)
+            {
+                if (!string.IsNullOrEmpty(app.Name))
+                {
+                    newPreset.AppVolumes[app.Name] = app.Volume;
+                }
+            }
+
+            // Remove if preset with same name exists
+            var existing = Presets.FirstOrDefault(p => p.Name == presetName);
+            if (existing != null)
+            {
+                Presets.Remove(existing);
+            }
+
+            Presets.Add(newPreset);
+            _settingsService.Settings.Presets = Presets.ToList();
+            _settingsService.SaveSettings();
+
+            SelectedPreset = newPreset;
+        }
+
+        public void ApplyPreset(AudioPreset preset)
+        {
+            if (preset == null) return;
+
+            // Apply Master Volume
+            MasterVolumePercentage = (int)Math.Round(preset.MasterVolume * 100);
+
+            // Apply App Volumes
+            foreach (var app in Apps)
+            {
+                if (!string.IsNullOrEmpty(app.Name) && preset.AppVolumes.ContainsKey(app.Name))
+                {
+                    app.Volume = preset.AppVolumes[app.Name];
+                    app.PushVolumeToOS(); // Force OS to sync immediately
+                }
+            }
+        }
+
+        public void DeletePreset(AudioPreset preset)
+        {
+            if (preset == null || !Presets.Contains(preset)) return;
+
+            Presets.Remove(preset);
+            _settingsService.Settings.Presets = Presets.ToList();
+            _settingsService.SaveSettings();
+
+            if (SelectedPreset == preset)
+            {
+                SelectedPreset = null;
+            }
         }
 
         // Standard for MVVM updates
