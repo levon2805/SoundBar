@@ -56,6 +56,36 @@ namespace SoundBar.Views
             TitleBarGrid.PointerMoved += TitleBarGrid_PointerMoved;
             TitleBarGrid.PointerReleased += TitleBarGrid_PointerReleased;
             TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
+
+            CreateDesktopShortcut();
+        }
+
+        private void CreateDesktopShortcut()
+        {
+            try
+            {
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string lnkPath = System.IO.Path.Combine(desktopPath, "SoundBar.lnk");
+
+                if (!System.IO.File.Exists(lnkPath))
+                {
+                    string currentExePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
+                    string currentAppDir = System.IO.Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
+
+                    var processInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = $"-NoProfile -Command \"$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('{lnkPath}'); $s.TargetPath = '{currentExePath}'; $s.WorkingDirectory = '{currentAppDir}'; $s.Save()\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    System.Diagnostics.Process.Start(processInfo);
+                }
+            }
+            catch
+            {
+                // Ignore if it fails
+            }
         }
 
         // Loads saved settings like window position and pinned state
