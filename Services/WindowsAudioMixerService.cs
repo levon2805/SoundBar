@@ -69,15 +69,16 @@ namespace SoundBar.Services
 
                             string? safeIconPath = GetExecutablePathSafely(process);
 
-                            // Clean up display names for Unreal/Unity engine games (e.g., VALORANT-Win64-Shipping)
+                            // Clean up display names for Unreal/Unity engine games or common wrappers
                             string displayName = processName;
-                            if (displayName.EndsWith("-Win64-Shipping", StringComparison.OrdinalIgnoreCase))
+                            string[] badSuffixes = new[] { "-Win64-Shipping", "-Win64", "-shell-ng" };
+                            foreach (string suffix in badSuffixes)
                             {
-                                displayName = displayName.Substring(0, displayName.Length - "-Win64-Shipping".Length);
-                            }
-                            else if (displayName.EndsWith("-Win64", StringComparison.OrdinalIgnoreCase))
-                            {
-                                displayName = displayName.Substring(0, displayName.Length - "-Win64".Length);
+                                if (displayName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    displayName = displayName.Substring(0, displayName.Length - suffix.Length);
+                                    break;
+                                }
                             }
 
                             // Also capitalize the first letter to make it look nicer if it's all lowercase
