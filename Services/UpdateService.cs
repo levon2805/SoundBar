@@ -14,7 +14,7 @@ namespace SoundBar.Services
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v1.2.2";
+        public const string CurrentVersion = "v1.2.3";
         
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static readonly HttpClient _httpClient = new HttpClient();
@@ -99,29 +99,35 @@ namespace SoundBar.Services
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
-            string batContent = $@"
+            string batContent = $$"""
 @echo off
 echo Updating SoundBar... Please wait.
-timeout /t 2 /nobreak >nul
+
+:waitloop
+tasklist /FI "IMAGENAME eq SoundBar.exe" 2>NUL | find /I /N "SoundBar.exe">NUL
+if "%ERRORLEVEL%"=="0" (
+    timeout /t 1 /nobreak >nul
+    goto waitloop
+)
 
 :: Copy all files from the extracted update to the current app directory, overwriting old ones
-xcopy ""{sourceDir}\*"" ""{currentAppDir}\"" /s /y /q
+xcopy "{{sourceDir}}\*" "{{currentAppDir}}\" /s /y /q
 
 :: Clean up the temp directory
-rmdir /s /q ""{tempUpdateDir}""
+rmdir /s /q "{{tempUpdateDir}}"
 
 :: Create a desktop shortcut if it doesn't exist
-set ""LNK_PATH=%USERPROFILE%\Desktop\SoundBar.lnk""
-if not exist ""%LNK_PATH%"" (
-    powershell -Command ""$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('%LNK_PATH%'); $s.TargetPath = '{currentExePath}'; $s.WorkingDirectory = '{currentAppDir}'; $s.Save()""
+set "LNK_PATH=%USERPROFILE%\Desktop\SoundBar.lnk"
+if not exist "%LNK_PATH%" (
+    powershell -Command "$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('%LNK_PATH%'); $s.TargetPath = '{{currentExePath}}'; $s.WorkingDirectory = '{{currentAppDir}}'; $s.Save()"
 )
 
 :: Restart the application
-start """" ""{currentExePath}""
+start "" "{{currentExePath}}"
 
 :: Delete this batch file
-del ""%~f0""
-";
+del "%~f0"
+""";
             File.WriteAllText(batPath, batContent);
 
             // Execute the batch script invisibly
