@@ -1,6 +1,10 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Media.Imaging;
 using SoundBar.Services;
 
 namespace SoundBar.Models
@@ -19,6 +23,21 @@ namespace SoundBar.Models
 
         // Path to the .exe
         public string? IconPath { get; set; }
+
+        // The loaded icon for the UI
+        private Microsoft.UI.Xaml.Media.ImageSource? _appIcon;
+        public Microsoft.UI.Xaml.Media.ImageSource? AppIcon
+        {
+            get => _appIcon;
+            private set
+            {
+                if (_appIcon != value)
+                {
+                    _appIcon = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         // Track when we last touched this slider
         public DateTime LastModified { get; private set; } = DateTime.MinValue;
@@ -108,6 +127,55 @@ namespace SoundBar.Models
         public AudioAppModel(IAudioMixerService audioService)
         {
             _audioService = audioService;
+        }
+
+        public async Task LoadIconAsync()
+        {
+            if (string.IsNullOrEmpty(IconPath) || AppIcon != null) return;
+
+            try
+            {
+                // Run disk I/O and extraction on a background thread
+                byte[]? iconBytes = await Task.Run(() =>
+                {
+                    try
+                    {
+                        using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
+                        if (sysIcon != null)
+                        {
+                            using var bmp = sysIcon.ToBitmap();
+                            using var ms = new MemoryStream();
+                            bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                            return ms.ToArray();
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore extraction errors
+                    }
+                    return null;
+                });
+
+                if (iconBytes != null)
+                {
+                    // Must initialize BitmapImage on the UI thread
+                    var dispatcher = DispatcherQueue.GetForCurrentThread();
+                    if (dispatcher != null)
+                    {
+                        // Since LoadIconAsync is already called from the UI thread (via UpdateCollection),
+                        // we can just directly await the stream load. But just to be safe, we ensure it's on UI.
+                        using var ms = new MemoryStream(iconBytes);
+                        var ras = ms.AsRandomAccessStream();
+                        var bitmap = new BitmapImage();
+                        await bitmap.SetSourceAsync(ras);
+                        AppIcon = bitmap;
+                    }
+                }
+            }
+            catch
+            {
+                // Silently fail if icon extraction is denied
+            }
         }
 
         // Code required by INotifyPropertyChanged

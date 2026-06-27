@@ -314,11 +314,12 @@ namespace SoundBar.ViewModels
                 if (!Apps.Any(x => string.Equals(x.Name, newApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     Apps.Add(newApp);
+                    _ = newApp.LoadIconAsync(); // Fire and forget
                 }
                 else
                 {
-                    // Update existing app
-                    var existingApp = Apps.First(x => x.ProcessId == newApp.ProcessId);
+                    // Update existing app (match by Name because ProcessId can change if the app restarts)
+                    var existingApp = Apps.First(x => string.Equals(x.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
 
                     // Check if the session just came back to life after being destroyed (e.g. tabbing back into a game)
                     if (!existingApp.IsSessionAlive)
