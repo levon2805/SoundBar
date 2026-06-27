@@ -13,8 +13,8 @@ namespace SoundBar.Services
 {
     public class UpdateService
     {
-        // Change this every time you release a new version
-        public const string CurrentVersion = "v1.0.2";
+        // Change this every time releasing a new version
+        public const string CurrentVersion = "v1.2.1";
         
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static readonly HttpClient _httpClient = new HttpClient();
@@ -39,7 +39,6 @@ namespace SoundBar.Services
                 {
                     LatestVersion = releaseInfo.TagName;
 
-                    // Before actual release, change this to: if (IsNewerVersion(LatestVersion, CurrentVersion))
                     if (LatestVersion != CurrentVersion)
                     {
                         var asset = releaseInfo.Assets?.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
