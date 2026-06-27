@@ -67,21 +67,30 @@ namespace SoundBar.Services
                             // If we already have a slider for this App Name, skip it to prevent duplicates
                             if (addedProcessNames.Contains(processName)) continue;
 
-                            string? safeIconPath = null;
-                            try
+                            string? safeIconPath = GetExecutablePathSafely(process);
+
+                            // Clean up display names for Unreal/Unity engine games (e.g., VALORANT-Win64-Shipping)
+                            string displayName = processName;
+                            if (displayName.EndsWith("-Win64-Shipping", StringComparison.OrdinalIgnoreCase))
                             {
-                                safeIconPath = process.MainModule?.FileName;
+                                displayName = displayName.Substring(0, displayName.Length - "-Win64-Shipping".Length);
                             }
-                            catch (System.ComponentModel.Win32Exception)
+                            else if (displayName.EndsWith("-Win64", StringComparison.OrdinalIgnoreCase))
                             {
-                                // Ignore and keep going
+                                displayName = displayName.Substring(0, displayName.Length - "-Win64".Length);
+                            }
+
+                            // Also capitalize the first letter to make it look nicer if it's all lowercase
+                            if (displayName.Length > 0 && char.IsLower(displayName[0]))
+                            {
+                                displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);
                             }
 
                             var newApp = new AudioAppModel(this)
                             {
                                 ProcessId = process.Id,
                                 IsBackgroundApp = isBackground,
-                                Name = processName,
+                                Name = displayName,
                                 Volume = simpleVolume.MasterVolume,
                                 IsMuted = simpleVolume.IsMuted,
                                 IconPath = safeIconPath
@@ -190,6 +199,47 @@ namespace SoundBar.Services
                     // Take errors on background thread to prevent crashing the app
                 }
             });
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, int processId);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(IntPtr hProcess, uint dwFlags, System.Text.StringBuilder lpExeName, ref uint lpdwSize);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hHandle);
+
+        private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+        private static string? GetExecutablePathSafely(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.MainModule?.FileName;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Fallback for Anti-Cheat protected processes (like Valorant / Vanguard)
+                IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.Id);
+                if (hProcess != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var buffer = new System.Text.StringBuilder(1024);
+                        uint size = (uint)buffer.Capacity;
+                        if (QueryFullProcessImageName(hProcess, 0, buffer, ref size))
+                        {
+                            return buffer.ToString();
+                        }
+                    }
+                    finally
+                    {
+                        CloseHandle(hProcess);
+                    }
+                }
+                return null;
+            }
         }
     }
 }
