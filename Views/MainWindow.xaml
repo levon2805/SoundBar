@@ -175,7 +175,7 @@
                                 <Flyout>
                                     <StackPanel Width="200">
                                         <TextBlock Text="Background Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                        <ListView ItemsSource="{x:Bind ViewModel.SystemBackgroundApps, Mode=OneWay}">
+                                        <ListView ItemsSource="{Binding SystemBackgroundApps}">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Margin="0,5">
@@ -204,7 +204,7 @@
                                 <Flyout>
                                     <StackPanel Width="200">
                                         <TextBlock Text="Hidden Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                        <ListView ItemsSource="{x:Bind ViewModel.HiddenApps, Mode=OneWay}">
+                                        <ListView ItemsSource="{Binding HiddenApps}">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid Margin="0,5">
