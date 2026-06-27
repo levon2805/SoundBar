@@ -287,24 +287,31 @@ namespace SoundBar.ViewModels
                 if (newApp.IsBackgroundApp)
                 {
                     // If it's a background app but not allowed, add to system list and skip
-                    if (!AllowedBackgroundApps.Contains(newApp.Name))
+                    if (!AllowedBackgroundApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (!SystemBackgroundApps.Contains(newApp.Name))
+                        if (!SystemBackgroundApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
                         {
                             SystemBackgroundApps.Add(newApp.Name);
                         }
+                        
+                        // Remove from active Apps if it was previously there
+                        var existingBg = Apps.FirstOrDefault(a => string.Equals(a.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
+                        if (existingBg != null) Apps.Remove(existingBg);
+                        
                         continue;
                     }
                 }
 
                 // Skip if this app is hidden by the user
-                if (HiddenApps.Contains(newApp.Name))
+                if (HiddenApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
+                    var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
+                    if (existingHidden != null) Apps.Remove(existingHidden);
                     continue;
                 }
 
-                // If new app is not in our current list
-                if (!Apps.Any(x => x.ProcessId == newApp.ProcessId))
+                // If new app is not in our current list (match by Name)
+                if (!Apps.Any(x => string.Equals(x.Name, newApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     Apps.Add(newApp);
                 }
@@ -341,14 +348,14 @@ namespace SoundBar.ViewModels
         // Hides an app from the main view
         public void HideApp(string appName)
         {
-            if (string.IsNullOrEmpty(appName) || HiddenApps.Contains(appName)) return;
+            if (string.IsNullOrEmpty(appName) || HiddenApps.Any(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase))) return;
 
             HiddenApps.Add(appName);
             _settingsService.Settings.HiddenApps = HiddenApps.ToList();
             _settingsService.SaveSettings();
 
             // Check if it's currently in the Apps list and remove it
-            var appToRemove = Apps.FirstOrDefault(a => a.Name == appName);
+            var appToRemove = Apps.FirstOrDefault(a => string.Equals(a.Name, appName, StringComparison.OrdinalIgnoreCase));
             if (appToRemove != null)
             {
                 Apps.Remove(appToRemove);
@@ -358,9 +365,10 @@ namespace SoundBar.ViewModels
         // Unhides an app
         public void UnhideApp(string appName)
         {
-            if (HiddenApps.Contains(appName))
+            var existing = HiddenApps.FirstOrDefault(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
             {
-                HiddenApps.Remove(appName);
+                HiddenApps.Remove(existing);
                 _settingsService.Settings.HiddenApps = HiddenApps.ToList();
                 _settingsService.SaveSettings();
             }
@@ -369,15 +377,16 @@ namespace SoundBar.ViewModels
         // Allows a system background app to be shown
         public void AllowBackgroundApp(string appName)
         {
-            if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Contains(appName)) return;
+            if (string.IsNullOrEmpty(appName) || AllowedBackgroundApps.Any(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase))) return;
 
             AllowedBackgroundApps.Add(appName);
             _settingsService.Settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
             _settingsService.SaveSettings();
 
-            if (SystemBackgroundApps.Contains(appName))
+            var existing = SystemBackgroundApps.FirstOrDefault(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
             {
-                SystemBackgroundApps.Remove(appName);
+                SystemBackgroundApps.Remove(existing);
             }
         }
 
