@@ -187,6 +187,10 @@ namespace SoundBar.ViewModels
             IsUpdating = false;
         }
 
+        // Thread-safe copy of known app names for the polling thread to read
+        private List<string> _knownAppNames = new List<string>();
+        private readonly object _knownAppNamesLock = new object();
+
         public void StartPolling()
         {
             // Create the thread
@@ -197,8 +201,14 @@ namespace SoundBar.ViewModels
                 {
                     try
                     {
-                        // Get fresh list from the backend
-                        var sessions = _audioService.GetActiveAudioSessions();
+                        // Get fresh list from the backend, passing known names to skip expensive checks
+                        List<string> knownNames;
+                        lock (_knownAppNamesLock)
+                        {
+                            knownNames = _knownAppNames.ToList();
+                        }
+                        
+                        var sessions = _audioService.GetActiveAudioSessions(knownNames);
 
                         // Get System Volume
                         var systemVol = _audioService.GetMasterVolume();
@@ -253,22 +263,36 @@ namespace SoundBar.ViewModels
                 if (!latestSessions.Any(x => string.Equals(x.Name, existingApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     bool isProcessDead = true;
-                    try
-                    {
-                        // Check if any process with this name is still running
-                        string safeName = existingApp.Name?.Replace(".exe", "", StringComparison.OrdinalIgnoreCase) ?? "";
-                        var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
-                        if (procs.Length > 0)
+                        // FAST PATH: Check if the specific process ID we started with is still running
+                        try
                         {
+                            using var p = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
+                            // If we can get it, and it hasn't exited, it's alive
+                            if (!p.HasExited)
+                            {
+                                isProcessDead = false;
+                            }
+                        }
+                        catch (ArgumentException)
+                        {
+                            // Process is definitely dead
+                            isProcessDead = true;
+                        }
+                        catch (System.ComponentModel.Win32Exception)
+                        {
+                            // We don't have access to check HasExited, but the process exists
                             isProcessDead = false;
                         }
-                        // Dispose every Process object to release OS handles
-                        foreach (var p in procs) p.Dispose();
-                    }
-                    catch
-                    {
-                        // Process doesn't exist or we don't have access (it died)
-                    }
+                        catch (InvalidOperationException)
+                        {
+                            // Process exited during the check
+                            isProcessDead = true;
+                        }
+                        catch
+                        {
+                            // Any other error, assume dead
+                            isProcessDead = true;
+                        }
 
                     if (isProcessDead)
                     {
@@ -334,17 +358,18 @@ namespace SoundBar.ViewModels
                     else if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
                     {
                         // Sync the volume from the OS (only if user hasn't recently moved the slider)
-                        if (existingApp.Volume != newApp.Volume)
-                        {
-                            existingApp.Volume = newApp.Volume;
-                        }
-
-                        if (existingApp.IsMuted != newApp.IsMuted)
-                        {
-                            existingApp.IsMuted = newApp.IsMuted;
-                        }
+                        // Use SyncFromOS methods to avoid writing back to the OS (which would create
+                        // a feedback loop spawning Task.Run + COM allocations every tick)
+                        existingApp.SyncVolumeFromOS(newApp.Volume);
+                        existingApp.SyncMuteFromOS(newApp.IsMuted);
                     }
                 }
+            }
+
+            // Sync the thread-safe copy for the polling thread
+            lock (_knownAppNamesLock)
+            {
+                _knownAppNames = Apps.Select(a => a.Name ?? "").Where(n => n.Length > 0).ToList();
             }
         }
 
@@ -362,6 +387,10 @@ namespace SoundBar.ViewModels
             if (appToRemove != null)
             {
                 Apps.Remove(appToRemove);
+                lock (_knownAppNamesLock)
+                {
+                    _knownAppNames = Apps.Select(a => a.Name ?? "").Where(n => n.Length > 0).ToList();
+                }
             }
         }
 

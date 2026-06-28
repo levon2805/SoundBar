@@ -3,18 +3,25 @@ using SoundBar.Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace SoundBar.Services
 {
     internal class WindowsAudioMixerService : IAudioMixerService
     {
-        public List<AudioAppModel> GetActiveAudioSessions()
+        // Cache of ProcessId -> App Info to prevent allocating heavy Process objects every tick
+        private readonly Dictionary<int, (string Name, bool IsBackground, string? IconPath)> _processCache = new();
+
+        public List<AudioAppModel> GetActiveAudioSessions(IEnumerable<string>? knownAppNames = null)
         {
             var apps = new List<AudioAppModel>();
 
             // Track which NAMES we have processed to prevent duplicates
             var addedProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Clean up the cache (remove dead processes) by tracking what we saw this tick
+            var seenProcessIdsThisTick = new HashSet<int>();
 
             // Get the default audio device
             using (var enumerator = new MMDeviceEnumerator())
@@ -32,47 +39,42 @@ namespace SoundBar.Services
                         using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                         using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                         {
+                            // Ignore expired sessions
+                            if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
+
+                            // FAST PATH: Check cache using ProcessID (No System.Diagnostics.Process allocation!)
+                            int processId = sessionControl.ProcessID;
+                            if (processId == 0) continue;
+                            
+                            seenProcessIdsThisTick.Add(processId);
+
+                            if (_processCache.TryGetValue(processId, out var cachedApp))
+                            {
+                                if (addedProcessNames.Contains(cachedApp.Name)) continue;
+
+                                var existingApp = new AudioAppModel(this)
+                                {
+                                    ProcessId = processId,
+                                    IsBackgroundApp = cachedApp.IsBackground,
+                                    Name = cachedApp.Name,
+                                    Volume = simpleVolume.MasterVolume,
+                                    IsMuted = simpleVolume.IsMuted,
+                                    IconPath = cachedApp.IconPath
+                                };
+
+                                apps.Add(existingApp);
+                                addedProcessNames.Add(cachedApp.Name);
+                                continue;
+                            }
+
+                            // SLOW PATH: First time seeing this ProcessId, we must resolve its name
                             // Cache the Process object so we can dispose it — sessionControl.Process
                             // creates a NEW System.Diagnostics.Process each time it is accessed
                             using var process = sessionControl.Process;
-
-                            // Ignore Idle (ID 0) and dead processes
-                            if (process == null || process.Id == 0) continue;
-
-                            // Ignore expired sessions, but allow Inactive sessions so users can adjust volume of paused/silent apps (matches Windows Volume Mixer)
-                            if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
+                            if (process == null) continue;
 
                             string processName = process.ProcessName;
                             if (string.IsNullOrEmpty(processName)) continue;
-
-                            // If we already have a slider for this App Name, skip it to prevent duplicates
-                            if (addedProcessNames.Contains(processName)) continue;
-
-                            // Identify if this is a background process
-                            // Check ALL processes with this name. If ANY have a main window, it's not a background app.
-                            // (E.g. Discord's audio engine is headless, but the main Discord.exe UI has a window)
-                            bool isBackground = true;
-                            try
-                            {
-                                string safeName = processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-                                var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
-                                foreach (var p in procs)
-                                {
-                                    if (p.MainWindowHandle != IntPtr.Zero)
-                                    {
-                                        isBackground = false;
-                                    }
-                                    // Dispose every Process object to release OS handles
-                                    p.Dispose();
-                                }
-                            }
-                            catch
-                            {
-                                // Fallback if access is denied
-                                isBackground = process.MainWindowHandle == IntPtr.Zero;
-                            }
-
-                            string? safeIconPath = GetExecutablePathSafely(process);
 
                             // Clean up display names for Unreal/Unity engine games or common wrappers
                             string displayName = processName;
@@ -86,15 +88,67 @@ namespace SoundBar.Services
                                 }
                             }
 
-                            // Also capitalize the first letter to make it look nicer if it's all lowercase
+                            // Capitalize the first letter
                             if (displayName.Length > 0 && char.IsLower(displayName[0]))
                             {
                                 displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);
                             }
 
+                            // If we already have a slider for this App Name, skip it
+                            if (addedProcessNames.Contains(displayName)) continue;
+
+                            bool isBackground = true;
+                            string? safeIconPath = null;
+
+                            // Identify if this is a background process
+                            try
+                            {
+                                string safeName = processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                                var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+                                try
+                                {
+                                    foreach (var p in procs)
+                                    {
+                                        try
+                                        {
+                                            if (p.MainWindowHandle != IntPtr.Zero)
+                                            {
+                                                isBackground = false;
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            // Ignore access denied for this specific process instance
+                                        }
+                                    }
+                                }
+                                finally
+                                {
+                                    // Guarantee every Process object is disposed to release OS handles
+                                    foreach (var p in procs) p.Dispose();
+                                }
+                            }
+                            catch
+                            {
+                                // Fallback if access is denied entirely
+                                try
+                                {
+                                    isBackground = process.MainWindowHandle == IntPtr.Zero;
+                                }
+                                catch
+                                {
+                                    isBackground = true;
+                                }
+                            }
+
+                            safeIconPath = GetExecutablePathSafely(process);
+
+                            // Save to Cache so we never run the slow path for this ProcessId again
+                            _processCache[processId] = (displayName, isBackground, safeIconPath);
+
                             var newApp = new AudioAppModel(this)
                             {
-                                ProcessId = process.Id,
+                                ProcessId = processId,
                                 IsBackgroundApp = isBackground,
                                 Name = displayName,
                                 Volume = simpleVolume.MasterVolume,
@@ -103,11 +157,22 @@ namespace SoundBar.Services
                             };
 
                             apps.Add(newApp);
-                            addedProcessNames.Add(processName);
+                            addedProcessNames.Add(displayName);
                         }
                     }
                 }
             }
+
+            // Cleanup dead processes from our dictionary cache to prevent memory leaks
+            var cachedIds = _processCache.Keys.ToList();
+            foreach (var id in cachedIds)
+            {
+                if (!seenProcessIdsThisTick.Contains(id))
+                {
+                    _processCache.Remove(id);
+                }
+            }
+
             return apps;
         }
 
