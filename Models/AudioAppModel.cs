@@ -71,6 +71,32 @@ namespace SoundBar.Models
             }
         }
 
+        /// <summary>
+        /// Updates the volume from an OS read without writing it back (avoids feedback loop).
+        /// Use this when syncing the slider to match what Windows reports.
+        /// </summary>
+        public void SyncVolumeFromOS(float volume)
+        {
+            if (_volume != volume)
+            {
+                _volume = volume;
+                OnPropertyChanged(nameof(Volume));
+                OnPropertyChanged(nameof(VolumePercentage));
+            }
+        }
+
+        /// <summary>
+        /// Updates the mute state from an OS read without writing it back (avoids feedback loop).
+        /// </summary>
+        public void SyncMuteFromOS(bool isMuted)
+        {
+            if (_isMuted != isMuted)
+            {
+                _isMuted = isMuted;
+                OnPropertyChanged(nameof(IsMuted));
+            }
+        }
+
         // Forces the current UI volume down to the Windows Audio Service
         // Useful if the game destroyed its audio session and just recreated a new one
         public void PushVolumeToOS()
