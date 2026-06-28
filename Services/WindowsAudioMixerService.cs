@@ -32,7 +32,9 @@ namespace SoundBar.Services
                         using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                         using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                         {
-                            var process = sessionControl.Process;
+                            // Cache the Process object so we can dispose it — sessionControl.Process
+                            // creates a NEW System.Diagnostics.Process each time it is accessed
+                            using var process = sessionControl.Process;
 
                             // Ignore Idle (ID 0) and dead processes
                             if (process == null || process.Id == 0) continue;
@@ -42,6 +44,9 @@ namespace SoundBar.Services
 
                             string processName = process.ProcessName;
                             if (string.IsNullOrEmpty(processName)) continue;
+
+                            // If we already have a slider for this App Name, skip it to prevent duplicates
+                            if (addedProcessNames.Contains(processName)) continue;
 
                             // Identify if this is a background process
                             // Check ALL processes with this name. If ANY have a main window, it's not a background app.
@@ -66,9 +71,6 @@ namespace SoundBar.Services
                                 // Fallback if access is denied
                                 isBackground = process.MainWindowHandle == IntPtr.Zero;
                             }
-
-                            // If we already have a slider for this App Name, skip it to prevent duplicates
-                            if (addedProcessNames.Contains(processName)) continue;
 
                             string? safeIconPath = GetExecutablePathSafely(process);
 
@@ -191,7 +193,9 @@ namespace SoundBar.Services
                             using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                             using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                             {
-                                if (sessionControl.Process != null && string.Equals(sessionControl.Process.ProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                // Cache and dispose Process — sessionControl.Process creates a new object each access
+                                using var process = sessionControl.Process;
+                                if (process != null && string.Equals(process.ProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
                                 {
                                     // Apply action to all matching sessions
                                     action(simpleVolume);
