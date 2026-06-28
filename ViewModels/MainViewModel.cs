@@ -262,6 +262,8 @@ namespace SoundBar.ViewModels
                         {
                             isProcessDead = false;
                         }
+                        // Dispose every Process object to release OS handles
+                        foreach (var p in procs) p.Dispose();
                     }
                     catch
                     {

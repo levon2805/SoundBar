@@ -165,7 +165,7 @@ namespace SoundBar.Models
                         // Since LoadIconAsync is already called from the UI thread (via UpdateCollection),
                         // we can just directly await the stream load. But just to be safe, we ensure it's on UI.
                         using var ms = new MemoryStream(iconBytes);
-                        var ras = ms.AsRandomAccessStream();
+                        using var ras = ms.AsRandomAccessStream();
                         var bitmap = new BitmapImage();
                         await bitmap.SetSourceAsync(ras);
                         AppIcon = bitmap;
