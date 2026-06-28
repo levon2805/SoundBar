@@ -27,6 +27,8 @@ namespace SoundBar.Services
                     // Loop through the audio sessions found
                     foreach (var session in sessionEnumerator)
                     {
+                        // Dispose the raw session COM object to prevent COM handle leaks
+                        using (session)
                         using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                         using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                         {
@@ -54,8 +56,9 @@ namespace SoundBar.Services
                                     if (p.MainWindowHandle != IntPtr.Zero)
                                     {
                                         isBackground = false;
-                                        break;
                                     }
+                                    // Dispose every Process object to release OS handles
+                                    p.Dispose();
                                 }
                             }
                             catch
@@ -183,6 +186,8 @@ namespace SoundBar.Services
                     {
                         foreach (var session in sessionEnumerator)
                         {
+                            // Dispose the raw session COM object to prevent COM handle leaks
+                            using (session)
                             using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                             using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                             {
