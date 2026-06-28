@@ -84,6 +84,7 @@
                     </StackPanel>
                 </Button>
 
+                <!-- Audio Presets - Temporarily disabled for redesign
                 <Grid Margin="0,0,0,15">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -128,6 +129,7 @@
                             ToolTipService.ToolTip="Delete Selected Preset"
                             Click="DeletePresetButton_Click"/>
                 </Grid>
+                -->
 
                 <TextBlock Text="Master Volume" 
                            Foreground="#DDDDDD" 
