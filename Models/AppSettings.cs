@@ -2,9 +2,11 @@ namespace SoundBar.Models
 {
     public class AppSettings
     {
-        // Default position if no config exists
+        // Default position and size if no config exists
         public double WindowTop { get; set; } = 100;
         public double WindowLeft { get; set; } = 100;
+        public int WindowWidth { get; set; } = 400;
+        public int WindowHeight { get; set; } = 500;
         public bool IsPinned { get; set; } = false;
 
         // List of app names that should be hidden from the main view
