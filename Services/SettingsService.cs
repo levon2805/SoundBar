@@ -13,8 +13,15 @@ namespace SoundBar.Services
 
         public SettingsService()
         {
-            // Save 'config.json' in the same folder as the executable
-            string folder = AppDomain.CurrentDomain.BaseDirectory;
+            // Save 'config.json' in %APPDATA%\SoundBar
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string folder = Path.Combine(appData, "SoundBar");
+            
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
             _filePath = Path.Combine(folder, "config.json");
             Settings = Load();
         }

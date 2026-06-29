@@ -41,12 +41,12 @@ namespace SoundBar.Views
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
             _appWindow = AppWindow.GetFromWindowId(wndId);
             
-            _appWindow.Resize(new SizeInt32(400, 500));
+            
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.IsMaximizable = false;
-                presenter.IsResizable = false;
+                presenter.IsResizable = true;
                 presenter.SetBorderAndTitleBar(true, false);
             }
 
@@ -93,7 +93,11 @@ namespace SoundBar.Views
         {
             var settings = _settingsService.Load();
 
-            _appWindow.Move(new PointInt32((int)settings.WindowLeft, (int)settings.WindowTop));
+            _appWindow.MoveAndResize(new RectInt32(
+                (int)settings.WindowLeft, 
+                (int)settings.WindowTop, 
+                settings.WindowWidth, 
+                settings.WindowHeight));
             
             if (settings.IsPinned)
             {
@@ -107,16 +111,17 @@ namespace SoundBar.Views
         private void SaveWindowSettings()
         {
             var position = _appWindow.Position;
+            var size = _appWindow.Size;
             var isPinned = IsTopmost();
 
-            var settings = new AppSettings
-            {
-                WindowTop = position.Y,
-                WindowLeft = position.X,
-                IsPinned = isPinned
-            };
+            // Update the existing settings object so we don't erase HiddenApps/BackgroundApps/Presets
+            _settingsService.Settings.WindowTop = position.Y;
+            _settingsService.Settings.WindowLeft = position.X;
+            _settingsService.Settings.WindowWidth = size.Width;
+            _settingsService.Settings.WindowHeight = size.Height;
+            _settingsService.Settings.IsPinned = isPinned;
 
-            _settingsService.Save(settings);
+            _settingsService.SaveSettings();
         }
 
         // Updates the pin icon color based on state
