@@ -12,272 +12,256 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <!-- Title Bar -->
+            <Grid x:Name="TitleBarGrid" Grid.Row="0" Margin="-20,-20,-20,15" Padding="20,20,20,0" Background="Transparent" Canvas.ZIndex="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-                <Grid x:Name="TitleBarGrid" Margin="-20,-20,-20,15" Padding="20,20,20,0" Background="Transparent">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="SoundBar" 
+                           Foreground="White" 
+                           VerticalAlignment="Center" 
+                           Margin="10,0,0,0"
+                           FontSize="12"
+                           FontWeight="SemiBold"/>
 
-                    <TextBlock Grid.Column="0"
-                               Text="SoundBar" 
-                               Foreground="White" 
-                               VerticalAlignment="Center" 
-                               Margin="10,0,0,0"
-                               FontSize="12"
-                               FontWeight="SemiBold"/>
-
-                    <Button x:Name="PinButton"
-                            Grid.Column="1"
-                            Content="&#xE718;" 
-                            FontFamily="Segoe Fluent Icons"
-                            Width="36" Height="36"
-                            Padding="0" MinWidth="0" MinHeight="0"
-                            Background="Transparent"
-                            Foreground="#555555"
-                            BorderThickness="0"
-                            FontSize="16"
-                            Margin="0,0,5,0"
-                            Click="PinButton_Click"
-                            ToolTipService.ToolTip="Always on Top"/>
-
-                    <Button x:Name="MinimizeButton"
-                            Grid.Column="2"
-                            Content="&#xE921;" 
-                            FontFamily="Segoe Fluent Icons"
-                            Width="36" Height="36"
-                            Padding="0" MinWidth="0" MinHeight="0"
-                            Background="Transparent"
-                            Foreground="#AAAAAA"
-                            BorderThickness="0"
-                            FontSize="14"
-                            Click="MinimizeButton_Click"/>
-
-                    <Button Grid.Column="3"
-                            Content="&#xE711;" 
-                            FontFamily="Segoe Fluent Icons"
-                            Width="36" Height="36"
-                            Padding="0" MinWidth="0" MinHeight="0"
-                            Background="Transparent"
-                            Foreground="#AAAAAA"
-                            BorderThickness="0"
-                            FontSize="14"
-                            Click="CloseButton_Click"/>
-                </Grid>
-
-                <Button Background="#1F6B2C" 
-                        Foreground="White" 
+                <Button x:Name="SettingsButton"
+                        Grid.Column="1"
+                        Content="&#xE713;" 
+                        FontFamily="Segoe Fluent Icons"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="#AAAAAA"
                         BorderThickness="0"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Margin="0,0,0,15"
-                        Padding="5"
-                        CornerRadius="4"
-                        Click="UpdateBanner_Click"
-                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE896;" VerticalAlignment="Center" />
-                        <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                    </StackPanel>
-                </Button>
+                        FontSize="14"
+                        Margin="0,0,5,0"
+                        Click="SettingsButton_Click"
+                        ToolTipService.ToolTip="Settings"/>
 
-                <!-- Audio Presets - Temporarily disabled for redesign
-                <Grid Margin="0,0,0,15">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <ComboBox Grid.Column="0"
-                              HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding Presets}"
-                              SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
-                              DisplayMemberPath="Name"
-                              PlaceholderText="Audio Presets..."
-                              Margin="0,0,5,0"
-                              Background="#333333"
-                              BorderThickness="1"
-                              BorderBrush="#555555"
-                              Foreground="#DDDDDD"/>
+                <Button x:Name="PinButton"
+                        Grid.Column="2"
+                        Content="&#xE718;" 
+                        FontFamily="Segoe Fluent Icons"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="#555555"
+                        BorderThickness="0"
+                        FontSize="16"
+                        Margin="0,0,5,0"
+                        Click="PinButton_Click"
+                        ToolTipService.ToolTip="Always on Top"/>
 
-                    <Button Grid.Column="1"
-                            Content="&#xE710;"
-                            FontFamily="Segoe Fluent Icons"
-                            Width="32" Height="32"
-                            Padding="0" MinWidth="0" MinHeight="0"
-                            Background="#333333"
-                            Foreground="#DDDDDD"
-                            BorderBrush="#555555"
-                            BorderThickness="1"
-                            Margin="0,0,5,0"
-                            ToolTipService.ToolTip="Save Current Volumes as Preset"
-                            Click="SavePresetButton_Click"/>
+                <Button x:Name="MinimizeButton"
+                        Grid.Column="3"
+                        Content="&#xE921;" 
+                        FontFamily="Segoe Fluent Icons"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="#AAAAAA"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Click="MinimizeButton_Click"/>
 
-                    <Button Grid.Column="2"
-                            Content="&#xE74D;"
-                            FontFamily="Segoe Fluent Icons"
-                            Width="32" Height="32"
-                            Padding="0" MinWidth="0" MinHeight="0"
-                            Background="#333333"
-                            Foreground="#E81123"
-                            BorderBrush="#555555"
-                            BorderThickness="1"
-                            ToolTipService.ToolTip="Delete Selected Preset"
-                            Click="DeletePresetButton_Click"/>
-                </Grid>
-                -->
+                <Button Grid.Column="4"
+                        Content="&#xE711;" 
+                        FontFamily="Segoe Fluent Icons"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="#AAAAAA"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Click="CloseButton_Click"/>
+            </Grid>
 
-                <TextBlock Text="Master Volume" 
-                           Foreground="#DDDDDD" 
-                           FontSize="14" 
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,5"/>
+            <!-- Main Content -->
+            <Grid x:Name="MainContentGrid" Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <StackPanel Grid.Row="0">
+                    <Button Background="#1F6B2C" 
+                            Foreground="White" 
+                            BorderThickness="0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Margin="0,0,0,15"
+                            Padding="5"
+                            CornerRadius="4"
+                            Click="UpdateBanner_Click"
+                            Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE896;" VerticalAlignment="Center" />
+                            <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="40"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Slider Grid.Column="0"
-                            Minimum="0" 
-                            Maximum="100" 
-                            Value="{Binding MasterVolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                            Margin="0,0,10,0"/>
-
-                    <TextBlock Grid.Column="1" 
-                               Foreground="#AAAAAA"
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Right">
-                        <Run Text="{Binding MasterVolumePercentage}" /><Run Text="%" />
-                    </TextBlock>
-                </Grid>
-
-                <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
-
-                <Grid Margin="0,0,0,10">
-                    <TextBlock Text="Active Apps" 
+                    <TextBlock Text="Master Volume" 
                                Foreground="#DDDDDD" 
                                FontSize="14" 
                                FontWeight="SemiBold"
-                               VerticalAlignment="Center"/>
-                    
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Background Apps" 
-                                Background="Transparent" 
-                                Foreground="#AAAAAA" 
-                                BorderThickness="0"
-                                Padding="5,0"
-                                Margin="0,0,5,0">
-                            <Button.Flyout>
-                                <Flyout>
-                                    <StackPanel Width="200">
-                                        <TextBlock Text="Background Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                        <ListView ItemsSource="{Binding SystemBackgroundApps}">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="0,5">
-                                                        <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="120" HorizontalAlignment="Left" />
-                                                        <Button Content="Allow" 
-                                                                Click="AllowBackgroundAppButton_Click" 
-                                                                HorizontalAlignment="Right" 
-                                                                Background="#333333" 
-                                                                Foreground="White" 
-                                                                BorderThickness="0"/>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
+                               Margin="0,0,0,5"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Slider Grid.Column="0"
+                                Minimum="0" 
+                                Maximum="100" 
+                                Value="{Binding MasterVolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                Margin="0,0,10,0"/>
+
+                        <TextBlock Grid.Column="1" 
+                                   Foreground="#AAAAAA"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right">
+                            <Run Text="{Binding MasterVolumePercentage}" /><Run Text="%" />
+                        </TextBlock>
+                    </Grid>
+
+                    <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
+
+                    <Grid Margin="0,0,0,10">
+                        <TextBlock Text="Active Apps" 
+                                   Foreground="#DDDDDD" 
+                                   FontSize="14" 
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Apps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="30"/>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button Grid.Column="0" 
+                                            Content="&#xE74D;" 
+                                            FontFamily="Segoe Fluent Icons" 
+                                            Background="Transparent" 
+                                            Foreground="#777777" 
+                                            BorderThickness="0" 
+                                            Click="HideAppButton_Click" 
+                                            ToolTipService.ToolTip="Hide App" 
+                                            Padding="0" MinWidth="20" Height="20"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,5,0" />
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Image Source="{Binding AppIcon}" Width="20" Height="20" Margin="0,0,8,0" Stretch="Uniform"/>
+                                        <TextBlock Text="{Binding Name}" 
+                                                   Foreground="White"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
 
-                        <Button Content="Hidden Apps" 
-                                Background="Transparent" 
-                                Foreground="#AAAAAA" 
-                                BorderThickness="0"
-                                Padding="5,0">
-                            <Button.Flyout>
-                                <Flyout>
-                                    <StackPanel Width="200">
-                                        <TextBlock Text="Hidden Apps" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                                        <ListView ItemsSource="{Binding HiddenApps}">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Grid Margin="0,5">
-                                                        <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White"/>
-                                                        <Button Content="Unhide" 
-                                                                Click="UnhideAppButton_Click" 
-                                                                HorizontalAlignment="Right" 
-                                                                Background="#333333" 
-                                                                Foreground="White" 
-                                                                BorderThickness="0"/>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-            </StackPanel>
+                                    <Slider Grid.Column="2" 
+                                            Minimum="0" 
+                                            Maximum="100" 
+                                            Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            Margin="10,0"/>
 
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Apps}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,0,0,15">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="30"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="40"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Button Grid.Column="0" 
-                                        Content="&#xE74D;" 
-                                        FontFamily="Segoe Fluent Icons" 
-                                        Background="Transparent" 
-                                        Foreground="#777777" 
-                                        BorderThickness="0" 
-                                        Click="HideAppButton_Click" 
-                                        ToolTipService.ToolTip="Hide App" 
-                                        Padding="0" MinWidth="20" Height="20"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,5,0" />
-
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Image Source="{Binding AppIcon}" Width="20" Height="20" Margin="0,0,8,0" Stretch="Uniform"/>
-                                    <TextBlock Text="{Binding Name}" 
-                                               Foreground="White"
+                                    <TextBlock Grid.Column="3" 
+                                               Foreground="#AAAAAA"
                                                VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
+                                               HorizontalAlignment="Right">
+                                        <Run Text="{Binding VolumePercentage}" /><Run Text="%" />
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
 
-                                <Slider Grid.Column="2" 
-                                        Minimum="0" 
-                                        Maximum="100" 
-                                        Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        Margin="10,0"/>
+            <!-- Settings Content -->
+            <Grid x:Name="SettingsContentGrid" Grid.Row="1" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Column="3" 
-                                           Foreground="#AAAAAA"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Right">
-                                    <Run Text="{Binding VolumePercentage}" /><Run Text="%" />
-                                </TextBlock>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
+                    <Button Content="&#xE72B;" 
+                            FontFamily="Segoe Fluent Icons"
+                            Background="Transparent"
+                            Foreground="#AAAAAA"
+                            BorderThickness="0"
+                            Padding="5"
+                            FontSize="18"
+                            Margin="0,0,10,0"
+                            Click="CloseSettingsButton_Click"/>
+                    <TextBlock Text="Settings" 
+                               Foreground="White" 
+                               FontSize="18" 
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+                    <StackPanel Spacing="20">
+                        <StackPanel>
+                            <TextBlock Text="Background Apps" Foreground="White" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBlock Text="Apps that are running in the background and not outputting audio yet." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding SystemBackgroundApps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,5">
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="180" HorizontalAlignment="Left" />
+                                            <Button Content="Allow" 
+                                                    Click="AllowBackgroundAppButton_Click" 
+                                                    HorizontalAlignment="Right" 
+                                                    Background="#333333" 
+                                                    Foreground="White" 
+                                                    BorderThickness="0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel>
+                            <TextBlock Text="Hidden Apps" Foreground="White" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBlock Text="Apps that you have manually hidden from the mixer." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding HiddenApps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,5">
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White"/>
+                                            <Button Content="Unhide" 
+                                                    Click="UnhideAppButton_Click" 
+                                                    HorizontalAlignment="Right" 
+                                                    Background="#333333" 
+                                                    Foreground="White" 
+                                                    BorderThickness="0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
     </Border>
 </Window>

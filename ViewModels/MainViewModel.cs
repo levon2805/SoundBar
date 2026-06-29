@@ -380,6 +380,15 @@ namespace SoundBar.ViewModels
 
             HiddenApps.Add(appName);
             _settingsService.Settings.HiddenApps = HiddenApps.ToList();
+
+            // Ensure mutual exclusivity: remove from AllowedBackgroundApps if present
+            var existingBg = AllowedBackgroundApps.FirstOrDefault(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase));
+            if (existingBg != null)
+            {
+                AllowedBackgroundApps.Remove(existingBg);
+                _settingsService.Settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
+            }
+
             _settingsService.SaveSettings();
 
             // Check if it's currently in the Apps list and remove it
@@ -409,6 +418,15 @@ namespace SoundBar.ViewModels
 
             AllowedBackgroundApps.Add(appName);
             _settingsService.Settings.AllowedBackgroundApps = AllowedBackgroundApps.ToList();
+
+            // Ensure mutual exclusivity: remove from HiddenApps if present
+            var existingHidden = HiddenApps.FirstOrDefault(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase));
+            if (existingHidden != null)
+            {
+                HiddenApps.Remove(existingHidden);
+                _settingsService.Settings.HiddenApps = HiddenApps.ToList();
+            }
+
             _settingsService.SaveSettings();
 
             var existing = SystemBackgroundApps.FirstOrDefault(a => string.Equals(a, appName, StringComparison.OrdinalIgnoreCase));
