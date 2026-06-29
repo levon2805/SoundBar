@@ -11,16 +11,16 @@ namespace SoundBar.Services
     internal class WindowsAudioMixerService : IAudioMixerService
     {
         // Cache of ProcessId -> App Info to prevent allocating heavy Process objects every tick
-        private readonly Dictionary<int, (string Name, bool IsBackground, string? IconPath)> _processCache = new();
+        private readonly Dictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
 
-        public List<AudioAppModel> GetActiveAudioSessions(IEnumerable<string>? knownAppNames = null)
+        public List<AudioSessionData> GetActiveAudioSessions()
         {
-            var apps = new List<AudioAppModel>();
+            var sessions = new List<AudioSessionData>();
 
-            // Track which NAMES we have processed to prevent duplicates
-            var addedProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Track which display names we have processed to prevent duplicates
+            var addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Clean up the cache (remove dead processes) by tracking what we saw this tick
+            // Track what ProcessIds we see this tick to clean up stale cache entries
             var seenProcessIdsThisTick = new HashSet<int>();
 
             // Get the default audio device
@@ -42,34 +42,33 @@ namespace SoundBar.Services
                             // Ignore expired sessions
                             if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
 
-                            // FAST PATH: Check cache using ProcessID (No System.Diagnostics.Process allocation!)
+                            // Use ProcessID directly — no System.Diagnostics.Process allocation
                             int processId = sessionControl.ProcessID;
                             if (processId == 0) continue;
                             
                             seenProcessIdsThisTick.Add(processId);
 
+                            // FAST PATH: Use cached process info (most ticks hit this)
                             if (_processCache.TryGetValue(processId, out var cachedApp))
                             {
-                                if (addedProcessNames.Contains(cachedApp.Name)) continue;
+                                if (addedNames.Contains(cachedApp.DisplayName)) continue;
 
-                                var existingApp = new AudioAppModel(this)
+                                sessions.Add(new AudioSessionData
                                 {
                                     ProcessId = processId,
+                                    DisplayName = cachedApp.DisplayName,
+                                    RawProcessName = cachedApp.RawProcessName,
                                     IsBackgroundApp = cachedApp.IsBackground,
-                                    Name = cachedApp.Name,
                                     Volume = simpleVolume.MasterVolume,
                                     IsMuted = simpleVolume.IsMuted,
                                     IconPath = cachedApp.IconPath
-                                };
+                                });
 
-                                apps.Add(existingApp);
-                                addedProcessNames.Add(cachedApp.Name);
+                                addedNames.Add(cachedApp.DisplayName);
                                 continue;
                             }
 
-                            // SLOW PATH: First time seeing this ProcessId, we must resolve its name
-                            // Cache the Process object so we can dispose it — sessionControl.Process
-                            // creates a NEW System.Diagnostics.Process each time it is accessed
+                            // SLOW PATH: First time seeing this ProcessId, resolve its name
                             using var process = sessionControl.Process;
                             if (process == null) continue;
 
@@ -94,8 +93,8 @@ namespace SoundBar.Services
                                 displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);
                             }
 
-                            // If we already have a slider for this App Name, skip it
-                            if (addedProcessNames.Contains(displayName)) continue;
+                            // If we already have a slider for this display name, skip it
+                            if (addedNames.Contains(displayName)) continue;
 
                             bool isBackground = true;
                             string? safeIconPath = null;
@@ -124,13 +123,11 @@ namespace SoundBar.Services
                                 }
                                 finally
                                 {
-                                    // Guarantee every Process object is disposed to release OS handles
                                     foreach (var p in procs) p.Dispose();
                                 }
                             }
                             catch
                             {
-                                // Fallback if access is denied entirely
                                 try
                                 {
                                     isBackground = process.MainWindowHandle == IntPtr.Zero;
@@ -143,27 +140,27 @@ namespace SoundBar.Services
 
                             safeIconPath = GetExecutablePathSafely(process);
 
-                            // Save to Cache so we never run the slow path for this ProcessId again
-                            _processCache[processId] = (displayName, isBackground, safeIconPath);
+                            // Cache so we never run the slow path for this ProcessId again
+                            _processCache[processId] = (displayName, processName, isBackground, safeIconPath);
 
-                            var newApp = new AudioAppModel(this)
+                            sessions.Add(new AudioSessionData
                             {
                                 ProcessId = processId,
+                                DisplayName = displayName,
+                                RawProcessName = processName,
                                 IsBackgroundApp = isBackground,
-                                Name = displayName,
                                 Volume = simpleVolume.MasterVolume,
                                 IsMuted = simpleVolume.IsMuted,
                                 IconPath = safeIconPath
-                            };
+                            });
 
-                            apps.Add(newApp);
-                            addedProcessNames.Add(displayName);
+                            addedNames.Add(displayName);
                         }
                     }
                 }
             }
 
-            // Cleanup dead processes from our dictionary cache to prevent memory leaks
+            // Cleanup dead processes from cache
             var cachedIds = _processCache.Keys.ToList();
             foreach (var id in cachedIds)
             {
@@ -173,7 +170,7 @@ namespace SoundBar.Services
                 }
             }
 
-            return apps;
+            return sessions;
         }
 
         public void SetVolume(string processName, float level)
@@ -258,11 +255,13 @@ namespace SoundBar.Services
                             using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                             using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                             {
-                                // Cache and dispose Process — sessionControl.Process creates a new object each access
-                                using var process = sessionControl.Process;
-                                if (process != null && string.Equals(process.ProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                // Match by ProcessID using the cache — zero Process object allocations
+                                int processId = sessionControl.ProcessID;
+                                if (processId == 0) continue;
+
+                                if (_processCache.TryGetValue(processId, out var cached) &&
+                                    string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    // Apply action to all matching sessions
                                     action(simpleVolume);
                                 }
                             }
@@ -271,7 +270,7 @@ namespace SoundBar.Services
                 }
                 catch (Exception)
                 {
-                    // Take errors on background thread to prevent crashing the app
+                    // Swallow errors on background thread to prevent crashing the app
                 }
             });
         }

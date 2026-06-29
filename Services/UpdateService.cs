@@ -14,7 +14,7 @@ namespace SoundBar.Services
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v1.3.5";
+        public const string CurrentVersion = "v1.3.6";
         
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static readonly HttpClient _httpClient = new HttpClient();

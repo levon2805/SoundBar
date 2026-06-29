@@ -4,8 +4,8 @@ namespace SoundBar.Services
 {
     public interface IAudioMixerService
     {
-        // Returns list of all apps currently making sound
-        List<AudioAppModel> GetActiveAudioSessions(IEnumerable<string>? knownAppNames = null);
+        // Returns lightweight snapshots of all active audio sessions (no side effects)
+        List<AudioSessionData> GetActiveAudioSessions();
 
         // Update volume for specific app using Process Name
         void SetVolume(string processName, float level);
