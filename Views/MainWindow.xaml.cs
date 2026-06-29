@@ -218,6 +218,21 @@ namespace SoundBar.Views
             }
         }
 
+        // Toggle Settings Menu
+        private void SettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            MainContentGrid.Visibility = Visibility.Collapsed;
+            SettingsContentGrid.Visibility = Visibility.Visible;
+            SettingsButton.Visibility = Visibility.Collapsed;
+        }
+
+        private void CloseSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsContentGrid.Visibility = Visibility.Collapsed;
+            MainContentGrid.Visibility = Visibility.Visible;
+            SettingsButton.Visibility = Visibility.Visible;
+        }
+
         private void UpdateBanner_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.ApplyUpdate();
