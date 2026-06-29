@@ -18,8 +18,11 @@ namespace SoundBar.Models
         // Process ID
         public int ProcessId { get; set; }
 
-        // The display name
+        // The display name (cleaned up, e.g. "Stremio" instead of "stremio-shell-ng")
         public string? Name { get; set; }
+
+        // The raw OS process name (e.g. "stremio-shell-ng") — used for SetVolume/SetMute calls
+        public string? RawProcessName { get; set; }
 
         // Path to the .exe
         public string? IconPath { get; set; }
@@ -44,6 +47,7 @@ namespace SoundBar.Models
 
         // The Volume level (0.0 to 1.0)
         private float _volume;
+        private System.Threading.CancellationTokenSource? _volumeDebounce;
 
         public float Volume
         {
@@ -62,10 +66,27 @@ namespace SoundBar.Models
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(VolumePercentage));
 
-                    // Actually changes the volume
-                    if (_audioService != null && !string.IsNullOrEmpty(Name))
+                    // Debounce: cancel any pending SetVolume call and schedule a new one
+                    // This prevents spawning 30+ Task.Run calls per second when dragging a slider
+                    _volumeDebounce?.Cancel();
+                    _volumeDebounce = new System.Threading.CancellationTokenSource();
+                    var token = _volumeDebounce.Token;
+                    var capturedVolume = _volume;
+                    string osName = RawProcessName ?? Name ?? "";
+                    if (_audioService != null && !string.IsNullOrEmpty(osName))
                     {
-                        _audioService.SetVolume(Name, _volume);
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await Task.Delay(50, token);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    _audioService.SetVolume(osName, capturedVolume);
+                                }
+                            }
+                            catch (TaskCanceledException) { }
+                        });
                     }
                 }
             }
@@ -101,9 +122,10 @@ namespace SoundBar.Models
         // Useful if the game destroyed its audio session and just recreated a new one
         public void PushVolumeToOS()
         {
-            if (_audioService != null && !string.IsNullOrEmpty(Name))
+            string osName = RawProcessName ?? Name ?? "";
+            if (_audioService != null && !string.IsNullOrEmpty(osName))
             {
-                _audioService.SetVolume(Name, _volume);
+                _audioService.SetVolume(osName, _volume);
             }
         }
 
@@ -140,10 +162,11 @@ namespace SoundBar.Models
 
                     OnPropertyChanged();
 
-                    // Actually mutes/unmutes
-                    if (_audioService != null && !string.IsNullOrEmpty(Name))
+                    // Actually mutes/unmutes (use RawProcessName for OS matching)
+                    string osName = RawProcessName ?? Name ?? "";
+                    if (_audioService != null && !string.IsNullOrEmpty(osName))
                     {
-                        _audioService.SetMute(Name, _isMuted);
+                        _audioService.SetMute(osName, _isMuted);
                     }
                 }
             }

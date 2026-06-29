@@ -187,9 +187,7 @@ namespace SoundBar.ViewModels
             IsUpdating = false;
         }
 
-        // Thread-safe copy of known app names for the polling thread to read
-        private List<string> _knownAppNames = new List<string>();
-        private readonly object _knownAppNamesLock = new object();
+
 
         public void StartPolling()
         {
@@ -201,14 +199,8 @@ namespace SoundBar.ViewModels
                 {
                     try
                     {
-                        // Get fresh list from the backend, passing known names to skip expensive checks
-                        List<string> knownNames;
-                        lock (_knownAppNamesLock)
-                        {
-                            knownNames = _knownAppNames.ToList();
-                        }
-                        
-                        var sessions = _audioService.GetActiveAudioSessions(knownNames);
+                        // Get lightweight session snapshots from the backend (zero side effects)
+                        var sessions = _audioService.GetActiveAudioSessions();
 
                         // Get System Volume
                         var systemVol = _audioService.GetMasterVolume();
@@ -251,7 +243,7 @@ namespace SoundBar.ViewModels
             thread.Start();
         }
 
-        private void UpdateCollection(List<AudioAppModel> latestSessions)
+        private void UpdateCollection(List<AudioSessionData> latestSessions)
         {
             // Remove apps that are no longer running
             // Loop backwards so we can remove items safely
@@ -260,7 +252,7 @@ namespace SoundBar.ViewModels
                 var existingApp = Apps[i];
 
                 // If existing app is not in the new list (match by Name since ProcessId might fluctuate for multi-process apps like Discord)
-                if (!latestSessions.Any(x => string.Equals(x.Name, existingApp.Name, StringComparison.OrdinalIgnoreCase)))
+                if (!latestSessions.Any(x => string.Equals(x.DisplayName, existingApp.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     bool isProcessDead = true;
                         // FAST PATH: Check if the specific process ID we started with is still running
@@ -305,23 +297,23 @@ namespace SoundBar.ViewModels
                 }
             }
 
-            // Add new apps that just started
-            foreach (var newApp in latestSessions)
+            // Add new apps or update existing ones
+            foreach (var sessionData in latestSessions)
             {
-                if (string.IsNullOrEmpty(newApp.Name)) continue;
+                if (string.IsNullOrEmpty(sessionData.DisplayName)) continue;
 
-                if (newApp.IsBackgroundApp)
+                if (sessionData.IsBackgroundApp)
                 {
                     // If it's a background app but not allowed, add to system list and skip
-                    if (!AllowedBackgroundApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
+                    if (!AllowedBackgroundApps.Any(a => string.Equals(a, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (!SystemBackgroundApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
+                        if (!SystemBackgroundApps.Any(a => string.Equals(a, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                         {
-                            SystemBackgroundApps.Add(newApp.Name);
+                            SystemBackgroundApps.Add(sessionData.DisplayName);
                         }
                         
                         // Remove from active Apps if it was previously there
-                        var existingBg = Apps.FirstOrDefault(a => string.Equals(a.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
+                        var existingBg = Apps.FirstOrDefault(a => string.Equals(a.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
                         if (existingBg != null) Apps.Remove(existingBg);
                         
                         continue;
@@ -329,28 +321,43 @@ namespace SoundBar.ViewModels
                 }
 
                 // Skip if this app is hidden by the user
-                if (HiddenApps.Any(a => string.Equals(a, newApp.Name, StringComparison.OrdinalIgnoreCase)))
+                if (HiddenApps.Any(a => string.Equals(a, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
+                    var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
                     if (existingHidden != null) Apps.Remove(existingHidden);
                     continue;
                 }
 
-                // If new app is not in our current list (match by Name)
-                if (!Apps.Any(x => string.Equals(x.Name, newApp.Name, StringComparison.OrdinalIgnoreCase)))
+                // If this app is not in our current UI list, create a new AudioAppModel for it
+                if (!Apps.Any(x => string.Equals(x.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                 {
+                    // ONLY place where AudioAppModel is created — for genuinely new apps
+                    var newApp = new AudioAppModel(_audioService)
+                    {
+                        ProcessId = sessionData.ProcessId,
+                        IsBackgroundApp = sessionData.IsBackgroundApp,
+                        Name = sessionData.DisplayName,
+                        RawProcessName = sessionData.RawProcessName,
+                        IconPath = sessionData.IconPath
+                    };
+                    // Set volume/mute via backing fields to avoid triggering OS write-back
+                    newApp.SyncVolumeFromOS(sessionData.Volume);
+                    newApp.SyncMuteFromOS(sessionData.IsMuted);
+
                     Apps.Add(newApp);
                     _ = newApp.LoadIconAsync(); // Fire and forget
                 }
                 else
                 {
                     // Update existing app (match by Name because ProcessId can change if the app restarts)
-                    var existingApp = Apps.First(x => string.Equals(x.Name, newApp.Name, StringComparison.OrdinalIgnoreCase));
+                    var existingApp = Apps.First(x => string.Equals(x.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
 
                     // Check if the session just came back to life after being destroyed (e.g. tabbing back into a game)
                     if (!existingApp.IsSessionAlive)
                     {
                         existingApp.IsSessionAlive = true;
+                        existingApp.ProcessId = sessionData.ProcessId;
+                        existingApp.RawProcessName = sessionData.RawProcessName;
                         
                         // Push our cached UI volume down to the new audio session
                         existingApp.PushVolumeToOS();
@@ -358,18 +365,11 @@ namespace SoundBar.ViewModels
                     else if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
                     {
                         // Sync the volume from the OS (only if user hasn't recently moved the slider)
-                        // Use SyncFromOS methods to avoid writing back to the OS (which would create
-                        // a feedback loop spawning Task.Run + COM allocations every tick)
-                        existingApp.SyncVolumeFromOS(newApp.Volume);
-                        existingApp.SyncMuteFromOS(newApp.IsMuted);
+                        // Use SyncFromOS methods to avoid writing back to the OS
+                        existingApp.SyncVolumeFromOS(sessionData.Volume);
+                        existingApp.SyncMuteFromOS(sessionData.IsMuted);
                     }
                 }
-            }
-
-            // Sync the thread-safe copy for the polling thread
-            lock (_knownAppNamesLock)
-            {
-                _knownAppNames = Apps.Select(a => a.Name ?? "").Where(n => n.Length > 0).ToList();
             }
         }
 
@@ -387,10 +387,6 @@ namespace SoundBar.ViewModels
             if (appToRemove != null)
             {
                 Apps.Remove(appToRemove);
-                lock (_knownAppNamesLock)
-                {
-                    _knownAppNames = Apps.Select(a => a.Name ?? "").Where(n => n.Length > 0).ToList();
-                }
             }
         }
 
