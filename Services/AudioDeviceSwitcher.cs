@@ -69,40 +69,47 @@ namespace SoundBar.Services
     {
         public static void SetDefaultDevice(string deviceId)
         {
-            var pcc = new PolicyConfigClient();
-            
-            // Try Windows 10/11 version
-            if (pcc is IPolicyConfig config)
+            try
             {
-                config.SetDefaultEndpoint(deviceId, 0); // eConsole
-                config.SetDefaultEndpoint(deviceId, 1); // eMultimedia
-                config.SetDefaultEndpoint(deviceId, 2); // eCommunications
-                Marshal.ReleaseComObject(pcc);
-                return;
-            }
+                var pcc = new PolicyConfigClient();
+                
+                // Try Windows 10/11 version
+                if (pcc is IPolicyConfig config)
+                {
+                    config.SetDefaultEndpoint(deviceId, 0); // eConsole
+                    config.SetDefaultEndpoint(deviceId, 1); // eMultimedia
+                    config.SetDefaultEndpoint(deviceId, 2); // eCommunications
+                    Marshal.ReleaseComObject(pcc);
+                    return;
+                }
 
-            // Try alternate Windows 11/Vista version
-            if (pcc is IPolicyConfigVista configVista)
+                // Try alternate Windows 11/Vista version
+                if (pcc is IPolicyConfigVista configVista)
+                {
+                    configVista.SetDefaultEndpoint(deviceId, 0);
+                    configVista.SetDefaultEndpoint(deviceId, 1);
+                    configVista.SetDefaultEndpoint(deviceId, 2);
+                    Marshal.ReleaseComObject(pcc);
+                    return;
+                }
+
+                // Try classic Windows 7/8 version
+                if (pcc is IPolicyConfigClassic configClassic)
+                {
+                    configClassic.SetDefaultEndpoint(deviceId, 0);
+                    configClassic.SetDefaultEndpoint(deviceId, 1);
+                    configClassic.SetDefaultEndpoint(deviceId, 2);
+                    Marshal.ReleaseComObject(pcc);
+                    return;
+                }
+
+                // Release if no interface matched
+                Marshal.ReleaseComObject(pcc);
+            }
+            catch
             {
-                configVista.SetDefaultEndpoint(deviceId, 0);
-                configVista.SetDefaultEndpoint(deviceId, 1);
-                configVista.SetDefaultEndpoint(deviceId, 2);
-                Marshal.ReleaseComObject(pcc);
-                return;
+                // Silently fail if COM is unavailable on this system
             }
-
-            // Try classic Windows 7/8 version
-            if (pcc is IPolicyConfigClassic configClassic)
-            {
-                configClassic.SetDefaultEndpoint(deviceId, 0);
-                configClassic.SetDefaultEndpoint(deviceId, 1);
-                configClassic.SetDefaultEndpoint(deviceId, 2);
-                Marshal.ReleaseComObject(pcc);
-                return;
-            }
-
-            // Release if no interface matched
-            Marshal.ReleaseComObject(pcc);
         }
     }
 }

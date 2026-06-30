@@ -69,6 +69,7 @@ namespace SoundBar.Models
                     // Debounce: cancel any pending SetVolume call and schedule a new one
                     // This prevents spawning 30+ Task.Run calls per second when dragging a slider
                     _volumeDebounce?.Cancel();
+                    _volumeDebounce?.Dispose();
                     _volumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _volumeDebounce.Token;
                     var capturedVolume = _volume;

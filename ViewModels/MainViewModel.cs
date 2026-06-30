@@ -144,6 +144,7 @@ namespace SoundBar.ViewModels
 
                     // Send command to Windows (DEBOUNCED to prevent COM/GC pressure when dragging)
                     _masterVolumeDebounce?.Cancel();
+                    _masterVolumeDebounce?.Dispose();
                     _masterVolumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _masterVolumeDebounce.Token;
                     var capturedVolume = _masterVolume;
