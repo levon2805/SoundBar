@@ -219,46 +219,56 @@
                 </StackPanel>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
-                    <StackPanel Spacing="20">
-                        <StackPanel>
-                            <TextBlock Text="Background Apps" Foreground="White" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Apps that are running in the background and not outputting audio yet." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                            <ItemsControl ItemsSource="{Binding SystemBackgroundApps}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,5">
-                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="180" HorizontalAlignment="Left" />
-                                            <Button Content="Allow" 
-                                                    Click="AllowBackgroundAppButton_Click" 
-                                                    HorizontalAlignment="Right" 
-                                                    Background="#333333" 
-                                                    Foreground="White" 
-                                                    BorderThickness="0"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                    <StackPanel Spacing="10">
+                        <!-- Hidden Apps First -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="True" Background="#252525" BorderThickness="1" BorderBrush="#444444">
+                            <Expander.Header>
+                                <TextBlock Text="Hidden Apps" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Apps that you have manually hidden from the mixer." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding HiddenApps}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,5">
+                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White"/>
+                                                <Button Content="Unhide" 
+                                                        Click="UnhideAppButton_Click" 
+                                                        HorizontalAlignment="Right" 
+                                                        Background="#333333" 
+                                                        Foreground="White" 
+                                                        BorderThickness="0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
 
-                        <StackPanel>
-                            <TextBlock Text="Hidden Apps" Foreground="White" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                            <TextBlock Text="Apps that you have manually hidden from the mixer." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                            <ItemsControl ItemsSource="{Binding HiddenApps}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,5">
-                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White"/>
-                                            <Button Content="Unhide" 
-                                                    Click="UnhideAppButton_Click" 
-                                                    HorizontalAlignment="Right" 
-                                                    Background="#333333" 
-                                                    Foreground="White" 
-                                                    BorderThickness="0"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                        <!-- Background Apps Second -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="#252525" BorderThickness="1" BorderBrush="#444444">
+                            <Expander.Header>
+                                <TextBlock Text="Background Apps" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Apps that are running in the background and not outputting audio yet." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding SystemBackgroundApps}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,5">
+                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="White" TextTrimming="CharacterEllipsis" MaxWidth="180" HorizontalAlignment="Left" />
+                                                <Button Content="Allow" 
+                                                        Click="AllowBackgroundAppButton_Click" 
+                                                        HorizontalAlignment="Right" 
+                                                        Background="#333333" 
+                                                        Foreground="White" 
+                                                        BorderThickness="0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
