@@ -14,7 +14,7 @@ namespace SoundBar.Services
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v1.5.2";
+        public const string CurrentVersion = "v1.6.0";
         
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static readonly HttpClient _httpClient = new HttpClient();
@@ -41,8 +41,8 @@ namespace SoundBar.Services
 
                     if (LatestVersion != CurrentVersion)
                     {
-                        var asset = releaseInfo.Assets?.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                        if (asset != null)
+                        var asset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        if (asset != null && asset.BrowserDownloadUrl != null)
                         {
                             DownloadUrl = asset.BrowserDownloadUrl;
                             return true;
