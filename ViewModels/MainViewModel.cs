@@ -101,6 +101,7 @@ namespace SoundBar.ViewModels
 
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
+        private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
 
         // Master Volume Property
         private float _masterVolume;
@@ -119,8 +120,24 @@ namespace SoundBar.ViewModels
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MasterVolumePercentage));
 
-                    // Send command to Windows
-                    _audioService.SetMasterVolume(_masterVolume);
+                    // Send command to Windows (DEBOUNCED to prevent COM/GC pressure when dragging)
+                    _masterVolumeDebounce?.Cancel();
+                    _masterVolumeDebounce = new System.Threading.CancellationTokenSource();
+                    var token = _masterVolumeDebounce.Token;
+                    var capturedVolume = _masterVolume;
+
+                    _ = System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await System.Threading.Tasks.Task.Delay(50, token);
+                            if (!token.IsCancellationRequested)
+                            {
+                                _audioService.SetMasterVolume(capturedVolume);
+                            }
+                        }
+                        catch (System.Threading.Tasks.TaskCanceledException) { }
+                    });
                 }
             }
         }
@@ -259,8 +276,8 @@ namespace SoundBar.ViewModels
                         try
                         {
                             using var p = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
-                            // If we can get it, and it hasn't exited, it's alive
-                            if (!p.HasExited)
+                            // If we can get it, it hasn't exited, AND the process name matches (prevents Windows PID recycling bug)
+                            if (!p.HasExited && string.Equals(p.ProcessName, existingApp.RawProcessName, StringComparison.OrdinalIgnoreCase))
                             {
                                 isProcessDead = false;
                             }
