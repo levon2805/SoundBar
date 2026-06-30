@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace SoundBar.Services
 {
-    internal class WindowsAudioMixerService : IAudioMixerService
+    internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
         // Cache of ProcessId -> App Info to prevent allocating heavy Process objects every tick
         private readonly Dictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
@@ -235,6 +235,51 @@ namespace SoundBar.Services
                     volume.IsMuted = isMuted;
                 }
             });
+        }
+
+        // Output Device Implementation
+
+        public List<AudioDeviceModel> GetAudioDevices()
+        {
+            var result = new List<AudioDeviceModel>();
+
+            using (var enumerator = new MMDeviceEnumerator())
+            {
+                string defaultDeviceId = string.Empty;
+                using (var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                {
+                    if (defaultDevice != null)
+                    {
+                        defaultDeviceId = defaultDevice.DeviceID;
+                    }
+                }
+                
+                using (var devices = enumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active))
+                {
+                    foreach (var device in devices)
+                    {
+                        result.Add(new AudioDeviceModel
+                        {
+                            Id = device.DeviceID,
+                            Name = device.FriendlyName,
+                            IsDefault = device.DeviceID == defaultDeviceId
+                        });
+                        device.Dispose(); // Dispose each individual device after processing
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public void SetDefaultAudioDevice(string deviceId)
+        {
+            AudioDeviceSwitcher.SetDefaultDevice(deviceId);
+        }
+
+        public void Dispose()
+        {
+            // No longer need to dispose CoreAudioController
         }
 
         private void PerformActionOnSession(string targetProcessName, Action<SimpleAudioVolume> action)

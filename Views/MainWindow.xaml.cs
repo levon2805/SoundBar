@@ -41,7 +41,8 @@ namespace SoundBar.Views
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
             _appWindow = AppWindow.GetFromWindowId(wndId);
             
-            
+            this.Title = "SoundBar";
+            _appWindow.Title = "SoundBar";
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
@@ -56,6 +57,8 @@ namespace SoundBar.Views
             TitleBarGrid.PointerMoved += TitleBarGrid_PointerMoved;
             TitleBarGrid.PointerReleased += TitleBarGrid_PointerReleased;
             TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
+
+            this.Closed += (s, e) => { ViewModel.Dispose(); };
 
             CreateDesktopShortcut();
         }

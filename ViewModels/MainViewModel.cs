@@ -7,11 +7,12 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using SoundBar.Helpers;
 
 
 namespace SoundBar.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly IAudioMixerService _audioService;
         private readonly SettingsService _settingsService;
@@ -30,7 +31,28 @@ namespace SoundBar.ViewModels
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
         // Saved presets
-        public ObservableCollection<AudioPreset> Presets { get; set; }
+        public ObservableCollection<AudioPreset> Presets { get; }
+        public ObservableCollection<AudioDeviceModel> AudioDevices { get; }
+
+        private AudioDeviceModel? _selectedAudioDevice;
+        public AudioDeviceModel? SelectedAudioDevice
+        {
+            get => _selectedAudioDevice;
+            set
+            {
+                if (_selectedAudioDevice != value)
+                {
+                    _selectedAudioDevice = value;
+                    OnPropertyChanged();
+
+                    if (_selectedAudioDevice != null && !_isUpdatingDeviceFromSystem)
+                    {
+                        _audioService.SetDefaultAudioDevice(_selectedAudioDevice.Id);
+                    }
+                }
+            }
+        }
+        private bool _isUpdatingDeviceFromSystem = false;
 
         private AudioPreset? _selectedPreset;
         public AudioPreset? SelectedPreset
@@ -171,6 +193,7 @@ namespace SoundBar.ViewModels
             SystemBackgroundApps = new ObservableCollection<string>();
             AllowedBackgroundApps = new ObservableCollection<string>(_settingsService.Settings.AllowedBackgroundApps);
             Presets = new ObservableCollection<AudioPreset>(_settingsService.Settings.Presets);
+            AudioDevices = new ObservableCollection<AudioDeviceModel>();
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -206,13 +229,18 @@ namespace SoundBar.ViewModels
 
 
 
+        private System.Threading.CancellationTokenSource? _pollingCts;
+
         public void StartPolling()
         {
+            _pollingCts = new System.Threading.CancellationTokenSource();
+            var token = _pollingCts.Token;
+
             // Create the thread
             var thread = new Thread(() =>
             {
                 // Loop forever to keep checking for changes
-                while (true)
+                while (!token.IsCancellationRequested)
                 {
                     try
                     {
@@ -221,6 +249,9 @@ namespace SoundBar.ViewModels
 
                         // Get System Volume
                         var systemVol = _audioService.GetMasterVolume();
+
+                        // Get Audio Devices
+                        var audioDevices = _audioService.GetAudioDevices();
 
                         // Update UI thread safely
                         _dispatcherQueue.TryEnqueue(() =>
@@ -238,6 +269,9 @@ namespace SoundBar.ViewModels
                                     OnPropertyChanged(nameof(MasterVolumePercentage));
                                 }
                             }
+
+                            // Sync Audio Devices
+                            UpdateAudioDevices(audioDevices);
                         });
                     }
                     catch (System.Exception)
@@ -245,8 +279,13 @@ namespace SoundBar.ViewModels
                         // Ignore errors for now
                     }
 
-                    // Poll every 1 second
-                    Thread.Sleep(1000);
+                    // Poll every 1 second but respond to cancellation quickly
+                    int slept = 0;
+                    while (slept < 1000 && !token.IsCancellationRequested)
+                    {
+                        Thread.Sleep(100);
+                        slept += 100;
+                    }
                 }
             });
 
@@ -523,6 +562,63 @@ namespace SoundBar.ViewModels
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        private void UpdateAudioDevices(List<AudioDeviceModel> latestDevices)
+        {
+            // Simple sync: just rebuild if counts differ or default changed, to avoid heavy UI churn.
+            // A more complex sync could match IDs.
+            bool needsRebuild = false;
+
+            if (AudioDevices.Count != latestDevices.Count)
+            {
+                needsRebuild = true;
+            }
+            else
+            {
+                for (int i = 0; i < latestDevices.Count; i++)
+                {
+                    if (AudioDevices[i].Id != latestDevices[i].Id || AudioDevices[i].IsDefault != latestDevices[i].IsDefault)
+                    {
+                        needsRebuild = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsRebuild)
+            {
+                _isUpdatingDeviceFromSystem = true;
+                AudioDevices.Clear();
+                AudioDeviceModel? newDefault = null;
+
+                foreach (var device in latestDevices)
+                {
+                    AudioDevices.Add(device);
+                    if (device.IsDefault)
+                    {
+                        newDefault = device;
+                    }
+                }
+
+                if (newDefault != null && (SelectedAudioDevice == null || SelectedAudioDevice.Id != newDefault.Id))
+                {
+                    SelectedAudioDevice = newDefault;
+                }
+                _isUpdatingDeviceFromSystem = false;
+            }
+        }
+
+        public void Dispose()
+        {
+            _pollingCts?.Cancel();
+            _pollingCts?.Dispose();
+            _pollingCts = null;
+
+            if (_audioService is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 }
