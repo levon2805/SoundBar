@@ -14,16 +14,17 @@ namespace SoundBar.Services
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v1.6.0";
+        public const string CurrentVersion = "v1.6.1";
         
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
-        private static readonly HttpClient _httpClient = new HttpClient();
+        private static readonly HttpClient _httpClient;
 
         public string LatestVersion { get; private set; } = string.Empty;
         public string DownloadUrl { get; private set; } = string.Empty;
 
-        public UpdateService()
+        static UpdateService()
         {
+            _httpClient = new HttpClient();
             // GitHub API requires a User-Agent header
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SoundBar", "1.0"));
         }
