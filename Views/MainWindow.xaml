@@ -27,7 +27,7 @@
                            Foreground="White" 
                            VerticalAlignment="Center" 
                            Margin="10,0,0,0"
-                           FontSize="12"
+                           FontSize="16"
                            FontWeight="SemiBold"/>
 
                 <Button x:Name="SettingsButton"
@@ -105,6 +105,23 @@
                             <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
+
+                    <TextBlock Text="Output Device" 
+                               Foreground="#DDDDDD" 
+                               FontSize="14" 
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,5"/>
+                    <ComboBox x:Name="DeviceComboBox"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding AudioDevices}"
+                              SelectedItem="{Binding SelectedAudioDevice, Mode=TwoWay}"
+                              DisplayMemberPath="Name"
+                              PlaceholderText="Select Output Device..."
+                              Background="#333333"
+                              BorderThickness="1"
+                              BorderBrush="#555555"
+                              Foreground="#DDDDDD"
+                              Margin="0,0,0,15"/>
 
                     <TextBlock Text="Master Volume" 
                                Foreground="#DDDDDD" 
@@ -221,7 +238,7 @@
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
                     <StackPanel Spacing="10">
                         <!-- Hidden Apps First -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="True" Background="#252525" BorderThickness="1" BorderBrush="#444444">
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="#252525" BorderThickness="1" BorderBrush="#444444">
                             <Expander.Header>
                                 <TextBlock Text="Hidden Apps" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
                             </Expander.Header>

@@ -18,5 +18,9 @@ namespace SoundBar.Services
         void SetMasterVolume(float level);
         bool GetMasterMute();
         void SetMasterMute(bool isMuted);
+
+        // Audio Output Device controls
+        List<AudioDeviceModel> GetAudioDevices();
+        void SetDefaultAudioDevice(string deviceId);
     }
 }
