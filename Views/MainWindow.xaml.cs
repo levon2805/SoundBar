@@ -236,6 +236,16 @@ namespace SoundBar.Views
             SettingsButton.Visibility = Visibility.Visible;
         }
 
+        private void OpenBackgroundFolder_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.OpenBackgroundFolder();
+        }
+
+        private void ReloadBackground_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ReloadBackground();
+        }
+
         private void UpdateBanner_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.ApplyUpdate();

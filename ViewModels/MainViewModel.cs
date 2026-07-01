@@ -121,6 +121,21 @@ namespace SoundBar.ViewModels
         public Microsoft.UI.Xaml.Visibility UpdateBannerVisibility => UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         public string UpdateBannerText => IsUpdating ? "Downloading Update..." : $"Update Available ({LatestVersion}) - Click to Install";
 
+        // Background Image Property
+        private Microsoft.UI.Xaml.Media.ImageSource? _backgroundImage;
+        public Microsoft.UI.Xaml.Media.ImageSource? BackgroundImage
+        {
+            get => _backgroundImage;
+            private set
+            {
+                if (_backgroundImage != value)
+                {
+                    _backgroundImage = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
         private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
@@ -202,6 +217,9 @@ namespace SoundBar.ViewModels
             // Start the monitoring loop
             StartPolling();
 
+            // Load Custom Background Image
+            LoadBackgroundImageAsync();
+
             // Check for updates
             CheckForUpdatesAsync();
         }
@@ -226,6 +244,93 @@ namespace SoundBar.ViewModels
             IsUpdating = true;
             await _updateService.DownloadAndApplyUpdateAsync();
             IsUpdating = false;
+        }
+
+        public async void LoadBackgroundImageAsync()
+        {
+            try
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string folder = System.IO.Path.Combine(appData, "SoundBar", "Backgrounds");
+
+                if (!System.IO.Directory.Exists(folder))
+                {
+                    System.IO.Directory.CreateDirectory(folder);
+                    _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+                    return; 
+                }
+
+                // Run disk I/O on a background thread
+                string? imagePath = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    var files = System.IO.Directory.GetFiles(folder);
+                    return files.FirstOrDefault(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                                     f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                                     f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase));
+                });
+
+                if (imagePath != null)
+                {
+                    _dispatcherQueue.TryEnqueue(async () =>
+                    {
+                        try
+                        {
+                            var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                            
+                            // MEMORY OPTIMIZATION: Constrain the decoded image size.
+                            // A raw 4K wallpaper consumes ~33MB of RAM. Limiting it to 800px width 
+                            // keeps memory usage tiny while looking crystal clear on the widget.
+                            bitmap.DecodePixelWidth = 800;
+
+                            // Use FileShare.ReadWrite so we don't crash if the user is mid-copying a file
+                            using var stream = System.IO.File.Open(imagePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+                            using var randomAccessStream = stream.AsRandomAccessStream();
+                            await bitmap.SetSourceAsync(randomAccessStream);
+                            BackgroundImage = bitmap;
+                        }
+                        catch
+                        {
+                            // If the file is heavily locked or corrupted, silently ignore
+                            // rather than clearing their existing background.
+                        }
+                    });
+                }
+                else
+                {
+                    _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+                }
+            }
+            catch
+            {
+                _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+            }
+        }
+
+        public void OpenBackgroundFolder()
+        {
+            try
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string folder = System.IO.Path.Combine(appData, "SoundBar", "Backgrounds");
+
+                if (!System.IO.Directory.Exists(folder))
+                {
+                    System.IO.Directory.CreateDirectory(folder);
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+                {
+                    FileName = folder,
+                    UseShellExecute = true,
+                    Verb = "open"
+                });
+            }
+            catch { }
+        }
+
+        public void ReloadBackground()
+        {
+            LoadBackgroundImageAsync();
         }
 
 
