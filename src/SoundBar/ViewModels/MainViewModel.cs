@@ -277,7 +277,7 @@ namespace SoundBar.ViewModels
                         {
                             var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
                             
-                            // MEMORY OPTIMIZATION: Constrain the decoded image size.
+                            // MEMORY OPTIMISATION: Constrain the decoded image size.
                             // A raw 4K wallpaper consumes ~33MB of RAM. Limiting it to 800px width 
                             // keeps memory usage tiny while looking crystal clear on the widget.
                             bitmap.DecodePixelWidth = 800;

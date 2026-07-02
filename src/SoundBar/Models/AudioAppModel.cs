@@ -208,7 +208,7 @@ namespace SoundBar.Models
 
                 if (iconBytes != null)
                 {
-                    // Must initialize BitmapImage on the UI thread
+                    // Must initialise BitmapImage on the UI thread
                     var dispatcher = DispatcherQueue.GetForCurrentThread();
                     if (dispatcher != null)
                     {
