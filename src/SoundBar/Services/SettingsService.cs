@@ -26,6 +26,12 @@ namespace SoundBar.Services
             Settings = Load();
         }
 
+        internal SettingsService(string customFilePath)
+        {
+            _filePath = customFilePath;
+            Settings = Load();
+        }
+
         public void SaveSettings()
         {
             Save(Settings);

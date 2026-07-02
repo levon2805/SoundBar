@@ -6,7 +6,10 @@
   <Folder Name="/Solution Items/">
     <File Path=".gitignore" />
   </Folder>
-  <Project Path="SoundBar.csproj">
+  <Project Path="src\SoundBar\SoundBar.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="tests\SoundBar.Tests\SoundBar.Tests.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
 </Solution>

@@ -2,11 +2,14 @@
 
 ## Features
 * **Individual App Control:** Granular volume control over every active application on your PC.
+* **Output Device Switching:** Seamlessly change your default Windows playback device directly from the overlay.
+* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge dimmed wallpaper.
 * **Master Volume:** Dedicated slider for controlling your entire system's audio.
 * **Always-on-Top:** Pin the SoundBar overlay above all other windows.
 * **App Blacklist:** Hide specific applications from your mixer interface to reduce clutter.
 * **Background Audio Controls:** Automatically captures invisible background services (like System Sounds) and allows you to optionally expose and control them.
-* **State Persistence:** SoundBar securely remembers your window position, pinned state, and hidden apps across reboots.
+* **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a 1-click install button.
+* **State Persistence:** SoundBar securely remembers your window position, pinned state, output device, and hidden apps across reboots.
 * **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek, dark-themed interface with custom window drag controls.
 
 ## Download & Install (For Users)
@@ -19,12 +22,25 @@ The application is built as a completely self-contained, portable `.exe`. You do
 
 > **Note on Windows SmartScreen:** Because this is a new open-source application, Windows may show a "Windows protected your PC" warning when you first run the app. This is completely normal for new independent software. To run the app, simply click **"More info"** and then **"Run anyway"**.
 
-## Building for Release (For Developers)
-If you are compiling this project from source and want to generate the portable folder to upload to GitHub Releases, run the following command in your terminal:
+## Development Setup
+This project has recently been refactored into a multi-project enterprise structure:
+* `src/SoundBar/` contains the WinUI 3 application.
+* `tests/SoundBar.Tests/` contains the xUnit automated tests.
+
+Open `SoundBar.slnx` or `src/SoundBar/SoundBar.csproj` in Visual Studio 2022 to get started.
+
+### Running Automated Tests
+We use **xUnit** and **Moq** to test our internal services and debouncing logic. 
+> **Note:** If you encounter `ExpandPriContent` MSBuild errors when attempting to run `dotnet test` from the command line, this is a known environmental quirk with the Windows App SDK preview tooling.
+> 
+> **To run tests reliably:** Open the solution in **Visual Studio 2022** and use the built-in **Test Explorer** (`Test > Test Explorer > Run All Tests`).
+
+## Building for Release
+If you are compiling this project from source and want to generate the portable folder to upload to GitHub Releases, run the following command in your terminal from the `src/SoundBar` folder:
 
 ```bash
 dotnet publish -c Release -p:Platform=x64 -p:PublishProfile=Properties\PublishProfiles\win-x64.pubxml
 ```
-*(Or simply right-click the project in Visual Studio and click **Publish**, ensuring you target `win-x64` Unpackaged).*
+*(Or simply right-click the `SoundBar` project in Visual Studio and click **Publish**, ensuring you target `win-x64` Unpackaged).*
 
 This will generate a self-contained folder containing `SoundBar.exe` and its dependencies. Zip this folder and upload it to your GitHub Release!
