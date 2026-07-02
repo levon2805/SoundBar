@@ -87,7 +87,7 @@ namespace SoundBar.Services
                                 }
                             }
 
-                            // Capitalize the first letter
+                            // Capitalise the first letter
                             if (displayName.Length > 0 && char.IsLower(displayName[0]))
                             {
                                 displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);

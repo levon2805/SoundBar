@@ -32,9 +32,9 @@
                            Text="SoundBar" 
                            Foreground="White" 
                            VerticalAlignment="Center" 
-                           Margin="10,0,0,0"
-                           FontSize="16"
-                           FontWeight="SemiBold"/>
+                           Margin="0"
+                           FontSize="20"
+                           FontWeight="Bold"/>
 
                 <Button x:Name="SettingsButton"
                         Grid.Column="1"
@@ -249,7 +249,7 @@
                                 <TextBlock Text="Custom Background" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
                             </Expander.Header>
                             <StackPanel>
-                                <TextBlock Text="Place a .jpg or .png image in the backgrounds folder to personalize your SoundBar." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <TextBlock Text="Place a .jpg or .png image in the backgrounds folder to personalise your SoundBar." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <Grid Margin="0,5">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>

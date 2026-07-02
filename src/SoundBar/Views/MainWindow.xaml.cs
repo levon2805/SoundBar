@@ -127,7 +127,7 @@ namespace SoundBar.Views
             _settingsService.SaveSettings();
         }
 
-        // Updates the pin icon color based on state
+        // Updates the pin icon colour based on state
         private void UpdatePinButtonVisual(bool isPinned)
         {
             if (PinButton != null)
