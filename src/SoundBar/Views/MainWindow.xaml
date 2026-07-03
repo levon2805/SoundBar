@@ -40,7 +40,7 @@
                 <Button x:Name="SettingsButton"
                         Grid.Column="1"
                         Content="&#xE713;" 
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
                         Background="Transparent"
@@ -54,7 +54,7 @@
                 <Button x:Name="PinButton"
                         Grid.Column="2"
                         Content="&#xE718;" 
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
                         Background="Transparent"
@@ -68,7 +68,7 @@
                 <ToggleButton x:Name="DndToggleButton"
                               Grid.Column="3"
                               Content="&#xE708;" 
-                              FontFamily="Segoe Fluent Icons"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               Width="36" Height="36"
                               Padding="0" MinWidth="0" MinHeight="0"
                               Background="Transparent"
@@ -84,7 +84,7 @@
                 <Button x:Name="MinimizeButton"
                         Grid.Column="4"
                         Content="&#xE921;" 
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
                         Background="Transparent"
@@ -95,7 +95,7 @@
 
                 <Button Grid.Column="5"
                         Content="&#xE711;" 
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
                         Background="Transparent"
@@ -124,7 +124,7 @@
                             Click="UpdateBanner_Click"
                             Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE896;" VerticalAlignment="Center" />
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE896;" VerticalAlignment="Center" />
                             <TextBlock Text="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
@@ -137,7 +137,7 @@
                             Padding="10"
                             Visibility="{x:Bind ViewModel.LoudnessWarningVisibility, Mode=OneWay}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xEA39;" Foreground="White" VerticalAlignment="Center" FontSize="16"/>
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xEA39;" Foreground="White" VerticalAlignment="Center" FontSize="16"/>
                             <TextBlock Text="Volume has been very high for a while. Protect your hearing!" Foreground="White" VerticalAlignment="Center" TextWrapping="Wrap" Width="200"/>
                             <Button Content="Dismiss" Background="#44000000" Foreground="White" BorderThickness="0" VerticalAlignment="Center" Click="DismissLoudnessWarning_Click"/>
                         </StackPanel>
@@ -211,7 +211,7 @@
 
                                     <Button Grid.Column="0" 
                                             Content="&#xE74D;" 
-                                            FontFamily="Segoe Fluent Icons" 
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}" 
                                             Background="Transparent" 
                                             Foreground="#777777" 
                                             BorderThickness="0" 
@@ -257,7 +257,7 @@
 
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
                     <Button Content="&#xE72B;" 
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Background="Transparent"
                             Foreground="#AAAAAA"
                             BorderThickness="0"
