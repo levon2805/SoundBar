@@ -19,7 +19,11 @@ namespace SoundBar.Services
         bool GetMasterMute();
         void SetMasterMute(bool isMuted);
 
-        // Audio Output Device controls
+        // System Sounds Methods
+        bool GetSystemSoundsMute();
+        void SetSystemSoundsMute(bool isMuted);
+
+        // Output Device Methods
         List<AudioDeviceModel> GetAudioDevices();
         void SetDefaultAudioDevice(string deviceId);
     }
