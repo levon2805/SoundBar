@@ -143,6 +143,22 @@ namespace SoundBar.Views
             }
         }
 
+        // Updates the DND icon colour based on state
+        private void DndToggleButton_Changed(object sender, RoutedEventArgs e)
+        {
+            if (DndToggleButton != null)
+            {
+                if (DndToggleButton.IsChecked == true)
+                {
+                    DndToggleButton.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 204, 0)); // Yellow Moon
+                }
+                else
+                {
+                    DndToggleButton.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 85, 85, 85)); // Dim Gray
+                }
+            }
+        }
+
         // Drag state variables
         private bool _isDragging = false;
         private NativeMethods.POINT _dragStartCursorPos;
@@ -249,6 +265,11 @@ namespace SoundBar.Views
         private void UpdateBanner_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.ApplyUpdate();
+        }
+
+        private void DismissLoudnessWarning_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.DismissLoudnessWarning();
         }
 
         private async void SavePresetButton_Click(object sender, RoutedEventArgs e)
