@@ -136,6 +136,80 @@ namespace SoundBar.ViewModels
             }
         }
 
+        // Do Not Disturb Property
+        private bool _isDoNotDisturbEnabled;
+        public bool IsDoNotDisturbEnabled
+        {
+            get => _isDoNotDisturbEnabled;
+            set
+            {
+                if (_isDoNotDisturbEnabled != value)
+                {
+                    _isDoNotDisturbEnabled = value;
+                    OnPropertyChanged();
+
+                    if (!_isUpdatingDndFromSystem)
+                    {
+                        _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
+                        
+                        // Save setting
+                        _settingsService.Settings.IsDoNotDisturbEnabled = _isDoNotDisturbEnabled;
+                        _settingsService.SaveSettings();
+                    }
+                }
+            }
+        }
+        private bool _isUpdatingDndFromSystem = false;
+
+        // Loudness Warning Properties
+        private bool _isLoudnessWarningEnabled;
+        public bool IsLoudnessWarningEnabled
+        {
+            get => _isLoudnessWarningEnabled;
+            set
+            {
+                if (_isLoudnessWarningEnabled != value)
+                {
+                    _isLoudnessWarningEnabled = value;
+                    OnPropertyChanged();
+                    _settingsService.Settings.IsLoudnessWarningEnabled = value;
+                    _settingsService.SaveSettings();
+
+                    if (!value)
+                    {
+                        ShowLoudnessWarning = false;
+                        _highVolumeStartTime = null;
+                    }
+                }
+            }
+        }
+
+        private bool _showLoudnessWarning;
+        public bool ShowLoudnessWarning
+        {
+            get => _showLoudnessWarning;
+            set
+            {
+                if (_showLoudnessWarning != value)
+                {
+                    _showLoudnessWarning = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LoudnessWarningVisibility));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility LoudnessWarningVisibility => ShowLoudnessWarning ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private DateTime? _highVolumeStartTime = null;
+        private bool _isLoudnessWarningDismissed = false;
+
+        public void DismissLoudnessWarning()
+        {
+            ShowLoudnessWarning = false;
+            _isLoudnessWarningDismissed = true;
+        }
+
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
         private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
@@ -213,6 +287,11 @@ namespace SoundBar.ViewModels
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
+
+            // Initial load of settings
+            _isDoNotDisturbEnabled = _settingsService.Settings.IsDoNotDisturbEnabled;
+            _isLoudnessWarningEnabled = _settingsService.Settings.IsLoudnessWarningEnabled;
+            _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
 
             // Start the monitoring loop
             StartPolling();
@@ -359,6 +438,9 @@ namespace SoundBar.ViewModels
                         // Get Audio Devices
                         var audioDevices = _audioService.GetAudioDevices();
 
+                        // Get Do Not Disturb status
+                        bool systemDnd = _audioService.GetSystemSoundsMute();
+
                         // Update UI thread safely
                         _dispatcherQueue.TryEnqueue(() =>
                         {
@@ -374,6 +456,41 @@ namespace SoundBar.ViewModels
                                     OnPropertyChanged(nameof(MasterVolume));
                                     OnPropertyChanged(nameof(MasterVolumePercentage));
                                 }
+                            }
+
+                            // Loudness Warning Logic
+                            if (_isLoudnessWarningEnabled)
+                            {
+                                if (_masterVolume > 0.85f)
+                                {
+                                    if (_highVolumeStartTime == null)
+                                    {
+                                        _highVolumeStartTime = DateTime.Now;
+                                        _isLoudnessWarningDismissed = false;
+                                    }
+                                    else if (!_isLoudnessWarningDismissed && !_showLoudnessWarning)
+                                    {
+                                        // 1 hour (3600 seconds)
+                                        if ((DateTime.Now - _highVolumeStartTime.Value).TotalSeconds >= 3600)
+                                        {
+                                            ShowLoudnessWarning = true;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    _highVolumeStartTime = null;
+                                    ShowLoudnessWarning = false;
+                                    _isLoudnessWarningDismissed = false;
+                                }
+                            }
+
+                            // Sync Do Not Disturb status from system
+                            if (_isDoNotDisturbEnabled != systemDnd)
+                            {
+                                _isUpdatingDndFromSystem = true;
+                                IsDoNotDisturbEnabled = systemDnd;
+                                _isUpdatingDndFromSystem = false;
                             }
 
                             // Sync Audio Devices

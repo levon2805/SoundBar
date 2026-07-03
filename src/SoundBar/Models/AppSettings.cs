@@ -8,6 +8,8 @@ namespace SoundBar.Models
         public int WindowWidth { get; set; } = 400;
         public int WindowHeight { get; set; } = 500;
         public bool IsPinned { get; set; } = false;
+        public bool IsDoNotDisturbEnabled { get; set; } = false;
+        public bool IsLoudnessWarningEnabled { get; set; } = true;
 
         // List of app names that should be hidden from the main view
         public System.Collections.Generic.List<string> HiddenApps { get; set; } = new System.Collections.Generic.List<string>();

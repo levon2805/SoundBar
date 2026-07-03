@@ -237,6 +237,67 @@ namespace SoundBar.Services
             });
         }
 
+        // System Sounds Implementation
+        
+        public bool GetSystemSoundsMute()
+        {
+            using (var enumerator = new MMDeviceEnumerator())
+            using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
+            using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
+            {
+                foreach (var session in sessionEnumerator)
+                {
+                    using (session)
+                    using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
+                    {
+                        if (sessionControl.IsSystemSoundSession)
+                        {
+                            using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
+                            {
+                                return simpleVolume.IsMuted;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        public void SetSystemSoundsMute(bool isMuted)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    using (var enumerator = new MMDeviceEnumerator())
+                    using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
+                    using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
+                    {
+                        foreach (var session in sessionEnumerator)
+                        {
+                            using (session)
+                            using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
+                            {
+                                if (sessionControl.IsSystemSoundSession)
+                                {
+                                    using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
+                                    {
+                                        simpleVolume.IsMuted = isMuted;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // Swallow errors on background thread
+                }
+            });
+        }
+
         // Output Device Implementation
 
         public List<AudioDeviceModel> GetAudioDevices()
