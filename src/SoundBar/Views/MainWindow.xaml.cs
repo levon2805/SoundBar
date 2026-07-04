@@ -373,5 +373,21 @@ namespace SoundBar.Views
         {
             MediaHelper.Mute();
         }
+
+        private void ToggleMusicPlayerMode_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.IsMusicPlayerMode = !ViewModel.IsMusicPlayerMode;
+        }
+
+        private void SongPositionSlider_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ViewModel.IsUserScrubbing = true;
+        }
+
+        private void SongPositionSlider_PointerCaptureLost(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ViewModel.IsUserScrubbing = false;
+            ViewModel.SeekToScrubPosition();
+        }
     }
 }
