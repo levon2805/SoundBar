@@ -2,9 +2,11 @@
     x:Class="SoundBar.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:SoundBar">
+    xmlns:local="using:SoundBar"
+    xmlns:helpers="using:SoundBar.Helpers">
     <Application.Resources>
         <ResourceDictionary>
+            <helpers:TimeSpanConverter x:Key="TimeSpanConverter" />
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
