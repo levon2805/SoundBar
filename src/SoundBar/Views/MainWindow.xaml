@@ -110,6 +110,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
                 <StackPanel Grid.Row="0">
@@ -246,6 +247,57 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+
+                <!-- Media Controls -->
+                <StackPanel Grid.Row="2" Margin="0,10,0,-10" Visibility="{x:Bind ViewModel.MediaControlsVisibility, Mode=OneWay}">
+                    <Border Height="1" Background="#555555" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="5">
+                        <Button Content="&#xE892;" 
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}" 
+                                Background="Transparent" 
+                                Foreground="#DDDDDD" 
+                                BorderThickness="0" 
+                                FontSize="16"
+                                Width="36" Height="36"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Click="MediaPrevious_Click" 
+                                ToolTipService.ToolTip="Previous Track" />
+
+                        <Button Background="Transparent" 
+                                BorderThickness="0" 
+                                Width="36" Height="36"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Click="MediaPlayPause_Click" 
+                                ToolTipService.ToolTip="Play / Pause">
+                            <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE768;" FontSize="14" Foreground="#DDDDDD"/>
+                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE769;" FontSize="14" Foreground="#DDDDDD"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Content="&#xE893;" 
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}" 
+                                Background="Transparent" 
+                                Foreground="#DDDDDD" 
+                                BorderThickness="0" 
+                                FontSize="16"
+                                Width="36" Height="36"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Click="MediaNext_Click" 
+                                ToolTipService.ToolTip="Next Track" />
+
+                        <Button Content="&#xE74F;" 
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}" 
+                                Background="Transparent" 
+                                Foreground="#DDDDDD" 
+                                BorderThickness="0" 
+                                FontSize="16"
+                                Width="36" Height="36"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Click="MediaMute_Click" 
+                                ToolTipService.ToolTip="Mute" />
+                    </StackPanel>
+                </StackPanel>
             </Grid>
 
             <!-- Settings Content -->
@@ -353,6 +405,19 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- Media Controls Settings -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="#252525" BorderThickness="1" BorderBrush="#444444">
+                            <Expander.Header>
+                                <TextBlock Text="Media Controls" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Shows global media controls at the bottom of the application (Previous, Play/Pause, Next, Mute)." Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ToggleSwitch Header="Show Media Controls" 
+                                              IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}" 
+                                              Foreground="White"/>
                             </StackPanel>
                         </Expander>
                     </StackPanel>
