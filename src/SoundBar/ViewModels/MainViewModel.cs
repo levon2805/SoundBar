@@ -214,6 +214,25 @@ namespace SoundBar.ViewModels
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
         private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
 
+        private bool _showMediaControls;
+        public bool ShowMediaControls
+        {
+            get => _showMediaControls;
+            set
+            {
+                if (_showMediaControls != value)
+                {
+                    _showMediaControls = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MediaControlsVisibility));
+                    _settingsService.Settings.ShowMediaControls = value;
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility MediaControlsVisibility => ShowMediaControls ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
         // Master Volume Property
         private float _masterVolume;
         public float MasterVolume
@@ -291,6 +310,7 @@ namespace SoundBar.ViewModels
             // Initial load of settings
             _isDoNotDisturbEnabled = _settingsService.Settings.IsDoNotDisturbEnabled;
             _isLoudnessWarningEnabled = _settingsService.Settings.IsLoudnessWarningEnabled;
+            _showMediaControls = _settingsService.Settings.ShowMediaControls;
             _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
 
             // Start the monitoring loop

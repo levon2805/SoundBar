@@ -44,6 +44,13 @@ namespace SoundBar.Views
             this.Title = "SoundBar";
             _appWindow.Title = "SoundBar";
 
+            // Set the icon for the taskbar and window
+            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                _appWindow.SetIcon(iconPath);
+            }
+
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.IsMaximizable = false;
@@ -345,6 +352,26 @@ namespace SoundBar.Views
                 return presenter.IsAlwaysOnTop;
             }
             return false;
+        }
+
+        private void MediaPrevious_Click(object sender, RoutedEventArgs e)
+        {
+            MediaHelper.PreviousTrack();
+        }
+
+        private void MediaPlayPause_Click(object sender, RoutedEventArgs e)
+        {
+            MediaHelper.PlayPause();
+        }
+
+        private void MediaNext_Click(object sender, RoutedEventArgs e)
+        {
+            MediaHelper.NextTrack();
+        }
+
+        private void MediaMute_Click(object sender, RoutedEventArgs e)
+        {
+            MediaHelper.Mute();
         }
     }
 }
