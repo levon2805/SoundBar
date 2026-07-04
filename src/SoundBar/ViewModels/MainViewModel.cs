@@ -8,7 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using SoundBar.Helpers;
-
+using Microsoft.UI.Xaml;
 
 namespace SoundBar.ViewModels
 {
@@ -17,6 +17,7 @@ namespace SoundBar.ViewModels
         private readonly IAudioMixerService _audioService;
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
+        private readonly MediaInfoService _mediaInfoService;
 
         // List of hidden apps
         public ObservableCollection<string> HiddenApps { get; set; }
@@ -291,6 +292,7 @@ namespace SoundBar.ViewModels
         {
             _settingsService = settingsService;
             _updateService = new UpdateService();
+            _mediaInfoService = new MediaInfoService();
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Connect to audio service
@@ -303,6 +305,14 @@ namespace SoundBar.ViewModels
             AllowedBackgroundApps = new ObservableCollection<string>(_settingsService.Settings.AllowedBackgroundApps);
             Presets = new ObservableCollection<AudioPreset>(_settingsService.Settings.Presets);
             AudioDevices = new ObservableCollection<AudioDeviceModel>();
+
+            _progressTimer = new DispatcherTimer();
+            _progressTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _progressTimer.Tick += ProgressTimer_Tick;
+
+            _mediaInfoService.MediaInfoChanged += MediaInfoService_MediaInfoChanged;
+            _mediaInfoService.TimelineInfoChanged += MediaInfoService_TimelineInfoChanged;
+            _ = _mediaInfoService.InitializeAsync();
 
             // Initial load of master volume
             _masterVolume = _audioService.GetMasterVolume();
@@ -798,6 +808,204 @@ namespace SoundBar.ViewModels
             {
                 SelectedPreset = null;
             }
+        }
+
+        // --- Music Player Mode ---
+        private bool _isMusicPlayerMode = false;
+        public bool IsMusicPlayerMode
+        {
+            get => _isMusicPlayerMode;
+            set
+            {
+                if (_isMusicPlayerMode != value)
+                {
+                    _isMusicPlayerMode = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MusicPlayerViewVisibility));
+                    OnPropertyChanged(nameof(MixerViewVisibility));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility MusicPlayerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+        private string _currentSongTitle = "Not Playing";
+        public string CurrentSongTitle
+        {
+            get => _currentSongTitle;
+            set
+            {
+                if (_currentSongTitle != value)
+                {
+                    _currentSongTitle = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _currentSongArtist = string.Empty;
+        public string CurrentSongArtist
+        {
+            get => _currentSongArtist;
+            set
+            {
+                if (_currentSongArtist != value)
+                {
+                    _currentSongArtist = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private Microsoft.UI.Xaml.Media.Imaging.BitmapImage? _currentSongThumbnail;
+        public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? CurrentSongThumbnail
+        {
+            get => _currentSongThumbnail;
+            set
+            {
+                if (_currentSongThumbnail != value)
+                {
+                    _currentSongThumbnail = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(FallbackIconVisibility));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility FallbackIconVisibility => CurrentSongThumbnail == null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        // --- Timeline & Scrubbing ---
+        private DispatcherTimer _progressTimer;
+        private TimeSpan _basePosition;
+        private DateTimeOffset _lastUpdatedTime;
+        private bool _isPlaying;
+        public bool IsUserScrubbing { get; set; }
+
+        private double _currentSongPositionSeconds;
+        public double CurrentSongPositionSeconds
+        {
+            get => _currentSongPositionSeconds;
+            set
+            {
+                if (_currentSongPositionSeconds != value)
+                {
+                    _currentSongPositionSeconds = value;
+                    OnPropertyChanged();
+                    CurrentSongPositionText = TimeSpan.FromSeconds(value).ToString(@"m\:ss");
+                }
+            }
+        }
+
+        private double _currentSongDurationSeconds = 1;
+        public double CurrentSongDurationSeconds
+        {
+            get => _currentSongDurationSeconds;
+            set
+            {
+                if (_currentSongDurationSeconds != value)
+                {
+                    _currentSongDurationSeconds = value;
+                    OnPropertyChanged();
+                    CurrentSongDurationText = TimeSpan.FromSeconds(value).ToString(@"m\:ss");
+                }
+            }
+        }
+
+        private string _currentSongPositionText = "0:00";
+        public string CurrentSongPositionText
+        {
+            get => _currentSongPositionText;
+            set
+            {
+                if (_currentSongPositionText != value)
+                {
+                    _currentSongPositionText = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _currentSongDurationText = "0:00";
+        public string CurrentSongDurationText
+        {
+            get => _currentSongDurationText;
+            set
+            {
+                if (_currentSongDurationText != value)
+                {
+                    _currentSongDurationText = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private void MediaInfoService_TimelineInfoChanged(object? sender, TimelineInfoEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                _basePosition = e.Position;
+                _lastUpdatedTime = e.LastUpdatedTime;
+                _isPlaying = e.IsPlaying;
+                
+                CurrentSongDurationSeconds = e.EndTime.TotalSeconds;
+                
+                if (!IsUserScrubbing)
+                {
+                    CurrentSongPositionSeconds = e.Position.TotalSeconds;
+                }
+
+                if (_isPlaying && !_progressTimer.IsEnabled)
+                    _progressTimer.Start();
+                else if (!_isPlaying && _progressTimer.IsEnabled)
+                    _progressTimer.Stop();
+            });
+        }
+
+        private void ProgressTimer_Tick(object? sender, object e)
+        {
+            if (!IsUserScrubbing && _isPlaying)
+            {
+                var timeSinceUpdate = DateTimeOffset.Now - _lastUpdatedTime;
+                var currentPosition = _basePosition + timeSinceUpdate;
+                if (currentPosition.TotalSeconds <= CurrentSongDurationSeconds)
+                {
+                    CurrentSongPositionSeconds = currentPosition.TotalSeconds;
+                }
+            }
+        }
+
+        public void SeekToScrubPosition()
+        {
+            _ = _mediaInfoService.SeekAsync(TimeSpan.FromSeconds(CurrentSongPositionSeconds));
+        }
+
+        private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(async () =>
+            {
+                CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
+                CurrentSongArtist = e.Artist;
+
+                if (e.Thumbnail != null)
+                {
+                    try
+                    {
+                        var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                        using var stream = await e.Thumbnail.OpenReadAsync();
+                        await bmp.SetSourceAsync(stream);
+                        CurrentSongThumbnail = bmp;
+                    }
+                    catch
+                    {
+                        CurrentSongThumbnail = null;
+                    }
+                }
+                else
+                {
+                    CurrentSongThumbnail = null;
+                }
+            });
         }
 
         // Standard for MVVM updates

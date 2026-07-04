@@ -1,6 +1,7 @@
 <Window x:Class="SoundBar.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
     <Border Background="#2D2D30" 
             BorderBrush="#444444" 
             BorderThickness="1">
@@ -113,7 +114,14 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
-                <StackPanel Grid.Row="0">
+                <!-- MIXER VIEW -->
+                <Grid Grid.Row="0" Grid.RowSpan="2" Visibility="{x:Bind ViewModel.MixerViewVisibility, Mode=OneWay}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <StackPanel Grid.Row="0">
                     <Button Background="#1F6B2C" 
                             Foreground="White" 
                             BorderThickness="0"
@@ -247,56 +255,137 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+                </Grid>
+
+                <!-- MUSIC PLAYER VIEW -->
+                <Grid Grid.Row="0" Grid.RowSpan="2" Visibility="{x:Bind ViewModel.MusicPlayerViewVisibility, Mode=OneWay}" Padding="15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Album Art -->
+                    <Border Grid.Row="0" CornerRadius="12" Margin="20" Background="#222222" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image Source="{x:Bind ViewModel.CurrentSongThumbnail, Mode=OneWay}" Stretch="UniformToFill" Width="220" Height="220">
+                            <!-- Fallback icon if no thumbnail -->
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="No Artwork Available" />
+                            </ToolTipService.ToolTip>
+                        </Image>
+                    </Border>
+                    <!-- Fallback Icon behind image -->
+                    <TextBlock Grid.Row="0" FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="#444444" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+
+                    <!-- Title -->
+                    <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.CurrentSongTitle, Mode=OneWay}" FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,5"/>
+
+                    <!-- Artist -->
+                    <TextBlock Grid.Row="2" Text="{x:Bind ViewModel.CurrentSongArtist, Mode=OneWay}" FontSize="16" Foreground="#AAAAAA" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,15"/>
+
+                    <!-- Scrub Bar -->
+                    <Grid Grid.Row="3" Margin="20,0,20,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="50"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.CurrentSongPositionText, Mode=OneWay}" Foreground="#888888" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                        
+                        <Slider Grid.Column="1" 
+                                Minimum="0" 
+                                Maximum="{x:Bind ViewModel.CurrentSongDurationSeconds, Mode=OneWay}" 
+                                Value="{x:Bind ViewModel.CurrentSongPositionSeconds, Mode=TwoWay}"
+                                ThumbToolTipValueConverter="{StaticResource TimeSpanConverter}"
+                                PointerPressed="SongPositionSlider_PointerPressed"
+                                PointerCaptureLost="SongPositionSlider_PointerCaptureLost"
+                                VerticalAlignment="Center" />
+
+                        <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.CurrentSongDurationText, Mode=OneWay}" Foreground="#888888" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0"/>
+                    </Grid>
+                </Grid>
+
 
                 <!-- Media Controls -->
                 <StackPanel Grid.Row="2" Margin="0,10,0,-10" Visibility="{x:Bind ViewModel.MediaControlsVisibility, Mode=OneWay}">
                     <Border Height="1" Background="#555555" Margin="0,0,0,8"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="5">
-                        <Button Content="&#xE892;" 
+                    
+                    <Grid>
+                        <!-- Music Player Mode Toggle -->
+                        <Button HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Content="&#xE8D6;" 
                                 FontFamily="{ThemeResource SymbolThemeFontFamily}" 
                                 Background="Transparent" 
-                                Foreground="#DDDDDD" 
+                                Foreground="#888888" 
                                 BorderThickness="0" 
-                                FontSize="16"
+                                FontSize="18"
+                                Width="36" Height="36"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Click="ToggleMusicPlayerMode_Click" 
+                                ToolTipService.ToolTip="Toggle Music Player View" />
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                        <!-- Previous -->
+                        <Button Content="&#xE892;" 
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}" 
+                                Background="#44000000" 
+                                Foreground="#DDDDDD" 
+                                BorderThickness="1"
+                                BorderBrush="#33FFFFFF" 
+                                CornerRadius="18"
+                                FontSize="14"
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPrevious_Click" 
                                 ToolTipService.ToolTip="Previous Track" />
 
-                        <Button Background="Transparent" 
-                                BorderThickness="0" 
+                        <!-- Play/Pause -->
+                        <Button Background="#44000000" 
+                                BorderThickness="1"
+                                BorderBrush="#33FFFFFF" 
+                                CornerRadius="18"
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPlayPause_Click" 
                                 ToolTipService.ToolTip="Play / Pause">
                             <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE768;" FontSize="14" Foreground="#DDDDDD"/>
-                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE769;" FontSize="14" Foreground="#DDDDDD"/>
+                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE768;" FontSize="12" Foreground="#DDDDDD"/>
+                                <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE769;" FontSize="12" Foreground="#DDDDDD"/>
                             </StackPanel>
                         </Button>
 
+                        <!-- Next -->
                         <Button Content="&#xE893;" 
                                 FontFamily="{ThemeResource SymbolThemeFontFamily}" 
-                                Background="Transparent" 
+                                Background="#44000000" 
                                 Foreground="#DDDDDD" 
-                                BorderThickness="0" 
-                                FontSize="16"
+                                BorderThickness="1"
+                                BorderBrush="#33FFFFFF" 
+                                CornerRadius="18"
+                                FontSize="14"
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaNext_Click" 
                                 ToolTipService.ToolTip="Next Track" />
 
+                        <!-- Mute -->
                         <Button Content="&#xE74F;" 
                                 FontFamily="{ThemeResource SymbolThemeFontFamily}" 
-                                Background="Transparent" 
+                                Background="#44000000" 
                                 Foreground="#DDDDDD" 
-                                BorderThickness="0" 
-                                FontSize="16"
+                                BorderThickness="1"
+                                BorderBrush="#33FFFFFF" 
+                                CornerRadius="18"
+                                FontSize="14"
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaMute_Click" 
-                                ToolTipService.ToolTip="Mute" />
+                                ToolTipService.ToolTip="Mute System" />
                     </StackPanel>
+                    </Grid>
                 </StackPanel>
             </Grid>
 
