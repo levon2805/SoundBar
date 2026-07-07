@@ -2,6 +2,11 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 
+/*
+cd "C:\Personal Projects\SoundBar\ReleaseTools\UpdateSigner"
+dotnet run -- "C:\Users\UKGC\Desktop\SoundBar.zip"
+*/
+
 namespace UpdateSigner
 {
     class Program
