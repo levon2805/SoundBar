@@ -1,5 +1,16 @@
 # SoundBar
 
+## How it looks!
+(Note: This is with my custom background, showing off the potential!)
+
+
+<p align="center">
+  <img alt="Home" src="https://github.com/user-attachments/assets/30a1ccfd-ddf6-4eda-88fe-06bb4cbb5f56" width="30%" />
+  <img alt="SettingsMenu" src="https://github.com/user-attachments/assets/2e9dae97-62c0-49f2-827b-48f65a495014" width="30%" />
+  <img alt="MediaPlayer" src="https://github.com/user-attachments/assets/e40498c5-f609-4bfd-a5f4-55d4cfc0a76b" width="30%" />
+</p>
+
+
 ## Features
 * **Individual App Control:** Granular volume control over every active application on your PC.
 * **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
@@ -40,13 +51,3 @@ We use **xUnit** and **Moq** to test our internal services and debouncing logic.
 > **Note:** If you encounter `ExpandPriContent` MSBuild errors when attempting to run `dotnet test` from the command line, this is a known environmental quirk with the Windows App SDK preview tooling.
 > 
 > **To run tests reliably:** Open the solution in **Visual Studio 2022** and use the built-in **Test Explorer** (`Test > Test Explorer > Run All Tests`).
-
-## Building for Release
-If you are compiling this project from source and want to generate the portable folder to upload to GitHub Releases, run the following command in your terminal from the `src/SoundBar` folder:
-
-```bash
-dotnet publish -c Release -p:Platform=x64 -p:PublishProfile=Properties\PublishProfiles\win-x64.pubxml
-```
-*(Or simply right-click the `SoundBar` project in Visual Studio and click **Publish**, ensuring you target `win-x64` Unpackaged).*
-
-This will generate a self-contained folder containing `SoundBar.exe` and its dependencies. Zip this folder and upload it to your GitHub Release!
