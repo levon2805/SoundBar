@@ -14,7 +14,7 @@
 ## Features
 * **Individual App Control:** Granular volume control over every active application on your PC.
 * **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
-* **Master Volume & Presets:** Control your entire system's audio, and save custom audio presets to instantly switch between different volume profiles (e.g., 'Gaming' vs 'Work').
+* **Master Volume:** Control your entire system's audio.
 * **Music Player Mode:** A beautiful, full-sized music player view that pulls in album artwork and provides a scrubbable timeline for the currently playing song.
 * **Global Media Controls:** Convenient buttons at the bottom of the app to play, pause, skip, and mute system audio.
 * **Output Device Switching:** Seamlessly change your default Windows playback device directly from the overlay.
