@@ -8,19 +8,23 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 
 namespace SoundBar.Services
 {
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v2.2.0";
+        public const string CurrentVersion = "v2.3.0";
         
+        public const string PublicKeyBase64 = "PFJTQUtleVZhbHVlPjxNb2R1bHVzPnh6bTBBMENEb0xMdC96aDVSazhhb0R0Yk5zdUs0QWNQOEdaTUpSMHRadUhrKzN2M2pUZUhQYVRlbTQ3OFlrZk5nVzRBeTVDa05PNHhjSGVMM0tCSGk5dDlKbjIrdXEza2VaV2NsZFdPWCtESXJqbWUrbk1YSDZURDZzMDZ3VGpBM0RWWTYxOHRXNmQvdnNJTWc5emlEUUxKSFl5RGNPbXhkODVwRkJveTkyNE1YRFdvbFhpZUx6YmN6M2p0K1IweDcySzdmOGsrVHRoNzlpRzJOeVVHZGQ2Rng1Y2lzRzlUaGd3emhIczc2eVh2VGV5UHhEaElWVCt0eXZGSlBUaTEzaDhBRXhWdkhaVVJnVVU4RWxsZ2ZTWTRNNCs0NUNDYkRxc2dPVmR4RGNvTkNOa1YrOU80d2d0WnZJNkI3bzFnUzdtekdJN1JpWklvWkxIbnVtYnBlUT09PC9Nb2R1bHVzPjxFeHBvbmVudD5BUUFCPC9FeHBvbmVudD48L1JTQUtleVZhbHVlPg==";
+
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static HttpClient _httpClient;
 
         public string LatestVersion { get; private set; } = string.Empty;
         public string DownloadUrl { get; private set; } = string.Empty;
+        public string SignatureUrl { get; private set; } = string.Empty;
 
         static UpdateService()
         {
@@ -48,10 +52,13 @@ namespace SoundBar.Services
 
                     if (LatestVersion != CurrentVersion)
                     {
-                        var asset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                        if (asset != null && asset.BrowserDownloadUrl != null)
+                        var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
                         {
-                            DownloadUrl = asset.BrowserDownloadUrl;
+                            DownloadUrl = zipAsset.BrowserDownloadUrl;
+                            SignatureUrl = sigAsset.BrowserDownloadUrl;
                             return true;
                         }
                     }
@@ -67,10 +74,11 @@ namespace SoundBar.Services
 
         public async Task DownloadAndApplyUpdateAsync()
         {
-            if (string.IsNullOrEmpty(DownloadUrl)) return;
+            if (string.IsNullOrEmpty(DownloadUrl) || string.IsNullOrEmpty(SignatureUrl)) return;
 
             string tempUpdateDir = Path.Combine(Path.GetTempPath(), "SoundBarUpdate");
             string zipPath = Path.Combine(tempUpdateDir, "update.zip");
+            string sigPath = Path.Combine(tempUpdateDir, "update.sig");
             string extractPath = Path.Combine(tempUpdateDir, "extracted");
 
             // Clean up any old update folders
@@ -87,6 +95,44 @@ namespace SoundBar.Services
             using (var fs = new FileStream(zipPath, FileMode.Create))
             {
                 await response.Content.CopyToAsync(fs);
+            }
+
+            // Download the SIG
+            using var sigResponse = await _httpClient.GetAsync(SignatureUrl);
+            sigResponse.EnsureSuccessStatusCode();
+
+            using (var sigFs = new FileStream(sigPath, FileMode.Create))
+            {
+                await sigResponse.Content.CopyToAsync(sigFs);
+            }
+
+            // Verify signature
+            try
+            {
+                string publicKeyXml = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(PublicKeyBase64));
+                using RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+                rsa.FromXmlString(publicKeyXml);
+
+                byte[] zipBytes = File.ReadAllBytes(zipPath);
+                byte[] sigBytes = Convert.FromBase64String(File.ReadAllText(sigPath));
+
+                using var sha256 = SHA256.Create();
+                byte[] hash = sha256.ComputeHash(zipBytes);
+
+                RSAPKCS1SignatureDeformatter deformatter = new RSAPKCS1SignatureDeformatter(rsa);
+                deformatter.SetHashAlgorithm("SHA256");
+
+                if (!deformatter.VerifySignature(hash, sigBytes))
+                {
+                    throw new Exception("Signature verification failed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update verification failed: {ex.Message}");
+                // Cleanup and abort update process
+                try { Directory.Delete(tempUpdateDir, true); } catch { }
+                return;
             }
 
             // Extract the ZIP
