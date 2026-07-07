@@ -32,9 +32,41 @@ namespace SoundBar.Tests
         }
 
         [Fact]
-        public async Task CheckForUpdatesAsync_WhenNewerVersionExists_ReturnsTrue()
+        public async Task CheckForUpdatesAsync_WhenNewerVersionExists_WithBothAssets_ReturnsTrue()
         {
-            // Arrange
+            // Arrange — must include both .zip AND .sig assets to pass validation
+            string json = @"{
+                ""tag_name"": ""v9.9.9"",
+                ""assets"": [
+                    {
+                        ""name"": ""SoundBar-v9.9.9.zip"",
+                        ""browser_download_url"": ""https://github.com/test/download.zip""
+                    },
+                    {
+                        ""name"": ""SoundBar-v9.9.9.sig"",
+                        ""browser_download_url"": ""https://github.com/test/download.sig""
+                    }
+                ]
+            }";
+            
+            var handler = CreateMockMessageHandler(json, HttpStatusCode.OK);
+            UpdateService.SetTestMessageHandler(handler);
+            var service = new UpdateService();
+
+            // Act
+            bool result = await service.CheckForUpdatesAsync();
+
+            // Assert
+            Assert.True(result);
+            Assert.Equal("v9.9.9", service.LatestVersion);
+            Assert.Equal("https://github.com/test/download.zip", service.DownloadUrl);
+            Assert.Equal("https://github.com/test/download.sig", service.SignatureUrl);
+        }
+
+        [Fact]
+        public async Task CheckForUpdatesAsync_WhenNewerVersionExists_MissingSigAsset_ReturnsFalse()
+        {
+            // Arrange — only .zip asset, no .sig
             string json = @"{
                 ""tag_name"": ""v9.9.9"",
                 ""assets"": [
@@ -52,28 +84,28 @@ namespace SoundBar.Tests
             // Act
             bool result = await service.CheckForUpdatesAsync();
 
-            // Assert
-            Assert.True(result);
-            Assert.Equal("v9.9.9", service.LatestVersion);
-            Assert.Equal("https://github.com/test/download.zip", service.DownloadUrl);
+            // Assert — should refuse to update without a signature file
+            Assert.False(result);
         }
 
         [Fact]
         public async Task CheckForUpdatesAsync_WhenSameVersionExists_ReturnsFalse()
         {
-            // Arrange
-            // Using CurrentVersion to simulate no update
+            // Arrange — use the actual current version string
             string currentVersion = UpdateService.CurrentVersion;
-            string json = $@"""tag_name"": ""{currentVersion}"",
+            string json = $@"{{
+                ""tag_name"": ""{currentVersion}"",
                 ""assets"": [
                     {{
                         ""name"": ""SoundBar-{currentVersion}.zip"",
                         ""browser_download_url"": ""https://github.com/test/download.zip""
+                    }},
+                    {{
+                        ""name"": ""SoundBar-{currentVersion}.sig"",
+                        ""browser_download_url"": ""https://github.com/test/download.sig""
                     }}
                 ]
             }}";
-            // Fix json structure
-            json = "{" + json;
             
             var handler = CreateMockMessageHandler(json, HttpStatusCode.OK);
             UpdateService.SetTestMessageHandler(handler);

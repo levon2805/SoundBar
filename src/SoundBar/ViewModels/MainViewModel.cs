@@ -12,6 +12,11 @@ using Microsoft.UI.Xaml;
 
 namespace SoundBar.ViewModels
 {
+    /// <summary>
+    /// The grand orchestrator of the entire application.
+    /// It brings together the audio services, media controls, and settings,
+    /// serving everything up on a silver platter for the user interface.
+    /// </summary>
     public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly IAudioMixerService _audioService;
@@ -19,16 +24,24 @@ namespace SoundBar.ViewModels
         private readonly UpdateService _updateService;
         private readonly MediaInfoService _mediaInfoService;
 
-        // List of hidden apps
+        /// <summary>
+        /// A list of application executable names that the user prefers to keep out of sight.
+        /// </summary>
         public ObservableCollection<string> HiddenApps { get; set; }
 
-        // List of allowed background apps
+        /// <summary>
+        /// A list of background applications that the user explicitly wants to see in the mixer.
+        /// </summary>
         public ObservableCollection<string> AllowedBackgroundApps { get; set; }
 
-        // List of raw system background apps for the UI to display
+        /// <summary>
+        /// A raw list of background apps detected by the system, just so the UI can show them in settings.
+        /// </summary>
         public ObservableCollection<string> SystemBackgroundApps { get; set; }
 
-        // Special list, add/remove items here the UI auto updates itself
+        /// <summary>
+        /// The main collection of active audio applications. When we add or remove items here, the UI updates automatically.
+        /// </summary>
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
         // Saved presets
@@ -69,6 +82,30 @@ namespace SoundBar.ViewModels
                     {
                         ApplyPreset(_selectedPreset);
                     }
+                }
+            }
+        }
+
+        public List<AppTheme> AvailableThemes { get; } = new List<AppTheme>
+        {
+            AppTheme.System,
+            AppTheme.Light,
+            AppTheme.Dark
+        };
+
+        public event EventHandler<AppTheme>? ThemeChanged;
+
+        public AppTheme SelectedTheme
+        {
+            get => _settingsService.Settings.Theme;
+            set
+            {
+                if (_settingsService.Settings.Theme != value)
+                {
+                    _settingsService.Settings.Theme = value;
+                    _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                    ThemeChanged?.Invoke(this, value);
                 }
             }
         }
@@ -121,6 +158,8 @@ namespace SoundBar.ViewModels
 
         public Microsoft.UI.Xaml.Visibility UpdateBannerVisibility => UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         public string UpdateBannerText => IsUpdating ? "Downloading Update..." : $"Update Available ({LatestVersion}) - Click to Install";
+
+        public string AppVersionText => $"SoundBar {UpdateService.CurrentVersion}";
 
         // Background Image Property
         private Microsoft.UI.Xaml.Media.ImageSource? _backgroundImage;
@@ -295,7 +334,8 @@ namespace SoundBar.ViewModels
 
                     // Send command to Windows (DEBOUNCED to prevent COM/GC pressure when dragging)
                     _masterVolumeDebounce?.Cancel();
-                    _masterVolumeDebounce?.Dispose();
+                    // Don't Dispose the old CTS immediately — the in-flight Task.Delay may still
+                    // reference its Token. Let the GC collect it after the task completes.
                     _masterVolumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _masterVolumeDebounce.Token;
                     var capturedVolume = _masterVolume;
@@ -595,6 +635,34 @@ namespace SoundBar.ViewModels
             thread.Start();
         }
 
+        private void HandleAliasChanged(string rawProcessName, string newAlias)
+        {
+            if (string.IsNullOrEmpty(rawProcessName)) return;
+
+            if (string.IsNullOrWhiteSpace(newAlias))
+            {
+                // Revert to original display name if cleared
+                _settingsService.Settings.AppAliases.Remove(rawProcessName);
+                
+                var app = Apps.FirstOrDefault(a => string.Equals(a.RawProcessName, rawProcessName, StringComparison.OrdinalIgnoreCase));
+                if (app != null)
+                {
+                    // Execute on the next UI tick so the TextBox has finished its TwoWay update
+                    _dispatcherQueue.TryEnqueue(() =>
+                    {
+                        app.AliasChanged -= HandleAliasChanged; // Temporarily unsubscribe to prevent loop
+                        app.Name = app.DisplayName;
+                        app.AliasChanged += HandleAliasChanged;
+                    });
+                }
+            }
+            else
+            {
+                _settingsService.Settings.AppAliases[rawProcessName] = newAlias;
+            }
+            _settingsService.SaveSettings();
+        }
+
         private void UpdateCollection(List<AudioSessionData> latestSessions)
         {
             // Remove apps that are no longer running
@@ -603,8 +671,8 @@ namespace SoundBar.ViewModels
             {
                 var existingApp = Apps[i];
 
-                // If existing app is not in the new list (match by Name since ProcessId might fluctuate for multi-process apps like Discord)
-                if (!latestSessions.Any(x => string.Equals(x.DisplayName, existingApp.Name, StringComparison.OrdinalIgnoreCase)))
+                // If existing app is not in the new list (match by RawProcessName since DisplayName can change and Name is now an alias)
+                if (!latestSessions.Any(x => string.Equals(x.RawProcessName, existingApp.RawProcessName, StringComparison.OrdinalIgnoreCase)))
                 {
                     bool isProcessDead = true;
                         // FAST PATH: Check if the specific process ID we started with is still running
@@ -665,7 +733,7 @@ namespace SoundBar.ViewModels
                         }
                         
                         // Remove from active Apps if it was previously there
-                        var existingBg = Apps.FirstOrDefault(a => string.Equals(a.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
+                        var existingBg = Apps.FirstOrDefault(a => string.Equals(a.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase));
                         if (existingBg != null) Apps.Remove(existingBg);
                         
                         continue;
@@ -675,23 +743,32 @@ namespace SoundBar.ViewModels
                 // Skip if this app is hidden by the user
                 if (HiddenApps.Any(a => string.Equals(a, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase));
                     if (existingHidden != null) Apps.Remove(existingHidden);
                     continue;
                 }
 
                 // If this app is not in our current UI list, create a new AudioAppModel for it
-                if (!Apps.Any(x => string.Equals(x.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
+                if (!Apps.Any(x => string.Equals(x.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase)))
                 {
+                    // Check if there is a saved alias
+                    string aliasName = _settingsService.Settings.AppAliases.TryGetValue(sessionData.RawProcessName ?? "", out var alias) ? alias : sessionData.DisplayName;
+
                     // ONLY place where AudioAppModel is created — for genuinely new apps
                     var newApp = new AudioAppModel(_audioService)
                     {
                         ProcessId = sessionData.ProcessId,
                         IsBackgroundApp = sessionData.IsBackgroundApp,
-                        Name = sessionData.DisplayName,
+                        DisplayName = sessionData.DisplayName,
                         RawProcessName = sessionData.RawProcessName,
                         IconPath = sessionData.IconPath
                     };
+                    
+                    // Set Name BEFORE assigning AliasChanged so the initial set
+                    // doesn't trigger a save to config.json for every app
+                    newApp.Name = aliasName;
+                    newApp.AliasChanged = HandleAliasChanged;
+
                     // Set volume/mute via backing fields to avoid triggering OS write-back
                     newApp.SyncVolumeFromOS(sessionData.Volume);
                     newApp.SyncMuteFromOS(sessionData.IsMuted);
@@ -701,8 +778,8 @@ namespace SoundBar.ViewModels
                 }
                 else
                 {
-                    // Update existing app (match by Name because ProcessId can change if the app restarts)
-                    var existingApp = Apps.First(x => string.Equals(x.Name, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    // Update existing app (match by RawProcessName)
+                    var existingApp = Apps.First(x => string.Equals(x.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase));
 
                     // Check if the session just came back to life after being destroyed (e.g. tabbing back into a game)
                     if (!existingApp.IsSessionAlive)
@@ -744,7 +821,7 @@ namespace SoundBar.ViewModels
             _settingsService.SaveSettings();
 
             // Check if it's currently in the Apps list and remove it
-            var appToRemove = Apps.FirstOrDefault(a => string.Equals(a.Name, appName, StringComparison.OrdinalIgnoreCase));
+            var appToRemove = Apps.FirstOrDefault(a => string.Equals(a.DisplayName, appName, StringComparison.OrdinalIgnoreCase));
             if (appToRemove != null)
             {
                 Apps.Remove(appToRemove);
@@ -801,9 +878,9 @@ namespace SoundBar.ViewModels
 
             foreach (var app in Apps)
             {
-                if (!string.IsNullOrEmpty(app.Name))
+                if (!string.IsNullOrEmpty(app.RawProcessName))
                 {
-                    newPreset.AppVolumes[app.Name] = app.Volume;
+                    newPreset.AppVolumes[app.RawProcessName] = app.Volume;
                 }
             }
 
@@ -831,9 +908,9 @@ namespace SoundBar.ViewModels
             // Apply App Volumes
             foreach (var app in Apps)
             {
-                if (!string.IsNullOrEmpty(app.Name) && preset.AppVolumes.ContainsKey(app.Name))
+                if (!string.IsNullOrEmpty(app.RawProcessName) && preset.AppVolumes.ContainsKey(app.RawProcessName))
                 {
-                    app.Volume = preset.AppVolumes[app.Name];
+                    app.Volume = preset.AppVolumes[app.RawProcessName];
                     app.PushVolumeToOS(); // Force OS to sync immediately
                 }
             }
@@ -1020,7 +1097,12 @@ namespace SoundBar.ViewModels
 
         public void SeekToScrubPosition()
         {
-            _ = _mediaInfoService.SeekAsync(TimeSpan.FromSeconds(CurrentSongPositionSeconds));
+            var seekPosition = TimeSpan.FromSeconds(CurrentSongPositionSeconds);
+            // Update base position immediately so ProgressTimer_Tick doesn't
+            // snap the slider back to the old position before the OS reports the new one
+            _basePosition = seekPosition;
+            _lastUpdatedTime = DateTimeOffset.Now;
+            _ = _mediaInfoService.SeekAsync(seekPosition);
         }
 
         private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
@@ -1108,6 +1190,16 @@ namespace SoundBar.ViewModels
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();
             _pollingCts = null;
+
+            _progressTimer?.Stop();
+
+            _mediaInfoService?.Dispose();
+
+            // Dispose all AudioAppModels to cancel any in-flight debounce tasks
+            foreach (var app in Apps)
+            {
+                app.Dispose();
+            }
 
             if (_audioService is IDisposable disposable)
             {

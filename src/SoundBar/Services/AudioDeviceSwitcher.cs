@@ -65,8 +65,17 @@ namespace SoundBar.Services
     {
     }
 
+    /// <summary>
+    /// A sneaky little helper class that talks directly to undocumented Windows COM APIs 
+    /// to switch the default audio output device. It tries a few different versions of the API 
+    /// to make sure it works across Windows 7, 10, and 11.
+    /// </summary>
     public static class AudioDeviceSwitcher
     {
+        /// <summary>
+        /// Tells Windows to instantly switch all its audio over to the specified device.
+        /// </summary>
+        /// <param name="deviceId">The unique ID of the device you want to switch to.</param>
         public static void SetDefaultDevice(string deviceId)
         {
             try

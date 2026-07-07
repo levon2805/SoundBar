@@ -8,16 +8,23 @@ using System.Threading.Tasks;
 
 namespace SoundBar.Services
 {
+    /// <summary>
+    /// The powerhouse that actually talks to the Windows Core Audio APIs.
+    /// It hunts down active audio sessions and lets us fiddle with their volumes and mutes.
+    /// </summary>
     internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
-        // Cache of ProcessId -> App Info to prevent allocating heavy Process objects every tick
+        // We keep a little cache of ProcessId -> App Info so we don't have to allocate heavy Process objects every single tick.
         private readonly Dictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
 
+        /// <summary>
+        /// Rummages through Windows to find every app currently hooked into the audio system.
+        /// </summary>
         public List<AudioSessionData> GetActiveAudioSessions()
         {
             var sessions = new List<AudioSessionData>();
 
-            // Track which display names we have processed to prevent duplicates
+            // We track which display names we've already seen to prevent annoying duplicates.
             var addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Track what ProcessIds we see this tick to clean up stale cache entries
@@ -173,6 +180,9 @@ namespace SoundBar.Services
             return sessions;
         }
 
+        /// <summary>
+        /// Reaches into the guts of Windows to adjust the volume for a specific app.
+        /// </summary>
         public void SetVolume(string processName, float level)
         {
             PerformActionOnSession(processName, (volumeControl) =>
@@ -181,6 +191,9 @@ namespace SoundBar.Services
             });
         }
 
+        /// <summary>
+        /// Mutes or unmutes a specific application.
+        /// </summary>
         public void SetMute(string processName, bool isMuted)
         {
             PerformActionOnSession(processName, (volumeControl) =>
@@ -189,7 +202,7 @@ namespace SoundBar.Services
             });
         }
 
-        // Master Volume Implementation
+        // --- Master Volume Implementation ---
 
         public float GetMasterVolume()
         {

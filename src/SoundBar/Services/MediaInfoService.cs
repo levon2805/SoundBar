@@ -19,7 +19,7 @@ namespace SoundBar.Services
         public bool IsPlaying { get; set; }
     }
 
-    public class MediaInfoService
+    public class MediaInfoService : IDisposable
     {
         private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
         private GlobalSystemMediaTransportControlsSession? _currentSession;
@@ -150,6 +150,23 @@ namespace SoundBar.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to get media properties: {ex.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_currentSession != null)
+            {
+                _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
+                _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
+                _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
+                _currentSession = null;
+            }
+
+            if (_sessionManager != null)
+            {
+                _sessionManager.CurrentSessionChanged -= SessionManager_CurrentSessionChanged;
+                _sessionManager = null;
             }
         }
     }

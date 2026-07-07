@@ -2,15 +2,21 @@
 
 ## Features
 * **Individual App Control:** Granular volume control over every active application on your PC.
+* **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
+* **Master Volume & Presets:** Control your entire system's audio, and save custom audio presets to instantly switch between different volume profiles (e.g., 'Gaming' vs 'Work').
+* **Music Player Mode:** A beautiful, full-sized music player view that pulls in album artwork and provides a scrubbable timeline for the currently playing song.
+* **Global Media Controls:** Convenient buttons at the bottom of the app to play, pause, skip, and mute system audio.
 * **Output Device Switching:** Seamlessly change your default Windows playback device directly from the overlay.
-* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge dimmed wallpaper.
-* **Master Volume:** Dedicated slider for controlling your entire system's audio.
-* **Always-on-Top:** Pin the SoundBar overlay above all other windows.
+* **Light & Dark Themes:** Fully supports Windows 11 native light, dark, and system themes, letting you customise the look to your exact preference.
+* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper.
+* **Smart Dimming:** Background dimming elegantly shifts to ensure text remains perfectly readable whether you use Light or Dark mode.
+* **Hearing Protection:** An optional excessive loudness warning helps you protect your ears if the volume stays high for too long.
+* **Always-on-Top & Start at Login:** Pin the SoundBar overlay above all other windows, and optionally have it run quietly in the background when your PC starts up.
+* **Do Not Disturb:** One-click toggle to mute all system notification sounds when you need peace and quiet.
 * **App Blacklist:** Hide specific applications from your mixer interface to reduce clutter.
-* **Background Audio Controls:** Automatically captures invisible background services (like System Sounds) and allows you to optionally expose and control them.
-* **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a 1-click install button.
-* **State Persistence:** SoundBar securely remembers your window position, pinned state, output device, and hidden apps across reboots.
-* **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek, dark-themed interface with custom window drag controls.
+* **Background Audio Controls:** Automatically captures invisible background services and allows you to optionally expose and control them.
+* **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a neat, 1-click update button.
+* **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek interface with smooth, responsive controls.
 
 ## Download & Install (For Users)
 The application is built as a completely self-contained, portable `.exe`. You do not need to install anything or download the Windows App SDK runtime!
