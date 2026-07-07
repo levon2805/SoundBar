@@ -71,5 +71,61 @@ namespace SoundBar.Tests
             Assert.NotNull(service.Settings);
             Assert.False(service.Settings.IsPinned); // Default state
         }
+
+        // --- New v2.4.0 Tests ---
+
+        [Fact]
+        public void SaveAndLoad_AppAliases_PersistsCorrectly()
+        {
+            // Arrange
+            var service1 = new SettingsService(_testFilePath);
+            service1.Settings.AppAliases["chrome.exe"] = "Browser";
+            service1.Settings.AppAliases["hl2.exe"] = "Half Life 2";
+
+            // Act
+            service1.SaveSettings();
+            var service2 = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.Equal(2, service2.Settings.AppAliases.Count);
+            Assert.Equal("Browser", service2.Settings.AppAliases["chrome.exe"]);
+            Assert.Equal("Half Life 2", service2.Settings.AppAliases["hl2.exe"]);
+        }
+
+        [Fact]
+        public void SaveAndLoad_RunAtStartup_PersistsCorrectly()
+        {
+            // Arrange
+            var service1 = new SettingsService(_testFilePath);
+            service1.Settings.RunAtStartup = true;
+
+            // Act
+            service1.SaveSettings();
+            var service2 = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.True(service2.Settings.RunAtStartup);
+        }
+
+        [Fact]
+        public void Load_DefaultSettings_HasEmptyAppAliases()
+        {
+            // Arrange & Act
+            var service = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.NotNull(service.Settings.AppAliases);
+            Assert.Empty(service.Settings.AppAliases);
+        }
+
+        [Fact]
+        public void Load_DefaultSettings_RunAtStartupIsFalse()
+        {
+            // Arrange & Act
+            var service = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.False(service.Settings.RunAtStartup);
+        }
     }
 }

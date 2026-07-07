@@ -12,33 +12,60 @@ using System.Security.Cryptography;
 
 namespace SoundBar.Services
 {
+    /// <summary>
+    /// Handles everything related to keeping SoundBar up to date.
+    /// It sneaks a peek at GitHub to see if there's a shiny new version, downloads it, verifies it, and applies it.
+    /// </summary>
     public class UpdateService
     {
-        // Change this every time releasing a new version
-        public const string CurrentVersion = "v2.3.2";
+        /// <summary>
+        /// The version of the app currently running. Remember to bump this before every release!
+        /// </summary>
+        public const string CurrentVersion = "v2.4.0";
         
+        /// <summary>
+        /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
+        /// </summary>
         public const string PublicKeyBase64 = "PFJTQUtleVZhbHVlPjxNb2R1bHVzPnh6bTBBMENEb0xMdC96aDVSazhhb0R0Yk5zdUs0QWNQOEdaTUpSMHRadUhrKzN2M2pUZUhQYVRlbTQ3OFlrZk5nVzRBeTVDa05PNHhjSGVMM0tCSGk5dDlKbjIrdXEza2VaV2NsZFdPWCtESXJqbWUrbk1YSDZURDZzMDZ3VGpBM0RWWTYxOHRXNmQvdnNJTWc5emlEUUxKSFl5RGNPbXhkODVwRkJveTkyNE1YRFdvbFhpZUx6YmN6M2p0K1IweDcySzdmOGsrVHRoNzlpRzJOeVVHZGQ2Rng1Y2lzRzlUaGd3emhIczc2eVh2VGV5UHhEaElWVCt0eXZGSlBUaTEzaDhBRXhWdkhaVVJnVVU4RWxsZ2ZTWTRNNCs0NUNDYkRxc2dPVmR4RGNvTkNOa1YrOU80d2d0WnZJNkI3bzFnUzdtekdJN1JpWklvWkxIbnVtYnBlUT09PC9Nb2R1bHVzPjxFeHBvbmVudD5BUUFCPC9FeHBvbmVudD48L1JTQUtleVZhbHVlPg==";
 
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static HttpClient _httpClient;
 
+        /// <summary>
+        /// The version string of the newest release found on GitHub.
+        /// </summary>
         public string LatestVersion { get; private set; } = string.Empty;
+
+        /// <summary>
+        /// Where we can grab the shiny new .zip file from.
+        /// </summary>
         public string DownloadUrl { get; private set; } = string.Empty;
+
+        /// <summary>
+        /// Where we can grab the cryptographic signature to ensure the update is legit.
+        /// </summary>
         public string SignatureUrl { get; private set; } = string.Empty;
 
         static UpdateService()
         {
             _httpClient = new HttpClient();
-            // GitHub API requires a User-Agent header
+            // GitHub is a bit picky and demands a User-Agent header, so we provide one politely.
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SoundBar", "1.0"));
         }
 
+        /// <summary>
+        /// Plugs in a fake HTTP handler for our unit tests so we don't spam GitHub.
+        /// </summary>
         internal static void SetTestMessageHandler(HttpMessageHandler handler)
         {
             _httpClient = new HttpClient(handler);
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SoundBar", "1.0"));
         }
 
+        /// <summary>
+        /// Checks GitHub to see if we're running an old version.
+        /// </summary>
+        /// <returns>True if a newer, signed version is available to download.</returns>
         public async Task<bool> CheckForUpdatesAsync()
         {
             try
@@ -55,6 +82,7 @@ namespace SoundBar.Services
                         var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
                         var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
                         
+                        // We strictly need both the update and its signature to proceed safely.
                         if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
                         {
                             DownloadUrl = zipAsset.BrowserDownloadUrl;
@@ -66,12 +94,15 @@ namespace SoundBar.Services
             }
             catch
             {
-                // Ignore network errors or parsing errors
+                // The internet might be down, or GitHub is throwing a wobbly. We just quietly fail.
             }
 
             return false;
         }
 
+        /// <summary>
+        /// Downloads the update, verifies its signature, extracts it, and triggers the clever batch script to overwrite the running app.
+        /// </summary>
         public async Task DownloadAndApplyUpdateAsync()
         {
             if (string.IsNullOrEmpty(DownloadUrl) || string.IsNullOrEmpty(SignatureUrl)) return;
@@ -81,14 +112,14 @@ namespace SoundBar.Services
             string sigPath = Path.Combine(tempUpdateDir, "update.sig");
             string extractPath = Path.Combine(tempUpdateDir, "extracted");
 
-            // Clean up any old update folders
+            // Tidy up any debris left over from previous updates
             if (Directory.Exists(tempUpdateDir))
             {
                 try { Directory.Delete(tempUpdateDir, true); } catch { }
             }
             Directory.CreateDirectory(tempUpdateDir);
 
-            // Download the ZIP
+            // Let's grab the ZIP file
             using var response = await _httpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
@@ -97,7 +128,7 @@ namespace SoundBar.Services
                 await response.Content.CopyToAsync(fs);
             }
 
-            // Download the SIG
+            // Let's grab the signature file
             using var sigResponse = await _httpClient.GetAsync(SignatureUrl, HttpCompletionOption.ResponseHeadersRead);
             sigResponse.EnsureSuccessStatusCode();
 
@@ -106,7 +137,7 @@ namespace SoundBar.Services
                 await sigResponse.Content.CopyToAsync(sigFs);
             }
 
-            // Verify signature
+            // Now for the security check...
             try
             {
                 string publicKeyXml = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(PublicKeyBase64));
@@ -130,16 +161,15 @@ namespace SoundBar.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Update verification failed: {ex.Message}");
-                // Cleanup and abort update process
+                // Something smells fishy. Let's abort and clean up.
                 try { Directory.Delete(tempUpdateDir, true); } catch { }
                 return;
             }
 
-            // Extract the ZIP
+            // Everything is legit, so let's extract it
             ZipFile.ExtractToDirectory(zipPath, extractPath);
 
-            // Find the actual folder containing SoundBar.exe inside the extracted zip
-            // Sometimes zips contain a root folder, sometimes just the files. We need the directory containing SoundBar.exe.
+            // We need to find the actual exe because sometimes zip files have root folders and sometimes they don't.
             string sourceDir = extractPath;
             var exeFiles = Directory.GetFiles(extractPath, "SoundBar.exe", SearchOption.AllDirectories);
             if (exeFiles.Any())
@@ -147,7 +177,7 @@ namespace SoundBar.Services
                 sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
             }
 
-            // Create the updater batch script outside the temp folder so it doesn't delete itself
+            // We write a sneaky batch script to the temp folder. This will run independently, wait for us to close, and copy the files over.
             string currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
@@ -183,7 +213,7 @@ del "%~f0"
 """;
             File.WriteAllText(batPath, batContent);
 
-            // Execute the batch script invisibly
+            // Fire and forget the batch script
             var processInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
@@ -193,11 +223,12 @@ del "%~f0"
             };
             Process.Start(processInfo);
 
-            // Terminate this application so the batch script can overwrite the files
+            // Goodbye old version! The batch script will take it from here.
             Environment.Exit(0);
         }
 
-        // Helper classes for JSON deserialization
+        // --- Helper classes just to read the GitHub API JSON ---
+
         private class GithubRelease
         {
             [JsonPropertyName("tag_name")]

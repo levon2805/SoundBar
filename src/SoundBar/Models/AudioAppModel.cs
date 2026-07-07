@@ -9,26 +9,62 @@ using SoundBar.Services;
 
 namespace SoundBar.Models
 {
-    // Interface that tells UI the value has changed and needs updating
-    public class AudioAppModel : INotifyPropertyChanged
+    /// <summary>
+    /// Represents a single audio application within the mixer.
+    /// This model handles its own volume debouncing to prevent hammering the Windows Audio API.
+    /// </summary>
+    public class AudioAppModel : INotifyPropertyChanged, IDisposable
     {
-        // Field definition
         private readonly IAudioMixerService _audioService;
 
-        // Process ID
+        /// <summary>
+        /// The OS-level process ID.
+        /// </summary>
         public int ProcessId { get; set; }
 
-        // The display name (cleaned up, e.g. "Stremio" instead of "stremio-shell-ng")
-        public string? Name { get; set; }
+        private string? _name;
+        /// <summary>
+        /// The name displayed in the UI. Users can edit this to give their apps custom nicknames.
+        /// </summary>
+        public string? Name
+        {
+            get => _name;
+            set
+            {
+                if (_name != value)
+                {
+                    _name = value;
+                    OnPropertyChanged();
+                    AliasChanged?.Invoke(RawProcessName ?? "", value ?? "");
+                }
+            }
+        }
 
-        // The raw OS process name (e.g. "stremio-shell-ng") — used for SetVolume/SetMute calls
+        /// <summary>
+        /// The original, untouched display name straight from Windows.
+        /// </summary>
+        public string? DisplayName { get; set; }
+
+        /// <summary>
+        /// Fired whenever the user decides to give an application a cheeky new nickname.
+        /// </summary>
+        public Action<string, string>? AliasChanged { get; set; }
+
+        /// <summary>
+        /// The raw executable name (e.g. 'stremio-shell-ng.exe'). 
+        /// We use this to reliably match sessions even if they get renamed.
+        /// </summary>
         public string? RawProcessName { get; set; }
 
-        // Path to the .exe
+        /// <summary>
+        /// Where we can find the executable to grab a nice icon from.
+        /// </summary>
         public string? IconPath { get; set; }
 
-        // The loaded icon for the UI
         private Microsoft.UI.Xaml.Media.ImageSource? _appIcon;
+        /// <summary>
+        /// The visual icon loaded for the UI.
+        /// </summary>
         public Microsoft.UI.Xaml.Media.ImageSource? AppIcon
         {
             get => _appIcon;
@@ -42,44 +78,51 @@ namespace SoundBar.Models
             }
         }
 
-        // Track when we last touched this slider
+        /// <summary>
+        /// Tracks the last time the user fiddled with this app's volume slider.
+        /// Helps us know when to stop auto-syncing from Windows to avoid fighting the user.
+        /// </summary>
         public DateTime LastModified { get; private set; } = DateTime.MinValue;
 
-        // The Volume level (0.0 to 1.0)
         private float _volume;
         private System.Threading.CancellationTokenSource? _volumeDebounce;
 
+        /// <summary>
+        /// The current volume level, ranging from 0.0 to 1.0.
+        /// Modifying this will automatically debounce and tell Windows to change the volume.
+        /// </summary>
         public float Volume
         {
             get => _volume;
             set
             {
-                // Only notify if the value actually changes to save performance
+                // Only do the hard work if the volume actually changed.
                 if (_volume != value)
                 {
                     _volume = value;
 
-                    // Update timestamp so we know the user is interacting
+                    // Note down the time so we don't immediately overwrite the user's change.
                     LastModified = DateTime.Now;
 
-                    // This triggers the event that the UI listens for
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(VolumePercentage));
 
-                    // Debounce: cancel any pending SetVolume call and schedule a new one
-                    // This prevents spawning 30+ Task.Run calls per second when dragging a slider
+                    // Cancel any pending volume changes so we don't spam the OS while sliding.
                     _volumeDebounce?.Cancel();
-                    _volumeDebounce?.Dispose();
+                    
+                    // We let the GC tidy up the old token source once the task finishes.
                     _volumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _volumeDebounce.Token;
                     var capturedVolume = _volume;
                     string osName = RawProcessName ?? Name ?? "";
+                    
                     if (_audioService != null && !string.IsNullOrEmpty(osName))
                     {
                         _ = Task.Run(async () =>
                         {
                             try
                             {
+                                // Wait just a tiny bit to see if the user is still sliding.
                                 await Task.Delay(50, token);
                                 if (!token.IsCancellationRequested)
                                 {
@@ -94,9 +137,10 @@ namespace SoundBar.Models
         }
 
         /// <summary>
-        /// Updates the volume from an OS read without writing it back (avoids feedback loop).
-        /// Use this when syncing the slider to match what Windows reports.
+        /// Updates our volume state directly from Windows without triggering a write-back.
+        /// This stops an endless loop of us telling Windows the volume, and Windows telling us back.
         /// </summary>
+        /// <param name="volume">The volume level (0.0 to 1.0).</param>
         public void SyncVolumeFromOS(float volume)
         {
             if (_volume != volume)
@@ -108,8 +152,9 @@ namespace SoundBar.Models
         }
 
         /// <summary>
-        /// Updates the mute state from an OS read without writing it back (avoids feedback loop).
+        /// Quietly updates our mute state from Windows without causing a scene.
         /// </summary>
+        /// <param name="isMuted">Whether the app is currently muted.</param>
         public void SyncMuteFromOS(bool isMuted)
         {
             if (_isMuted != isMuted)
@@ -119,18 +164,22 @@ namespace SoundBar.Models
             }
         }
 
-        // Forces the current UI volume down to the Windows Audio Service
-        // Useful if the game destroyed its audio session and just recreated a new one
+        /// <summary>
+        /// Shoves our current volume down to the Windows Audio Service.
+        /// Brilliant for when an app completely destroys and recreates its audio session.
+        /// </summary>
         public void PushVolumeToOS()
         {
-            string osName = RawProcessName ?? Name ?? "";
+            string osName = RawProcessName ?? DisplayName ?? "";
             if (_audioService != null && !string.IsNullOrEmpty(osName))
             {
                 _audioService.SetVolume(osName, _volume);
             }
         }
 
-        // The volume represented as a percentage (0 to 100)
+        /// <summary>
+        /// A friendly percentage representation of the volume, perfect for UI bindings.
+        /// </summary>
         public int VolumePercentage
         {
             get => (int)Math.Round(_volume * 100);
@@ -140,15 +189,21 @@ namespace SoundBar.Models
             }
         }
 
-        // True if the app does not have a visible main window
+        /// <summary>
+        /// True if this seems to be a sneaky background process without a proper window.
+        /// </summary>
         public bool IsBackgroundApp { get; set; }
 
-        // True if the Windows Audio Session is currently active/inactive (not destroyed)
+        /// <summary>
+        /// Lets us know if the Windows Audio Session is still breathing.
+        /// </summary>
         public bool IsSessionAlive { get; set; } = true;
 
-        // Whether the app is muted
         private bool _isMuted;
 
+        /// <summary>
+        /// Mutes or unmutes the application, instantly telling Windows about the change.
+        /// </summary>
         public bool IsMuted
         {
             get => _isMuted;
@@ -157,14 +212,12 @@ namespace SoundBar.Models
                 if (_isMuted != value)
                 {
                     _isMuted = value;
-
-                    // Update timestamp here too
                     LastModified = DateTime.Now;
 
                     OnPropertyChanged();
 
-                    // Actually mutes/unmutes (use RawProcessName for OS matching)
-                    string osName = RawProcessName ?? Name ?? "";
+                    // Actually tell Windows to shut it up (or let it sing).
+                    string osName = RawProcessName ?? DisplayName ?? "";
                     if (_audioService != null && !string.IsNullOrEmpty(osName))
                     {
                         _audioService.SetMute(osName, _isMuted);
@@ -173,19 +226,26 @@ namespace SoundBar.Models
             }
         }
 
-        // Consturctor requiring the service to be passed in
+        /// <summary>
+        /// Creates a new instance of our audio app model.
+        /// </summary>
+        /// <param name="audioService">The service we use to boss around the Windows audio.</param>
         public AudioAppModel(IAudioMixerService audioService)
         {
             _audioService = audioService;
         }
 
+        /// <summary>
+        /// Attempts to extract a lovely icon from the application's executable.
+        /// We do the heavy lifting in the background to keep the UI smooth.
+        /// </summary>
         public async Task LoadIconAsync()
         {
             if (string.IsNullOrEmpty(IconPath) || AppIcon != null) return;
 
             try
             {
-                // Run disk I/O and extraction on a background thread
+                // Pop onto a background thread for disk reads.
                 byte[]? iconBytes = await Task.Run(() =>
                 {
                     try
@@ -201,19 +261,17 @@ namespace SoundBar.Models
                     }
                     catch
                     {
-                        // Ignore extraction errors
+                        // Some apps are notoriously stubborn about their icons. We'll just ignore them.
                     }
                     return null;
                 });
 
                 if (iconBytes != null)
                 {
-                    // Must initialise BitmapImage on the UI thread
+                    // Hop back to the UI thread to construct the actual image.
                     var dispatcher = DispatcherQueue.GetForCurrentThread();
                     if (dispatcher != null)
                     {
-                        // Since LoadIconAsync is already called from the UI thread (via UpdateCollection),
-                        // we can just directly await the stream load. But just to be safe, we ensure it's on UI.
                         using var ms = new MemoryStream(iconBytes);
                         using var ras = ms.AsRandomAccessStream();
                         var bitmap = new BitmapImage();
@@ -224,11 +282,19 @@ namespace SoundBar.Models
             }
             catch
             {
-                // Silently fail if icon extraction is denied
+                // Access denied or something similar. No big deal.
             }
         }
 
-        // Code required by INotifyPropertyChanged
+        /// <summary>
+        /// Cleans up any pending volume tasks when this model is tossed away.
+        /// </summary>
+        public void Dispose()
+        {
+            _volumeDebounce?.Cancel();
+            _volumeDebounce = null;
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
