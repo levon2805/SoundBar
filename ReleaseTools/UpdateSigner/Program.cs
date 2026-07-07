@@ -2,6 +2,11 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 
+/*
+cd "C:\Personal Projects\SoundBar\ReleaseTools\UpdateSigner"
+dotnet run -- "C:\Users\UKGC\Desktop\SoundBar.zip"
+*/
+
 namespace UpdateSigner
 {
     class Program
@@ -46,11 +51,11 @@ namespace UpdateSigner
                 try
                 {
                     Console.WriteLine($"Signing {targetFile}...");
-                    byte[] fileBytes = File.ReadAllBytes(targetFile);
                     
                     // Hash and sign
                     using var sha256 = SHA256.Create();
-                    byte[] hash = sha256.ComputeHash(fileBytes);
+                    using var fs = new FileStream(targetFile, FileMode.Open, FileAccess.Read);
+                    byte[] hash = sha256.ComputeHash(fs);
                     
                     RSAPKCS1SignatureFormatter formatter = new RSAPKCS1SignatureFormatter(rsa);
                     formatter.SetHashAlgorithm("SHA256");
