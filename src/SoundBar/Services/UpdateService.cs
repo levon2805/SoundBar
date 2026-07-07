@@ -15,7 +15,7 @@ namespace SoundBar.Services
     public class UpdateService
     {
         // Change this every time releasing a new version
-        public const string CurrentVersion = "v2.3.0";
+        public const string CurrentVersion = "v2.3.1";
         
         public const string PublicKeyBase64 = "PFJTQUtleVZhbHVlPjxNb2R1bHVzPnh6bTBBMENEb0xMdC96aDVSazhhb0R0Yk5zdUs0QWNQOEdaTUpSMHRadUhrKzN2M2pUZUhQYVRlbTQ3OFlrZk5nVzRBeTVDa05PNHhjSGVMM0tCSGk5dDlKbjIrdXEza2VaV2NsZFdPWCtESXJqbWUrbk1YSDZURDZzMDZ3VGpBM0RWWTYxOHRXNmQvdnNJTWc5emlEUUxKSFl5RGNPbXhkODVwRkJveTkyNE1YRFdvbFhpZUx6YmN6M2p0K1IweDcySzdmOGsrVHRoNzlpRzJOeVVHZGQ2Rng1Y2lzRzlUaGd3emhIczc2eVh2VGV5UHhEaElWVCt0eXZGSlBUaTEzaDhBRXhWdkhaVVJnVVU4RWxsZ2ZTWTRNNCs0NUNDYkRxc2dPVmR4RGNvTkNOa1YrOU80d2d0WnZJNkI3bzFnUzdtekdJN1JpWklvWkxIbnVtYnBlUT09PC9Nb2R1bHVzPjxFeHBvbmVudD5BUUFCPC9FeHBvbmVudD48L1JTQUtleVZhbHVlPg==";
 
@@ -89,7 +89,7 @@ namespace SoundBar.Services
             Directory.CreateDirectory(tempUpdateDir);
 
             // Download the ZIP
-            using var response = await _httpClient.GetAsync(DownloadUrl);
+            using var response = await _httpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
             using (var fs = new FileStream(zipPath, FileMode.Create))
@@ -98,7 +98,7 @@ namespace SoundBar.Services
             }
 
             // Download the SIG
-            using var sigResponse = await _httpClient.GetAsync(SignatureUrl);
+            using var sigResponse = await _httpClient.GetAsync(SignatureUrl, HttpCompletionOption.ResponseHeadersRead);
             sigResponse.EnsureSuccessStatusCode();
 
             using (var sigFs = new FileStream(sigPath, FileMode.Create))
@@ -113,11 +113,11 @@ namespace SoundBar.Services
                 using RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
                 rsa.FromXmlString(publicKeyXml);
 
-                byte[] zipBytes = File.ReadAllBytes(zipPath);
                 byte[] sigBytes = Convert.FromBase64String(File.ReadAllText(sigPath));
 
                 using var sha256 = SHA256.Create();
-                byte[] hash = sha256.ComputeHash(zipBytes);
+                using var zipFs = new FileStream(zipPath, FileMode.Open, FileAccess.Read);
+                byte[] hash = sha256.ComputeHash(zipFs);
 
                 RSAPKCS1SignatureDeformatter deformatter = new RSAPKCS1SignatureDeformatter(rsa);
                 deformatter.SetHashAlgorithm("SHA256");

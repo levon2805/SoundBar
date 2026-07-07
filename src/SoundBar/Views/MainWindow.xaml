@@ -267,16 +267,19 @@
                     </Grid.RowDefinitions>
 
                     <!-- Album Art -->
-                    <Border Grid.Row="0" CornerRadius="12" Margin="20" Background="#222222" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Image Source="{x:Bind ViewModel.CurrentSongThumbnail, Mode=OneWay}" Stretch="UniformToFill" Width="220" Height="220">
-                            <!-- Fallback icon if no thumbnail -->
-                            <ToolTipService.ToolTip>
-                                <ToolTip Content="No Artwork Available" />
-                            </ToolTipService.ToolTip>
-                        </Image>
-                    </Border>
-                    <!-- Fallback Icon behind image -->
-                    <TextBlock Grid.Row="0" FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="#444444" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+                    <Viewbox Grid.Row="0" Margin="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="280">
+                        <Grid>
+                            <Border CornerRadius="12" Background="#222222" Width="250" Height="250">
+                                <Image Source="{x:Bind ViewModel.CurrentSongThumbnail, Mode=OneWay}" Stretch="UniformToFill">
+                                    <ToolTipService.ToolTip>
+                                        <ToolTip Content="No Artwork Available" />
+                                    </ToolTipService.ToolTip>
+                                </Image>
+                            </Border>
+                            <!-- Fallback Icon behind image -->
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="#444444" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+                        </Grid>
+                    </Viewbox>
 
                     <!-- Title -->
                     <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.CurrentSongTitle, Mode=OneWay}" FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,0,0,5"/>
