@@ -16,16 +16,23 @@ using SoundBar.Helpers;
 
 namespace SoundBar.Views
 {
+    /// <summary>
+    /// The main window of our application where all the action happens.
+    /// It handles all the UI interactions, dragging, and passing commands down to the ViewModel.
+    /// </summary>
     public sealed partial class MainWindow : Window
     {
-        // View Model accessor
+        /// <summary>
+        /// Our connection to the brains of the operation.
+        /// </summary>
         public MainViewModel ViewModel { get; }
 
-        // Dependencies
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
 
-        // Constructor
+        /// <summary>
+        /// Sets up the window, wires up the ViewModel, and restores our saved settings.
+        /// </summary>
         public MainWindow()
         {
             this.InitializeComponent();
@@ -33,6 +40,10 @@ namespace SoundBar.Views
             _settingsService = new SettingsService();
             ViewModel = new MainViewModel(_settingsService);
             ((FrameworkElement)this.Content).DataContext = ViewModel;
+
+            // Apply initial theme and listen for changes
+            ApplyTheme(ViewModel.SelectedTheme);
+            ViewModel.ThemeChanged += (s, theme) => ApplyTheme(theme);
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(null);
@@ -58,6 +69,24 @@ namespace SoundBar.Views
                 presenter.SetBorderAndTitleBar(true, false);
             }
 
+            RestoreWindowPosition();
+        }
+
+        private void ApplyTheme(AppTheme theme)
+        {
+            if (this.Content is FrameworkElement rootElement)
+            {
+                rootElement.RequestedTheme = theme switch
+                {
+                    AppTheme.Light => ElementTheme.Light,
+                    AppTheme.Dark => ElementTheme.Dark,
+                    _ => ElementTheme.Default,
+                };
+            }
+        }
+
+        private void RestoreWindowPosition()
+        {
             LoadWindowSettings();
             
             TitleBarGrid.PointerPressed += TitleBarGrid_PointerPressed;
@@ -66,6 +95,8 @@ namespace SoundBar.Views
             TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
 
             this.Closed += (s, e) => { ViewModel.Dispose(); };
+
+            SongPositionSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed), true);
 
             CreateDesktopShortcut();
         }
@@ -222,7 +253,7 @@ namespace SoundBar.Views
         {
             if ((sender as Button)?.DataContext is AudioAppModel app)
             {
-                ViewModel.HideApp(app.Name ?? string.Empty);
+                ViewModel.HideApp(app.DisplayName ?? string.Empty);
             }
         }
 
@@ -388,6 +419,16 @@ namespace SoundBar.Views
         {
             ViewModel.IsUserScrubbing = false;
             ViewModel.SeekToScrubPosition();
+        }
+
+        private void TextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                // Force focus back to the main content grid to trigger LostFocus binding update
+                MainContentGrid.Focus(FocusState.Programmatic);
+                e.Handled = true;
+            }
         }
     }
 }
