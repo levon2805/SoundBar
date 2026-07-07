@@ -11,6 +11,7 @@ namespace SoundBar.Models
         public bool IsDoNotDisturbEnabled { get; set; } = false;
         public bool IsLoudnessWarningEnabled { get; set; } = true;
         public bool ShowMediaControls { get; set; } = true;
+        public bool RunAtStartup { get; set; } = false;
 
         // List of app names that should be hidden from the main view
         public System.Collections.Generic.List<string> HiddenApps { get; set; } = new System.Collections.Generic.List<string>();

@@ -234,6 +234,48 @@ namespace SoundBar.ViewModels
 
         public Microsoft.UI.Xaml.Visibility MediaControlsVisibility => ShowMediaControls ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+        // Run At Startup Property
+        private bool _runAtStartup;
+        public bool RunAtStartup
+        {
+            get => _runAtStartup;
+            set
+            {
+                if (_runAtStartup != value)
+                {
+                    _runAtStartup = value;
+                    OnPropertyChanged();
+                    _settingsService.Settings.RunAtStartup = value;
+                    _settingsService.SaveSettings();
+                    UpdateStartupRegistry(value);
+                }
+            }
+        }
+
+        private void UpdateStartupRegistry(bool enable)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+                if (key != null)
+                {
+                    if (enable)
+                    {
+                        string exePath = System.Environment.ProcessPath ?? "";
+                        if (!string.IsNullOrEmpty(exePath))
+                        {
+                            key.SetValue("SoundBar", $"\"{exePath}\"");
+                        }
+                    }
+                    else
+                    {
+                        key.DeleteValue("SoundBar", false);
+                    }
+                }
+            }
+            catch { }
+        }
+
         // Master Volume Property
         private float _masterVolume;
         public float MasterVolume
@@ -321,6 +363,7 @@ namespace SoundBar.ViewModels
             _isDoNotDisturbEnabled = _settingsService.Settings.IsDoNotDisturbEnabled;
             _isLoudnessWarningEnabled = _settingsService.Settings.IsLoudnessWarningEnabled;
             _showMediaControls = _settingsService.Settings.ShowMediaControls;
+            _runAtStartup = _settingsService.Settings.RunAtStartup;
             _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
 
             // Start the monitoring loop
