@@ -557,13 +557,24 @@
                         <!-- System Integration Settings -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
-                                <TextBlock Text="System Startup" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="System Integration" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
                             </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Automatically start SoundBar in the background when you log into Windows." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Run at Startup" 
-                                              IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}" 
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            <StackPanel Spacing="15">
+                                <StackPanel>
+                                    <TextBlock Text="Automatically start SoundBar in the background when you log into Windows." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <ToggleSwitch Header="Run at Startup" 
+                                                  IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}" 
+                                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="Place a fresh shortcut to SoundBar directly on your Desktop." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <Button Content="Create Desktop Shortcut" 
+                                            Click="{x:Bind ViewModel.CreateDesktopShortcut}" 
+                                            Background="{ThemeResource ControlFillColorDefaultBrush}" 
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Expander>
                     </StackPanel>

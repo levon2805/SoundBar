@@ -1185,6 +1185,31 @@ namespace SoundBar.ViewModels
             }
         }
 
+        public void CreateDesktopShortcut()
+        {
+            try
+            {
+                Type wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (wshShellType != null)
+                {
+                    dynamic shell = Activator.CreateInstance(wshShellType);
+                    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                    string shortcutPath = System.IO.Path.Combine(desktopPath, "SoundBar.lnk");
+                    
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = Environment.ProcessPath;
+                    shortcut.WorkingDirectory = System.IO.Path.GetDirectoryName(Environment.ProcessPath);
+                    shortcut.Description = "SoundBar Audio Mixer";
+                    shortcut.IconLocation = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
+                    shortcut.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Failed to create shortcut: " + ex.Message);
+            }
+        }
+
         public void Dispose()
         {
             _pollingCts?.Cancel();
