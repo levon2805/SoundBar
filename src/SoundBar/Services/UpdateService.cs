@@ -77,17 +77,21 @@ namespace SoundBar.Services
                 {
                     LatestVersion = releaseInfo.TagName;
 
-                    if (LatestVersion != CurrentVersion)
+                    if (Version.TryParse(LatestVersion.TrimStart('v', 'V'), out var latest) &&
+                        Version.TryParse(CurrentVersion.TrimStart('v', 'V'), out var current))
                     {
-                        var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                        var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
-                        
-                        // We strictly need both the update and its signature to proceed safely.
-                        if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
+                        if (latest > current)
                         {
-                            DownloadUrl = zipAsset.BrowserDownloadUrl;
-                            SignatureUrl = sigAsset.BrowserDownloadUrl;
-                            return true;
+                            var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                            var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
+                            
+                            // We strictly need both the update and its signature to proceed safely.
+                            if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
+                            {
+                                DownloadUrl = zipAsset.BrowserDownloadUrl;
+                                SignatureUrl = sigAsset.BrowserDownloadUrl;
+                                return true;
+                            }
                         }
                     }
                 }

@@ -55,12 +55,9 @@ namespace SoundBar.Views
             this.Title = "SoundBar";
             _appWindow.Title = "SoundBar";
 
-            // Set the icon for the taskbar and window
-            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
-            if (System.IO.File.Exists(iconPath))
-            {
-                _appWindow.SetIcon(iconPath);
-            }
+            // We do NOT use _appWindow.SetIcon() here. 
+            // WinUI 3 has a bug where setting the icon dynamically forces a UWP "plate" (white square) behind the taskbar icon.
+            // By doing nothing, the OS natively pulls the transparent SoundBar.ico directly from the compiled .exe without any plates!
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
