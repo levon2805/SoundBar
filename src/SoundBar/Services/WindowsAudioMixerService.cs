@@ -100,9 +100,6 @@ namespace SoundBar.Services
                                 displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);
                             }
 
-                            // If we already have a slider for this display name, skip it
-                            if (addedNames.Contains(displayName)) continue;
-
                             bool isBackground = true;
                             string? safeIconPath = null;
 
@@ -147,8 +144,13 @@ namespace SoundBar.Services
 
                             safeIconPath = GetExecutablePathSafely(process);
 
-                            // Cache so we never run the slow path for this ProcessId again
+                            // Cache so we never run the slow path for this ProcessId again.
+                            // We MUST do this before the addedNames check so secondary sessions get cached 
+                            // and can respond to volume/mute commands!
                             _processCache[processId] = (displayName, processName, isBackground, safeIconPath);
+
+                            // If we already have a slider for this display name, skip adding it to the UI list
+                            if (addedNames.Contains(displayName)) continue;
 
                             sessions.Add(new AudioSessionData
                             {

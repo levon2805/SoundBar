@@ -63,6 +63,11 @@ namespace SoundBar.Models
         public AppTheme Theme { get; set; } = AppTheme.System;
 
         /// <summary>
+        /// Whether to show a visual highlight outline around the currently focused application.
+        /// </summary>
+        public bool EnableFocusHighlight { get; set; } = true;
+
+        /// <summary>
         /// Hotkey configuration string for increasing the focused app's volume. Format: "Ctrl+Alt+Up"
         /// </summary>
         public string VolumeUpHotkey { get; set; } = "Control+Alt+Up";
