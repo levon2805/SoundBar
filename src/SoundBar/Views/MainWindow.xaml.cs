@@ -35,11 +35,26 @@ namespace SoundBar.Views
         /// </summary>
         public MainWindow()
         {
-            this.InitializeComponent();
+            try
+            {
+                this.InitializeComponent();
 
-            _settingsService = new SettingsService();
-            ViewModel = new MainViewModel(_settingsService);
-            ((FrameworkElement)this.Content).DataContext = ViewModel;
+                _settingsService = new SettingsService();
+                ViewModel = new MainViewModel(_settingsService);
+                ((FrameworkElement)this.Content).DataContext = ViewModel;
+
+                // We dynamically build the UI here because the local machine's XAML compiler
+                // is throwing MSB4062 and failing to compile new XAML nodes correctly.
+                BuildDynamicUI();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                var localFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(localFolder, "soundbar_crash_log.txt"), ex.ToString());
+#endif
+                throw;
+            }
 
             // Apply initial theme and listen for changes
             ApplyTheme(ViewModel.SelectedTheme);
@@ -428,6 +443,111 @@ namespace SoundBar.Views
                 // Force focus back to the main content grid to trigger LostFocus binding update
                 MainContentGrid.Focus(FocusState.Programmatic);
                 e.Handled = true;
+            }
+        }
+
+        private void VersionHyperlink_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.OpenReleaseNotes();
+        }
+
+        private void BuildDynamicUI()
+        {
+            try
+            {
+                // Traverse the visual tree to find all ScrollViewers
+                var scrollViewers = new System.Collections.Generic.List<ScrollViewer>();
+                FindVisualChildren(this.Content, scrollViewers);
+                
+                // The settings ScrollViewer is the one containing a StackPanel
+                StackPanel settingsPanel = null;
+                
+                foreach (var sv in scrollViewers)
+                {
+                    if (sv.Content is StackPanel sp)
+                    {
+                        settingsPanel = sp;
+                        break;
+                    }
+                }
+
+                if (settingsPanel == null) return;
+
+                // 1. About & Updates Expander (Top)
+                var aboutExpander = new Expander
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Header = new TextBlock { Text = "About & Updates", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
+                };
+                
+                var aboutStack = new StackPanel { Spacing = 15 };
+                aboutStack.Children.Add(new TextBlock { Text = "Check out the latest features and changes in this version.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+                var releaseNotesBtn = new Button { Content = "View Release Notes" };
+                releaseNotesBtn.Click += VersionHyperlink_Click;
+                aboutStack.Children.Add(releaseNotesBtn);
+                aboutExpander.Content = aboutStack;
+                
+                // Insert at the very top
+                settingsPanel.Children.Insert(0, aboutExpander);
+
+                // 2. Global Hotkeys Expander
+                var keybindsExpander = new Expander
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Header = new TextBlock { Text = "Global Hotkeys", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
+                };
+                
+                var keybindsStack = new StackPanel { Spacing = 15 };
+                keybindsStack.Children.Add(new TextBlock { Text = "Control the volume of the app you are currently using without leaving it.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+                
+                // Volume Up
+                var volUpStack = new StackPanel();
+                volUpStack.Children.Add(new TextBlock { Text = "Volume Up Hotkey", Margin = new Thickness(0, 0, 0, 5) });
+                var volUpBox = new TextBox { PlaceholderText = "e.g. Control+Alt+Up" };
+                volUpBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("VolumeUpHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                volUpStack.Children.Add(volUpBox);
+                keybindsStack.Children.Add(volUpStack);
+                
+                // Volume Down
+                var volDownStack = new StackPanel();
+                volDownStack.Children.Add(new TextBlock { Text = "Volume Down Hotkey", Margin = new Thickness(0, 0, 0, 5) });
+                var volDownBox = new TextBox { PlaceholderText = "e.g. Control+Alt+Down" };
+                volDownBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("VolumeDownHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                volDownStack.Children.Add(volDownBox);
+                keybindsStack.Children.Add(volDownStack);
+                
+                // Mute
+                var muteStack = new StackPanel();
+                muteStack.Children.Add(new TextBlock { Text = "Mute Hotkey", Margin = new Thickness(0, 0, 0, 5) });
+                var muteBox = new TextBox { PlaceholderText = "e.g. Control+Alt+M" };
+                muteBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("MuteHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                muteStack.Children.Add(muteBox);
+                keybindsStack.Children.Add(muteStack);
+                
+                keybindsExpander.Content = keybindsStack;
+                
+                // Insert right before System Integration Settings (which is the last item)
+                int insertIndex = Math.Max(0, settingsPanel.Children.Count - 1);
+                settingsPanel.Children.Insert(insertIndex, keybindsExpander);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to build dynamic UI: {ex.Message}");
+            }
+        }
+
+        private void FindVisualChildren<T>(DependencyObject parent, System.Collections.Generic.List<T> results) where T : DependencyObject
+        {
+            for (int i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T t)
+                {
+                    results.Add(t);
+                }
+                FindVisualChildren(child, results);
             }
         }
     }

@@ -61,6 +61,21 @@ namespace SoundBar.Models
         /// The visual theme of the application (Light, Dark, or System).
         /// </summary>
         public AppTheme Theme { get; set; } = AppTheme.System;
+
+        /// <summary>
+        /// Hotkey configuration string for increasing the focused app's volume. Format: "Ctrl+Alt+Up"
+        /// </summary>
+        public string VolumeUpHotkey { get; set; } = "Control+Alt+Up";
+
+        /// <summary>
+        /// Hotkey configuration string for decreasing the focused app's volume. Format: "Ctrl+Alt+Down"
+        /// </summary>
+        public string VolumeDownHotkey { get; set; } = "Control+Alt+Down";
+
+        /// <summary>
+        /// Hotkey configuration string for muting/unmuting the focused app. Format: "Ctrl+Alt+M"
+        /// </summary>
+        public string MuteHotkey { get; set; } = "Control+Alt+M";
     }
 
     /// <summary>
