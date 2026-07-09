@@ -29,6 +29,8 @@ namespace SoundBar.Views
 
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
+        private DispatcherTimer? _focusOutlineTimer;
+        private ItemsControl? _appsItemsControl;
 
         /// <summary>
         /// Sets up the window, wires up the ViewModel, and restores our saved settings.
@@ -63,6 +65,11 @@ namespace SoundBar.Views
             ApplyTheme(ViewModel.SelectedTheme);
             ViewModel.ThemeChanged += (s, theme) => ApplyTheme(theme);
 
+            // Start focus outline visual updater
+            _focusOutlineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _focusOutlineTimer.Tick += FocusOutlineTimer_Tick;
+            _focusOutlineTimer.Start();
+
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(null);
 
@@ -85,6 +92,99 @@ namespace SoundBar.Views
             }
 
             RestoreWindowPosition();
+        }
+
+        private void FocusOutlineTimer_Tick(object? sender, object e)
+        {
+            if (ViewModel == null) return;
+
+            // Lazily find the ItemsControl because XAML bindings might not be evaluated immediately in the constructor
+            if (_appsItemsControl == null)
+            {
+                var itemsControls = new System.Collections.Generic.List<ItemsControl>();
+                FindVisualChildren(this.Content, itemsControls);
+                foreach (var ic in itemsControls)
+                {
+                    if (ic.ItemsSource == ViewModel.Apps)
+                    {
+                        _appsItemsControl = ic;
+                        break;
+                    }
+                }
+            }
+
+            if (_appsItemsControl == null) return;
+
+            foreach (var app in ViewModel.Apps)
+            {
+                var container = _appsItemsControl.ContainerFromItem(app) as DependencyObject;
+                if (container != null)
+                {
+                    // Find the main Grid inside the DataTemplate
+                    var grids = new System.Collections.Generic.List<Grid>();
+                    FindVisualChildren(container, grids);
+                    if (grids.Count > 0)
+                    {
+                        var rowGrid = grids[0];
+                        if (app.IsFocused && ViewModel.EnableFocusHighlight)
+                        {
+                            // A clearly visible, translucent blue accent
+                            rowGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 0, 120, 215));
+                            rowGrid.CornerRadius = new CornerRadius(8);
+                        }
+                        else
+                        {
+                            rowGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                        }
+                        
+                        // Handle Mute Visualization
+                        var textBlocks = new System.Collections.Generic.List<TextBlock>();
+                        FindVisualChildren(rowGrid, textBlocks);
+                        foreach (var tb in textBlocks)
+                        {
+                            if (Grid.GetColumn(tb) == 3)
+                            {
+                                if (app.IsMuted)
+                                {
+                                    tb.Text = "\uE74F"; // Segoe Fluent VolumeMute icon
+                                    tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons");
+                                    tb.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                                    tb.FontSize = 16;
+                                }
+                                else
+                                {
+                                    tb.Text = $"{app.VolumePercentage}%";
+                                    tb.ClearValue(TextBlock.FontFamilyProperty);
+                                    tb.ClearValue(TextBlock.ForegroundProperty);
+                                    tb.ClearValue(TextBlock.FontSizeProperty);
+                                }
+                            }
+                        }
+
+                        // Attach Mute/Unmute click handler to App Icon
+                        var images = new System.Collections.Generic.List<Image>();
+                        FindVisualChildren(rowGrid, images);
+                        if (images.Count > 0)
+                        {
+                            var img = images[0];
+                            // Always detach first to ensure we don't double-subscribe or subscribe to the wrong app model if containers are recycled
+                            img.Tapped -= AppIcon_Tapped;
+                            img.Tag = app;
+                            img.Tapped += AppIcon_Tapped;
+                            ToolTipService.SetToolTip(img, "Click to mute/unmute");
+                        }
+                    }
+                }
+            }
+        }
+
+        private void AppIcon_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is Image img && img.Tag is AudioAppModel app)
+            {
+                app.IsMuted = !app.IsMuted;
+                e.Handled = true;
+            }
         }
 
         private void ApplyTheme(AppTheme theme)
@@ -460,13 +560,25 @@ namespace SoundBar.Views
                 FindVisualChildren(this.Content, scrollViewers);
                 
                 // The settings ScrollViewer is the one containing a StackPanel
-                StackPanel settingsPanel = null;
+                StackPanel? settingsPanel = null;
                 
                 foreach (var sv in scrollViewers)
                 {
                     if (sv.Content is StackPanel sp)
                     {
                         settingsPanel = sp;
+                        break;
+                    }
+                }
+
+                // Also find the ItemsControl that holds our Audio Apps
+                var itemsControls = new System.Collections.Generic.List<ItemsControl>();
+                FindVisualChildren(this.Content, itemsControls);
+                foreach (var ic in itemsControls)
+                {
+                    if (ic.ItemsSource == ViewModel.Apps)
+                    {
+                        _appsItemsControl = ic;
                         break;
                     }
                 }
@@ -570,7 +682,7 @@ namespace SoundBar.Views
                 }
 
                 // Helper to add expander if it exists
-                void AddExpander(string key, Expander explicitExpander = null)
+                void AddExpander(string key, Expander? explicitExpander = null)
                 {
                     if (explicitExpander != null)
                         settingsPanel.Children.Add(explicitExpander);
@@ -582,6 +694,38 @@ namespace SoundBar.Views
 
                 AddCategoryHeader("Personalisation", true);
                 AddExpander("Appearance");
+
+                // Dynamically inject the Active App Highlight toggle into the Appearance expander
+                // (Done in C# to bypass the MSB4062 XAML compiler error on the host machine)
+                if (expanders.TryGetValue("Appearance", out var appearanceExp) && appearanceExp.Content is StackPanel appearanceStack)
+                {
+                    // Check if it already has it to prevent duplicates on hot reloads
+                    bool hasHighlightSetting = false;
+                    foreach (var child in appearanceStack.Children)
+                    {
+                        if (child is ToggleSwitch ts && ts.Header?.ToString() == "Active App Highlight")
+                            hasHighlightSetting = true;
+                    }
+
+                    if (!hasHighlightSetting)
+                    {
+                        appearanceStack.Children.Add(new TextBlock 
+                        { 
+                            Text = "Highlights the active application so you know which volume you are controlling via hotkeys.", 
+                            FontSize = 12, 
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin = new Thickness(0, 20, 0, 10) 
+                        });
+                        
+                        var highlightToggle = new ToggleSwitch { Header = "Active App Highlight" };
+                        highlightToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding 
+                        { 
+                            Path = new PropertyPath("EnableFocusHighlight"), 
+                            Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay 
+                        });
+                        appearanceStack.Children.Add(highlightToggle);
+                    }
+                }
                 AddExpander("Custom Background");
 
                 AddCategoryHeader("Audio & Focus");

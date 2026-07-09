@@ -251,6 +251,20 @@ namespace SoundBar.ViewModels
             _isLoudnessWarningDismissed = true;
         }
 
+        public bool EnableFocusHighlight
+        {
+            get => _settingsService.Settings.EnableFocusHighlight;
+            set
+            {
+                if (_settingsService.Settings.EnableFocusHighlight != value)
+                {
+                    _settingsService.Settings.EnableFocusHighlight = value;
+                    OnPropertyChanged();
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
         private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
@@ -312,14 +326,17 @@ namespace SoundBar.ViewModels
 
                 if (enable)
                 {
-                    Type wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                    Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
                     if (wshShellType != null)
                     {
-                        dynamic shell = Activator.CreateInstance(wshShellType);
-                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                        shortcut.TargetPath = System.Environment.ProcessPath;
-                        shortcut.WorkingDirectory = AppContext.BaseDirectory;
-                        shortcut.Save();
+                        dynamic? shell = Activator.CreateInstance(wshShellType);
+                        if (shell != null)
+                        {
+                            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                            shortcut.TargetPath = System.Environment.ProcessPath;
+                            shortcut.WorkingDirectory = AppContext.BaseDirectory;
+                            shortcut.Save();
+                        }
                     }
                 }
                 else
@@ -448,27 +465,26 @@ namespace SoundBar.ViewModels
             {
                 string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
 
-                uint activePid = WindowHelper.GetForegroundProcessId();
-                if (activePid == 0) return;
+                var activeApps = Apps.Where(a => a.IsFocused).ToList();
+                if (!activeApps.Any()) return;
 
-                // Find the app in our collection that matches the foreground window's PID
-                var activeApp = Apps.FirstOrDefault(a => a.ProcessId == activePid);
-                if (activeApp == null) return;
-
-                if (pressedString == VolumeUpHotkey)
+                foreach (var activeApp in activeApps)
                 {
-                    activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
-                    e.Handled = true;
-                }
-                else if (pressedString == VolumeDownHotkey)
-                {
-                    activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
-                    e.Handled = true;
-                }
-                else if (pressedString == MuteHotkey)
-                {
-                    activeApp.IsMuted = !activeApp.IsMuted;
-                    e.Handled = true;
+                    if (pressedString == VolumeUpHotkey)
+                    {
+                        activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
+                        e.Handled = true;
+                    }
+                    else if (pressedString == VolumeDownHotkey)
+                    {
+                        activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
+                        e.Handled = true;
+                    }
+                    else if (pressedString == MuteHotkey)
+                    {
+                        activeApp.IsMuted = !activeApp.IsMuted;
+                        e.Handled = true;
+                    }
                 }
             });
         }
@@ -717,6 +733,43 @@ namespace SoundBar.ViewModels
 
                             // Sync Audio Devices
                             UpdateAudioDevices(audioDevices);
+
+                            // Update Focus Outline (support multi-process apps like Discord)
+                            uint activePid = WindowHelper.GetForegroundProcessId();
+                            string activeProcessName = "";
+                            try
+                            {
+                                if (activePid > 0)
+                                {
+                                    var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                                    activeProcessName = proc.ProcessName;
+                                }
+                            }
+                            catch { }
+
+                            foreach (var app in Apps)
+                            {
+                                bool isMatch = false;
+                                if (activePid > 0)
+                                {
+                                    if (app.ProcessId == activePid)
+                                    {
+                                        isMatch = true;
+                                    }
+                                    else if (!string.IsNullOrEmpty(activeProcessName) && !string.IsNullOrEmpty(app.RawProcessName))
+                                    {
+                                        string rawNoExt = app.RawProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) 
+                                            ? app.RawProcessName.Substring(0, app.RawProcessName.Length - 4) 
+                                            : app.RawProcessName;
+                                            
+                                        if (rawNoExt.Equals(activeProcessName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            isMatch = true;
+                                        }
+                                    }
+                                }
+                                app.IsFocused = isMatch;
+                            }
                         });
                     }
                     catch (System.Exception)
@@ -1298,19 +1351,22 @@ namespace SoundBar.ViewModels
         {
             try
             {
-                Type wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
                 if (wshShellType != null)
                 {
-                    dynamic shell = Activator.CreateInstance(wshShellType);
-                    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                    string shortcutPath = System.IO.Path.Combine(desktopPath, "SoundBar.lnk");
-                    
-                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                    shortcut.TargetPath = Environment.ProcessPath;
+                    dynamic? shell = Activator.CreateInstance(wshShellType);
+                    if (shell != null)
+                    {
+                        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                        string shortcutPath = System.IO.Path.Combine(desktopPath, "SoundBar.lnk");
+                        
+                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                        shortcut.TargetPath = Environment.ProcessPath;
                     shortcut.WorkingDirectory = System.IO.Path.GetDirectoryName(Environment.ProcessPath);
-                    shortcut.Description = "SoundBar Audio Mixer";
-                    shortcut.IconLocation = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
-                    shortcut.Save();
+                        shortcut.Description = "SoundBar Audio Mixer";
+                        shortcut.IconLocation = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
+                        shortcut.Save();
+                    }
                 }
             }
             catch (Exception ex)

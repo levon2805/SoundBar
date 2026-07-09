@@ -455,7 +455,13 @@
                                           Background="{ThemeResource ControlFillColorDefaultBrush}"
                                           BorderThickness="1"
                                           BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                          Margin="0,0,0,15"/>
+
+                                <TextBlock Text="Highlights the active application so you know which volume you are controlling via hotkeys." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ToggleSwitch Header="Active App Highlight" 
+                                              IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}" 
+                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </StackPanel>
                         </Expander>
 

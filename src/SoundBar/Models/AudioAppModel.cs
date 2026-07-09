@@ -108,9 +108,12 @@ namespace SoundBar.Models
                     OnPropertyChanged(nameof(VolumePercentage));
 
                     // Cancel any pending volume changes so we don't spam the OS while sliding.
-                    _volumeDebounce?.Cancel();
+                    if (_volumeDebounce != null)
+                    {
+                        _volumeDebounce.Cancel();
+                        _volumeDebounce.Dispose();
+                    }
                     
-                    // We let the GC tidy up the old token source once the task finishes.
                     _volumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _volumeDebounce.Token;
                     var capturedVolume = _volume;
@@ -193,6 +196,23 @@ namespace SoundBar.Models
         /// True if this seems to be a sneaky background process without a proper window.
         /// </summary>
         public bool IsBackgroundApp { get; set; }
+
+        private bool _isFocused;
+        /// <summary>
+        /// True if this application is currently the active foreground window.
+        /// </summary>
+        public bool IsFocused
+        {
+            get => _isFocused;
+            set
+            {
+                if (_isFocused != value)
+                {
+                    _isFocused = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         /// <summary>
         /// Lets us know if the Windows Audio Session is still breathing.
