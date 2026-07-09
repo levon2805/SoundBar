@@ -23,6 +23,7 @@ namespace SoundBar.ViewModels
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
         private readonly MediaInfoService _mediaInfoService;
+        private readonly HotkeyService _hotkeyService;
 
         /// <summary>
         /// A list of application executable names that the user prefers to keep out of sight.
@@ -375,6 +376,8 @@ namespace SoundBar.ViewModels
             _settingsService = settingsService;
             _updateService = new UpdateService();
             _mediaInfoService = new MediaInfoService();
+            _hotkeyService = new HotkeyService();
+            _hotkeyService.KeyPressed += HotkeyService_KeyPressed;
             _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             // Connect to audio service
@@ -414,6 +417,89 @@ namespace SoundBar.ViewModels
 
             // Check for updates
             CheckForUpdatesAsync();
+        }
+
+        private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
+
+                uint activePid = WindowHelper.GetForegroundProcessId();
+                if (activePid == 0) return;
+
+                // Find the app in our collection that matches the foreground window's PID
+                var activeApp = Apps.FirstOrDefault(a => a.ProcessId == activePid);
+                if (activeApp == null) return;
+
+                if (pressedString == VolumeUpHotkey)
+                {
+                    activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
+                    e.Handled = true;
+                }
+                else if (pressedString == VolumeDownHotkey)
+                {
+                    activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
+                    e.Handled = true;
+                }
+                else if (pressedString == MuteHotkey)
+                {
+                    activeApp.IsMuted = !activeApp.IsMuted;
+                    e.Handled = true;
+                }
+            });
+        }
+
+        private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
+        {
+            string modStr = "";
+            if (modifiers.HasFlag(HotkeyModifiers.Control)) modStr += "Control+";
+            if (modifiers.HasFlag(HotkeyModifiers.Alt)) modStr += "Alt+";
+            if (modifiers.HasFlag(HotkeyModifiers.Shift)) modStr += "Shift+";
+
+            return modStr + key.ToString();
+        }
+
+        public string VolumeUpHotkey
+        {
+            get => _settingsService.Settings.VolumeUpHotkey;
+            set
+            {
+                if (_settingsService.Settings.VolumeUpHotkey != value)
+                {
+                    _settingsService.Settings.VolumeUpHotkey = value;
+                    _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string VolumeDownHotkey
+        {
+            get => _settingsService.Settings.VolumeDownHotkey;
+            set
+            {
+                if (_settingsService.Settings.VolumeDownHotkey != value)
+                {
+                    _settingsService.Settings.VolumeDownHotkey = value;
+                    _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string MuteHotkey
+        {
+            get => _settingsService.Settings.MuteHotkey;
+            set
+            {
+                if (_settingsService.Settings.MuteHotkey != value)
+                {
+                    _settingsService.Settings.MuteHotkey = value;
+                    _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                }
+            }
         }
 
         private async void CheckForUpdatesAsync()
@@ -1210,6 +1296,23 @@ namespace SoundBar.ViewModels
             }
         }
 
+        public void OpenReleaseNotes()
+        {
+            try
+            {
+                var processInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = $"https://github.com/levon2805/SoundBar/releases/tag/{UpdateService.CurrentVersion}",
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(processInfo);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to open release notes: {ex.Message}");
+            }
+        }
+
         public void Dispose()
         {
             _pollingCts?.Cancel();
@@ -1219,6 +1322,7 @@ namespace SoundBar.ViewModels
             _progressTimer?.Stop();
 
             _mediaInfoService?.Dispose();
+            _hotkeyService?.Dispose();
 
             // Dispose all AudioAppModels to cancel any in-flight debounce tasks
             foreach (var app in Apps)
