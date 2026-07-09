@@ -46,6 +46,9 @@ namespace SoundBar.Views
                 // We dynamically build the UI here because the local machine's XAML compiler
                 // is throwing MSB4062 and failing to compile new XAML nodes correctly.
                 BuildDynamicUI();
+
+                // Hide the top-bar DND button since we moved it into settings
+                DndToggleButton.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             }
             catch (Exception ex)
             {
@@ -485,9 +488,6 @@ namespace SoundBar.Views
                 aboutStack.Children.Add(releaseNotesBtn);
                 aboutExpander.Content = aboutStack;
                 
-                // Insert at the very top
-                settingsPanel.Children.Insert(0, aboutExpander);
-
                 // 2. Global Hotkeys Expander
                 var keybindsExpander = new Expander
                 {
@@ -525,9 +525,78 @@ namespace SoundBar.Views
                 
                 keybindsExpander.Content = keybindsStack;
                 
-                // Insert right before System Integration Settings (which is the last item)
-                int insertIndex = Math.Max(0, settingsPanel.Children.Count - 1);
-                settingsPanel.Children.Insert(insertIndex, keybindsExpander);
+                // 3. Do Not Disturb Expander
+                var dndExpander = new Expander
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Header = new TextBlock { Text = "Do Not Disturb Mode", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
+                };
+                
+                var dndStack = new StackPanel { Spacing = 15 };
+                dndStack.Children.Add(new TextBlock { Text = "Mutes all system sounds and notifications when enabled.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+                var dndToggle = new ToggleSwitch { OnContent = "Enabled", OffContent = "Disabled" };
+                dndToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("IsDoNotDisturbEnabled"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                
+                // Keep the icon color logic synced if they toggle from settings menu
+                dndToggle.Toggled += DndToggleButton_Changed;
+                
+                dndStack.Children.Add(dndToggle);
+                dndExpander.Content = dndStack;
+                
+                // Collect existing Expanders
+                var expanders = new System.Collections.Generic.Dictionary<string, Expander>();
+                foreach (var child in settingsPanel.Children)
+                {
+                    if (child is Expander exp && exp.Header is TextBlock header)
+                    {
+                        expanders[header.Text] = exp;
+                    }
+                }
+                
+                // Clear the panel to rebuild it in order
+                settingsPanel.Children.Clear();
+                
+                // Helper to add group headers
+                void AddCategoryHeader(string title, bool isFirst = false)
+                {
+                    settingsPanel.Children.Add(new TextBlock 
+                    { 
+                        Text = title, 
+                        FontSize = 16, 
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold, 
+                        Margin = new Thickness(0, isFirst ? 0 : 20, 0, 5) 
+                    });
+                }
+
+                // Helper to add expander if it exists
+                void AddExpander(string key, Expander explicitExpander = null)
+                {
+                    if (explicitExpander != null)
+                        settingsPanel.Children.Add(explicitExpander);
+                    else if (expanders.TryGetValue(key, out var exp))
+                        settingsPanel.Children.Add(exp);
+                }
+
+                // --- Build New Ordered UI ---
+
+                AddCategoryHeader("Personalisation", true);
+                AddExpander("Appearance");
+                AddExpander("Custom Background");
+
+                AddCategoryHeader("Audio & Focus");
+                AddExpander("Global Hotkeys", keybindsExpander);
+                AddExpander("Do Not Disturb Mode", dndExpander);
+                AddExpander("Hearing Protection");
+                AddExpander("Media Controls");
+
+                AddCategoryHeader("App Management");
+                AddExpander("Hidden Apps");
+                AddExpander("Background Apps");
+
+                AddCategoryHeader("General");
+                AddExpander("System Integration");
+                AddExpander("About & Updates", aboutExpander);
             }
             catch (Exception ex)
             {
