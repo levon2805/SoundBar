@@ -287,33 +287,53 @@ namespace SoundBar.ViewModels
                     OnPropertyChanged();
                     _settingsService.Settings.RunAtStartup = value;
                     _settingsService.SaveSettings();
-                    UpdateStartupRegistry(value);
+                    UpdateStartupShortcut(value);
                 }
             }
         }
 
-        private void UpdateStartupRegistry(bool enable)
+        private void UpdateStartupShortcut(bool enable)
         {
             try
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-                if (key != null)
+                // Clean up the old registry key if it exists
+                try
                 {
-                    if (enable)
-                    {
-                        string exePath = System.Environment.ProcessPath ?? "";
-                        if (!string.IsNullOrEmpty(exePath))
-                        {
-                            key.SetValue("SoundBar", $"\"{exePath}\"");
-                        }
-                    }
-                    else
+                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+                    if (key != null && key.GetValue("SoundBar") != null)
                     {
                         key.DeleteValue("SoundBar", false);
                     }
                 }
+                catch { }
+
+                string startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+                string shortcutPath = System.IO.Path.Combine(startupPath, "SoundBar.lnk");
+
+                if (enable)
+                {
+                    Type wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                    if (wshShellType != null)
+                    {
+                        dynamic shell = Activator.CreateInstance(wshShellType);
+                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                        shortcut.TargetPath = System.Environment.ProcessPath;
+                        shortcut.WorkingDirectory = AppContext.BaseDirectory;
+                        shortcut.Save();
+                    }
+                }
+                else
+                {
+                    if (System.IO.File.Exists(shortcutPath))
+                    {
+                        System.IO.File.Delete(shortcutPath);
+                    }
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to update startup shortcut: {ex.Message}");
+            }
         }
 
         // Master Volume Property
@@ -408,6 +428,9 @@ namespace SoundBar.ViewModels
             _showMediaControls = _settingsService.Settings.ShowMediaControls;
             _runAtStartup = _settingsService.Settings.RunAtStartup;
             _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
+
+            // Ensure startup state is correctly applied (also cleans up old registry keys)
+            UpdateStartupShortcut(_runAtStartup);
 
             // Start the monitoring loop
             StartPolling();
