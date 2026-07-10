@@ -14,8 +14,13 @@ namespace SoundBar.Services
     /// </summary>
     internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
-        // We keep a little cache of ProcessId -> App Info so we don't have to allocate heavy Process objects every single tick.
         private readonly Dictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
+        private readonly MMDeviceEnumerator _enumerator;
+
+        public WindowsAudioMixerService()
+        {
+            _enumerator = new MMDeviceEnumerator();
+        }
 
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
@@ -31,8 +36,7 @@ namespace SoundBar.Services
             var seenProcessIdsThisTick = new HashSet<int>();
 
             // Get the default audio device
-            using (var enumerator = new MMDeviceEnumerator())
-            using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             {
                 // Get the session manager for that device
                 using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
@@ -208,8 +212,7 @@ namespace SoundBar.Services
 
         public float GetMasterVolume()
         {
-            using (var enumerator = new MMDeviceEnumerator())
-            using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             using (var volume = AudioEndpointVolume.FromDevice(device))
             {
                 return volume.MasterVolumeLevelScalar;
@@ -220,8 +223,7 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using (var enumerator = new MMDeviceEnumerator())
-                using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 using (var volume = AudioEndpointVolume.FromDevice(device))
                 {
                     volume.MasterVolumeLevelScalar = level;
@@ -231,8 +233,7 @@ namespace SoundBar.Services
 
         public bool GetMasterMute()
         {
-            using (var enumerator = new MMDeviceEnumerator())
-            using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             using (var volume = AudioEndpointVolume.FromDevice(device))
             {
                 return volume.IsMuted;
@@ -243,8 +244,7 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using (var enumerator = new MMDeviceEnumerator())
-                using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 using (var volume = AudioEndpointVolume.FromDevice(device))
                 {
                     volume.IsMuted = isMuted;
@@ -256,8 +256,7 @@ namespace SoundBar.Services
         
         public bool GetSystemSoundsMute()
         {
-            using (var enumerator = new MMDeviceEnumerator())
-            using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
             using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
             {
@@ -285,8 +284,7 @@ namespace SoundBar.Services
             {
                 try
                 {
-                    using (var enumerator = new MMDeviceEnumerator())
-                    using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                     using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
                     using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
                     {
@@ -319,10 +317,8 @@ namespace SoundBar.Services
         {
             var result = new List<AudioDeviceModel>();
 
-            using (var enumerator = new MMDeviceEnumerator())
-            {
-                string defaultDeviceId = string.Empty;
-                using (var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            string defaultDeviceId = string.Empty;
+            using (var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 {
                     if (defaultDevice != null)
                     {
@@ -330,7 +326,7 @@ namespace SoundBar.Services
                     }
                 }
                 
-                using (var devices = enumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active))
+                using (var devices = _enumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active))
                 {
                     foreach (var device in devices)
                     {
@@ -343,7 +339,6 @@ namespace SoundBar.Services
                         device.Dispose(); // Dispose each individual device after processing
                     }
                 }
-            }
 
             return result;
         }
@@ -355,7 +350,7 @@ namespace SoundBar.Services
 
         public void Dispose()
         {
-            // No longer need to dispose CoreAudioController
+            _enumerator?.Dispose();
         }
 
         private void PerformActionOnSession(string targetProcessName, Action<SimpleAudioVolume> action)
@@ -364,8 +359,7 @@ namespace SoundBar.Services
             {
                 try
                 {
-                    using (var enumerator = new MMDeviceEnumerator())
-                    using (var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                     using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
                     using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
                     {

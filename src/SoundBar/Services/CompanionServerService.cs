@@ -709,6 +709,12 @@ namespace SoundBar.Services
 
         private void OnMediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {
+            if (_currentTitle == e.Title && _currentArtist == e.Artist)
+            {
+                // Song hasn't changed, skip heavy base64 encoding
+                return;
+            }
+
             _currentTitle = e.Title;
             _currentArtist = e.Artist;
 

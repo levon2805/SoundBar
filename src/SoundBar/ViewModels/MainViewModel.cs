@@ -778,8 +778,8 @@ namespace SoundBar.ViewModels
             _pollingCts = new System.Threading.CancellationTokenSource();
             var token = _pollingCts.Token;
 
-            // Create the thread
-            var thread = new Thread(() =>
+            // Use the .NET Thread Pool instead of dedicating a raw OS thread
+            _ = Task.Run(async () =>
             {
                 // Loop forever to keep checking for changes
                 while (!token.IsCancellationRequested)
@@ -896,24 +896,16 @@ namespace SoundBar.ViewModels
                         // Ignore errors for now
                     }
 
-                    // Poll every 1 second but respond to cancellation quickly
-                    int slept = 0;
-                    while (slept < 1000 && !token.IsCancellationRequested)
+                    try
                     {
-                        Thread.Sleep(100);
-                        slept += 100;
+                        await Task.Delay(1000, token);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        break;
                     }
                 }
             });
-
-            // Force thread to be MTA
-            thread.SetApartmentState(ApartmentState.MTA);
-
-            // Make this a background thread so it dies when the App closes
-            thread.IsBackground = true;
-
-            // Start the thread
-            thread.Start();
         }
 
         private void HandleAliasChanged(string rawProcessName, string newAlias)

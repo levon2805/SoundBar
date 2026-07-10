@@ -573,7 +573,7 @@ namespace SoundBar.Views
                 var settingsPanel = DynamicSettingsStackPanel;
                 if (settingsPanel == null) return;
 
-                // 1. About & Updates Expander (Top)
+                // About & Updates Expander (Top)
                 var aboutExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -588,7 +588,7 @@ namespace SoundBar.Views
                 aboutStack.Children.Add(releaseNotesBtn);
                 aboutExpander.Content = aboutStack;
                 
-                // 2. Global Hotkeys Expander
+                // Global Hotkeys Expander
                 var keybindsExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -625,7 +625,7 @@ namespace SoundBar.Views
                 
                 keybindsExpander.Content = keybindsStack;
                 
-                // 3. Do Not Disturb Expander
+                // Do Not Disturb Expander
                 var dndExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
