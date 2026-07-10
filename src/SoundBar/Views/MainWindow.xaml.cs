@@ -483,7 +483,7 @@ namespace SoundBar.Views
 
         private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.EnableCompanionServer = false;
+            ViewModel.StopCompanionServer();
         }
 
         private void SetTopmost(bool topmost)

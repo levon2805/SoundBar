@@ -276,7 +276,7 @@ namespace SoundBar.ViewModels
         public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
         public string CompanionClientText => CompanionConnectedClients > 0 ? $"{CompanionConnectedClients} client(s) connected" : "Waiting for connection...";
 
-        public Uri CompanionQrUrl
+        public Uri? CompanionQrUrl
         {
             get
             {
@@ -355,7 +355,20 @@ namespace SoundBar.ViewModels
 
         public void StopCompanionServer()
         {
-            _companionServer?.Stop();
+            if (_companionServer != null)
+            {
+                _companionServer.Dispose();
+                _companionServer = null;
+            }
+
+            // Ensure settings are synced
+            if (_settingsService.Settings.EnableCompanionServer)
+            {
+                _settingsService.Settings.EnableCompanionServer = false;
+                _settingsService.SaveSettings();
+                OnPropertyChanged(nameof(EnableCompanionServer));
+            }
+
             OnPropertyChanged(nameof(IsCompanionServerRunning));
             OnPropertyChanged(nameof(CompanionConnectedClients));
             OnPropertyChanged(nameof(CompanionPowerButtonVisibility));

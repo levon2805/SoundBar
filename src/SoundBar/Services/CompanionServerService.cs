@@ -242,19 +242,23 @@ namespace SoundBar.Services
             }
             catch { }
 
-            // Close all WebSocket connections gracefully
-            foreach (var kvp in _clients)
+            // Close all WebSocket connections gracefully in a background task to avoid UI deadlocks
+            var sockets = _clients.Values.ToList();
+            _ = Task.Run(async () =>
             {
-                try
+                foreach (var ws in sockets)
                 {
-                    if (kvp.Value.State == WebSocketState.Open)
+                    try
                     {
-                        kvp.Value.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", CancellationToken.None)
-                            .Wait(TimeSpan.FromSeconds(2));
+                        if (ws.State == WebSocketState.Open)
+                        {
+                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", cts.Token).ConfigureAwait(false);
+                        }
                     }
+                    catch { }
                 }
-                catch { }
-            }
+            });
 
             _clients.Clear();
             _pairedClients.Clear();
