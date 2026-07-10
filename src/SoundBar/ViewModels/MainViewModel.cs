@@ -274,6 +274,16 @@ namespace SoundBar.ViewModels
         public string CompanionPairingCode => _companionServer?.PairingCode ?? "--";
 
         public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
+        public string CompanionClientText => CompanionConnectedClients > 0 ? $"{CompanionConnectedClients} client(s) connected" : "Waiting for connection...";
+
+        public Uri CompanionQrUrl
+        {
+            get
+            {
+                if (!IsCompanionServerRunning || string.IsNullOrEmpty(CompanionServerUrl)) return null;
+                return new Uri($"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={Uri.EscapeDataString(CompanionServerUrl)}&bgcolor=1a1a1a&color=ffffff&margin=10");
+            }
+        }
 
         public bool EnableCompanionServer
         {
@@ -326,6 +336,10 @@ namespace SoundBar.ViewModels
                     OnPropertyChanged(nameof(CompanionServerUrl));
                     OnPropertyChanged(nameof(CompanionPairingCode));
                     OnPropertyChanged(nameof(CompanionConnectedClients));
+                    OnPropertyChanged(nameof(CompanionClientText));
+                    OnPropertyChanged(nameof(CompanionQrUrl));
+                    OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+                    OnPropertyChanged(nameof(CompanionActiveUiVisibility));
                 });
             };
 
@@ -333,6 +347,10 @@ namespace SoundBar.ViewModels
             OnPropertyChanged(nameof(IsCompanionServerRunning));
             OnPropertyChanged(nameof(CompanionServerUrl));
             OnPropertyChanged(nameof(CompanionPairingCode));
+            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
+            OnPropertyChanged(nameof(CompanionClientText));
+            OnPropertyChanged(nameof(CompanionQrUrl));
         }
 
         public void StopCompanionServer()
@@ -340,6 +358,10 @@ namespace SoundBar.ViewModels
             _companionServer?.Stop();
             OnPropertyChanged(nameof(IsCompanionServerRunning));
             OnPropertyChanged(nameof(CompanionConnectedClients));
+            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
+            OnPropertyChanged(nameof(CompanionClientText));
+            OnPropertyChanged(nameof(CompanionQrUrl));
         }
 
         // Timestamp for Master Volume
@@ -1176,7 +1198,7 @@ namespace SoundBar.ViewModels
             }
         }
 
-        // --- Music Player Mode ---
+        // --- View Modes ---
         private bool _isMusicPlayerMode = false;
         public bool IsMusicPlayerMode
         {
@@ -1186,6 +1208,8 @@ namespace SoundBar.ViewModels
                 if (_isMusicPlayerMode != value)
                 {
                     _isMusicPlayerMode = value;
+                    if (value) IsCompanionViewMode = false; // Turn off companion view if turning on music player
+                    
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MusicPlayerViewVisibility));
                     OnPropertyChanged(nameof(MixerViewVisibility));
@@ -1193,8 +1217,31 @@ namespace SoundBar.ViewModels
             }
         }
 
+        private bool _isCompanionViewMode = false;
+        public bool IsCompanionViewMode
+        {
+            get => _isCompanionViewMode;
+            set
+            {
+                if (_isCompanionViewMode != value)
+                {
+                    _isCompanionViewMode = value;
+                    if (value) IsMusicPlayerMode = false; // Turn off music player if turning on companion view
+                    
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CompanionViewVisibility));
+                    OnPropertyChanged(nameof(MixerViewVisibility));
+                }
+            }
+        }
+
         public Microsoft.UI.Xaml.Visibility MusicPlayerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        public Microsoft.UI.Xaml.Visibility CompanionViewVisibility => IsCompanionViewMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => (IsMusicPlayerMode || IsCompanionViewMode) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        
+        // Companion Server UI states (Power button vs QR code)
+        public Microsoft.UI.Xaml.Visibility CompanionPowerButtonVisibility => IsCompanionServerRunning ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        public Microsoft.UI.Xaml.Visibility CompanionActiveUiVisibility => IsCompanionServerRunning ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         private string _currentSongTitle = "Not Playing";
         public string CurrentSongTitle

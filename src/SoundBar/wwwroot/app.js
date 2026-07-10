@@ -13,6 +13,19 @@
     let sliderDebounceTimers = {};
     let lastState = null;
 
+    // --- SVG Icons ---
+    const Icons = {
+        volumeHigh: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>`,
+        volumeLow: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
+        volumeMuted: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`,
+        music: `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`,
+        play: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
+        pause: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`,
+        link: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: sub; margin-right: 4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`,
+        sun: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
+        moon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
+    };
+
     // --- DOM References ---
     const pairingScreen = document.getElementById('pairing-screen');
     const appScreen = document.getElementById('app-screen');
@@ -128,10 +141,10 @@
         const muteIcon = masterMuteBtn.querySelector('.mute-icon');
         if (state.masterMuted) {
             masterMuteBtn.classList.add('muted');
-            muteIcon.textContent = '🔇';
+            muteIcon.innerHTML = Icons.volumeMuted;
         } else {
             masterMuteBtn.classList.remove('muted');
-            muteIcon.textContent = state.masterVolume > 50 ? '🔊' : state.masterVolume > 0 ? '🔉' : '🔈';
+            muteIcon.innerHTML = state.masterVolume > 50 ? Icons.volumeHigh : state.masterVolume > 0 ? Icons.volumeLow : Icons.volumeMuted;
         }
 
         // Now Playing
@@ -158,7 +171,7 @@
             }
 
             // Play/Pause icon
-            playPauseBtn.textContent = state.nowPlaying.isPlaying ? '⏸' : '▶️';
+            playPauseBtn.innerHTML = state.nowPlaying.isPlaying ? Icons.pause : Icons.play;
         } else {
             nowPlayingCard.classList.add('hidden');
         }
@@ -222,7 +235,7 @@
             const muteBtn = row.querySelector('.app-mute-btn');
             if (muteBtn) {
                 muteBtn.classList.toggle('muted', app.isMuted);
-                muteBtn.textContent = app.isMuted ? '🔇' : '🔊';
+                muteBtn.innerHTML = app.isMuted ? Icons.volumeMuted : Icons.volumeHigh;
             }
 
             // Update icon
@@ -246,7 +259,7 @@
         row.innerHTML = `
             ${hasIcon
                 ? `<img class="app-icon" src="data:image/png;base64,${app.iconBase64}" alt="${app.name}">`
-                : `<div class="app-icon-placeholder">🎵</div><img class="app-icon" style="display:none" alt="${app.name}">`
+                : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${app.name}">`
             }
             <div class="app-info">
                 <div class="app-name">${app.name}</div>
@@ -255,7 +268,7 @@
                     <span class="volume-value">${app.volume}%</span>
                 </div>
             </div>
-            <button class="app-mute-btn ${app.isMuted ? 'muted' : ''}" title="Mute">${app.isMuted ? '🔇' : '🔊'}</button>
+            <button class="app-mute-btn ${app.isMuted ? 'muted' : ''}" title="Mute">${app.isMuted ? Icons.volumeMuted : Icons.volumeHigh}</button>
         `;
 
         // Slider events
@@ -336,7 +349,7 @@
         switch (status) {
             case 'connected':
                 dot.className = 'status-dot connected';
-                text.textContent = 'Connected — enter code above';
+                text.innerHTML = `${Icons.link} Connected - enter code above`;
                 break;
             case 'connecting':
                 dot.className = 'status-dot disconnected';
@@ -413,6 +426,37 @@
     // --- Initialise ---
     // Initialise slider fills
     document.querySelectorAll('.volume-slider, .seek-slider').forEach(updateSliderFill);
+
+    // --- Theme Toggle ---
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    if (themeToggleBtn) {
+        const updateMetaTheme = (theme) => {
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f4f4f8' : '#0a0a0f');
+        };
+
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            themeToggleBtn.innerHTML = Icons.sun;
+            updateMetaTheme('light');
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            if (current === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+                themeToggleBtn.innerHTML = Icons.sun;
+                updateMetaTheme('light');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'dark');
+                themeToggleBtn.innerHTML = Icons.moon;
+                updateMetaTheme('dark');
+            }
+        });
+    }
 
     // Register Service Worker
     if ('serviceWorker' in navigator) {

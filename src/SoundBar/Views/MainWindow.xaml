@@ -348,6 +348,81 @@
                     </Grid>
                 </Grid>
 
+                <!-- COMPANION VIEW -->
+                <Grid Grid.Row="0" Grid.RowSpan="2" Visibility="{x:Bind ViewModel.CompanionViewVisibility, Mode=OneWay}" Padding="15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Mobile Companion" 
+                               FontSize="20" FontWeight="Bold" 
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                               HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+                    <!-- OFF STATE: Power Button -->
+                    <Grid Grid.Row="1" Visibility="{x:Bind ViewModel.CompanionPowerButtonVisibility, Mode=OneWay}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
+                            <TextBlock Text="Server Offline" 
+                                       FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                       HorizontalAlignment="Center"/>
+                            
+                            <!-- Huge Power Button -->
+                            <ToggleButton IsChecked="{x:Bind ViewModel.EnableCompanionServer, Mode=TwoWay}"
+                                          Width="120" Height="120" CornerRadius="60"
+                                          Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                          BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                          BorderThickness="2"
+                                          HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE7E8;" 
+                                           FontFamily="{ThemeResource SymbolThemeFontFamily}" 
+                                           FontSize="50" 
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            </ToggleButton>
+                            
+                            <TextBlock Text="Click to power on" 
+                                       FontSize="14" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ON STATE: QR Code & Info -->
+                    <Grid Grid.Row="1" Visibility="{x:Bind ViewModel.CompanionActiveUiVisibility, Mode=OneWay}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                            
+                            <TextBlock Text="Scan to connect" 
+                                       FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                       HorizontalAlignment="Center"/>
+
+                            <!-- Dynamic QR using custom converter (need to add it) -->
+                            <Image Width="160" Height="160" Stretch="Uniform" HorizontalAlignment="Center">
+                                <Image.Source>
+                                    <BitmapImage UriSource="{x:Bind ViewModel.CompanionQrUrl, Mode=OneWay}" />
+                                </Image.Source>
+                            </Image>
+
+                            <TextBlock Text="{x:Bind ViewModel.CompanionPairingCode, Mode=OneWay}" 
+                                       FontSize="42" FontWeight="Bold" 
+                                       CharacterSpacing="400"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                       HorizontalAlignment="Center" Margin="0,5,0,5"/>
+
+                            <TextBlock Text="{x:Bind ViewModel.CompanionClientText, Mode=OneWay}" 
+                                       FontSize="14" Foreground="{ThemeResource SystemFillColorSuccessBrush}" 
+                                       HorizontalAlignment="Center" FontWeight="SemiBold"/>
+
+                            <TextBlock Text="{x:Bind ViewModel.CompanionServerUrl, Mode=OneWay}" 
+                                       FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                       HorizontalAlignment="Center" IsTextSelectionEnabled="True"/>
+
+                            <Button Content="Turn Off Server"
+                                    Margin="0,15,0,0"
+                                    HorizontalAlignment="Center"
+                                    Click="CompanionPowerOff_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
 
                 <!-- Media Controls -->
                 <StackPanel Grid.Row="2" Margin="0,10,0,-10" Visibility="{x:Bind ViewModel.MediaControlsVisibility, Mode=OneWay}">

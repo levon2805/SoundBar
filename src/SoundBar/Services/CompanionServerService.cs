@@ -123,6 +123,9 @@ namespace SoundBar.Services
                 // Ensure the firewall rule exists so external devices (phones) can connect
                 _ = Task.Run(() => EnsureFirewallRule(Port));
 
+                // Force initial load of media state
+                _mediaInfoService.Refresh();
+
                 // Start accepting connections on a background thread
                 _ = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
 
@@ -362,14 +365,14 @@ namespace SoundBar.Services
                     context.Response.ContentType = GetMimeType(fullPath);
                     context.Response.ContentLength64 = fileBytes.Length;
 
-                    // Cache static assets for 1 hour, but not HTML (so PWA updates instantly)
-                    if (!fullPath.EndsWith(".html"))
+                    // Cache static assets for 1 hour, but not HTML, SW, or manifest (so PWA updates instantly)
+                    if (!fullPath.EndsWith(".html") && !fullPath.EndsWith("sw.js") && !fullPath.EndsWith("manifest.json"))
                     {
                         context.Response.Headers.Add("Cache-Control", "public, max-age=3600");
                     }
                     else
                     {
-                        context.Response.Headers.Add("Cache-Control", "no-cache");
+                        context.Response.Headers.Add("Cache-Control", "no-cache, no-store, must-revalidate");
                     }
 
                     context.Response.OutputStream.Write(fileBytes, 0, fileBytes.Length);
