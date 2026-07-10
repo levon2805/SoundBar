@@ -482,9 +482,11 @@
     // This listener forces an immediate hard-reconnect the millisecond the app comes back to the foreground.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            if (isPaired) updateConnectionStatus('reconnecting');
-            reconnectAttempts = 0;
-            connect(); // Hard-reset the socket immediately
+            if (isPaired && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                updateConnectionStatus('reconnecting');
+                reconnectAttempts = 0;
+                connect(); // Hard-reset the socket immediately
+            }
         }
     });
 

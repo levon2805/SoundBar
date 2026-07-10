@@ -26,7 +26,7 @@ namespace SoundBar.Services
     {
         private HttpListener? _httpListener;
         private CancellationTokenSource? _cts;
-        private Timer? _broadcastTimer;
+        private string? _lastBroadcastJson;
         private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
         private readonly Random _random = new();
@@ -129,8 +129,8 @@ namespace SoundBar.Services
                 // Start accepting connections on a background thread
                 _ = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
 
-                // Broadcast state to all paired clients every 500ms
-                _broadcastTimer = new Timer(BroadcastState, null, 500, 500);
+                // Broadcast state to all paired clients every 500ms via an async loop
+                _ = Task.Run(() => BroadcastLoopAsync(_cts.Token));
 
                 StateChanged?.Invoke();
             }
@@ -161,7 +161,7 @@ namespace SoundBar.Services
                     IsRunning = true;
 
                     _ = Task.Run(() => AcceptConnectionsAsync(_cts!.Token));
-                    _broadcastTimer = new Timer(BroadcastState, null, 500, 500);
+                    _ = Task.Run(() => BroadcastLoopAsync(_cts!.Token));
 
                     StateChanged?.Invoke();
                 }
@@ -231,8 +231,6 @@ namespace SoundBar.Services
         {
             if (!IsRunning) return;
 
-            _broadcastTimer?.Dispose();
-            _broadcastTimer = null;
             _cts?.Cancel();
 
             try
@@ -241,6 +239,10 @@ namespace SoundBar.Services
                 _httpListener?.Close();
             }
             catch { }
+            finally
+            {
+                _httpListener = null;
+            }
 
             // Close all WebSocket connections gracefully in a background task to avoid UI deadlocks
             var sockets = _clients.Values.ToList();
@@ -263,6 +265,10 @@ namespace SoundBar.Services
             _clients.Clear();
             _pairedClients.Clear();
             IsRunning = false;
+            
+            _cts?.Dispose();
+            _cts = null;
+            _lastBroadcastJson = null;
 
             StateChanged?.Invoke();
         }
@@ -319,26 +325,41 @@ namespace SoundBar.Services
 
         private async Task AcceptConnectionsAsync(CancellationToken ct)
         {
-            while (!ct.IsCancellationRequested && _httpListener != null && _httpListener.IsListening)
+            try
             {
-                try
+                while (!ct.IsCancellationRequested && _httpListener != null && _httpListener.IsListening)
                 {
-                    var context = await _httpListener.GetContextAsync();
+                    try
+                    {
+                        var context = await _httpListener.GetContextAsync();
 
-                    if (context.Request.IsWebSocketRequest)
-                    {
-                        _ = Task.Run(() => HandleWebSocketAsync(context, ct));
+                        if (context.Request.IsWebSocketRequest)
+                        {
+                            _ = Task.Run(() => HandleWebSocketAsync(context, ct));
+                        }
+                        else
+                        {
+                            HandleHttpRequest(context);
+                        }
                     }
-                    else
+                    catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
+                    catch (ObjectDisposedException) { break; }
+                    catch (Exception ex)
                     {
-                        HandleHttpRequest(context);
+                        System.Diagnostics.Debug.WriteLine($"Companion server request error: {ex.Message}");
                     }
                 }
-                catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
-                catch (ObjectDisposedException) { break; }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Companion listener loop crashed: {ex.Message}");
+            }
+            finally
+            {
+                if (IsRunning)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Companion server error: {ex.Message}");
+                    IsRunning = false;
+                    StateChanged?.Invoke();
                 }
             }
         }
@@ -402,11 +423,12 @@ namespace SoundBar.Services
         private async Task HandleWebSocketAsync(HttpListenerContext httpContext, CancellationToken ct)
         {
             string clientId = Guid.NewGuid().ToString("N")[..8];
+            WebSocket? ws = null;
 
             try
             {
                 var wsContext = await httpContext.AcceptWebSocketAsync(null);
-                var ws = wsContext.WebSocket;
+                ws = wsContext.WebSocket;
                 _clients[clientId] = ws;
 
                 System.Diagnostics.Debug.WriteLine($"Companion client connected: {clientId}");
@@ -443,6 +465,7 @@ namespace SoundBar.Services
             {
                 _clients.TryRemove(clientId, out _);
                 _pairedClients.TryRemove(clientId, out _);
+                ws?.Dispose(); // Prevent unmanaged handle leak
                 StateChanged?.Invoke();
                 System.Diagnostics.Debug.WriteLine($"Companion client disconnected: {clientId}");
             }
@@ -539,35 +562,48 @@ namespace SoundBar.Services
             }
         }
 
-        private void BroadcastState(object? state)
+        private async Task BroadcastLoopAsync(CancellationToken ct)
         {
-            if (_pairedClients.IsEmpty) return;
-
-            try
+            while (!ct.IsCancellationRequested)
             {
-                var snapshot = BuildStateSnapshot();
-                string json = JsonSerializer.Serialize(new { type = "state", data = snapshot }, _jsonOptions);
-                byte[] bytes = Encoding.UTF8.GetBytes(json);
-
-                foreach (var kvp in _pairedClients)
+                try
                 {
-                    if (_clients.TryGetValue(kvp.Key, out var ws) && ws.State == WebSocketState.Open)
+                    await Task.Delay(500, ct);
+
+                    if (_pairedClients.IsEmpty) continue;
+
+                    var snapshot = BuildStateSnapshot();
+                    string json = JsonSerializer.Serialize(new { type = "state", data = snapshot }, _jsonOptions);
+
+                    // Skip re-allocating bytes and sending if state is completely identical
+                    if (json == _lastBroadcastJson) continue;
+                    _lastBroadcastJson = json;
+
+                    byte[] bytes = Encoding.UTF8.GetBytes(json);
+
+                    foreach (var kvp in _pairedClients)
                     {
-                        try
+                        if (_clients.TryGetValue(kvp.Key, out var ws) && ws.State == WebSocketState.Open)
                         {
-                            ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None)
-                                .Wait(TimeSpan.FromSeconds(2));
-                        }
-                        catch
-                        {
-                            // Client is gone — it will be cleaned up on the next receive loop
+                            try
+                            {
+                                // Async non-blocking send with its own cancellation timeout
+                                using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                                sendCts.CancelAfter(2000);
+                                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, sendCts.Token).ConfigureAwait(false);
+                            }
+                            catch
+                            {
+                                // Client dropped, timeout, or closed
+                            }
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Broadcast error: {ex.Message}");
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Broadcast error: {ex.Message}");
+                }
             }
         }
 
