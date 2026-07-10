@@ -558,22 +558,6 @@ namespace SoundBar.Views
         {
             try
             {
-                // Traverse the visual tree to find all ScrollViewers
-                var scrollViewers = new System.Collections.Generic.List<ScrollViewer>();
-                FindVisualChildren(this.Content, scrollViewers);
-                
-                // The settings ScrollViewer is the one containing a StackPanel
-                StackPanel? settingsPanel = null;
-                
-                foreach (var sv in scrollViewers)
-                {
-                    if (sv.Content is StackPanel sp)
-                    {
-                        settingsPanel = sp;
-                        break;
-                    }
-                }
-
                 // Also find the ItemsControl that holds our Audio Apps
                 var itemsControls = new System.Collections.Generic.List<ItemsControl>();
                 FindVisualChildren(this.Content, itemsControls);
@@ -586,6 +570,7 @@ namespace SoundBar.Views
                     }
                 }
 
+                var settingsPanel = DynamicSettingsStackPanel;
                 if (settingsPanel == null) return;
 
                 // 1. About & Updates Expander (Top)

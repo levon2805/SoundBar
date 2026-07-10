@@ -388,38 +388,40 @@
 
                     <!-- ON STATE: QR Code & Info -->
                     <Grid Grid.Row="1" Visibility="{x:Bind ViewModel.CompanionActiveUiVisibility, Mode=OneWay}">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                            
-                            <TextBlock Text="Scan to connect" 
-                                       FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                                       HorizontalAlignment="Center"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Padding="0,5">
+                                
+                                <TextBlock Text="Scan to connect" 
+                                           FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                           HorizontalAlignment="Center"/>
 
-                            <!-- Dynamic QR using custom converter (need to add it) -->
-                            <Image Width="160" Height="160" Stretch="Uniform" HorizontalAlignment="Center">
-                                <Image.Source>
-                                    <BitmapImage UriSource="{x:Bind ViewModel.CompanionQrUrl, Mode=OneWay}" />
-                                </Image.Source>
-                            </Image>
+                                <!-- Dynamic QR using custom converter -->
+                                <Image Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center">
+                                    <Image.Source>
+                                        <BitmapImage UriSource="{x:Bind ViewModel.CompanionQrUrl, Mode=OneWay}" />
+                                    </Image.Source>
+                                </Image>
 
-                            <TextBlock Text="{x:Bind ViewModel.CompanionPairingCode, Mode=OneWay}" 
-                                       FontSize="42" FontWeight="Bold" 
-                                       CharacterSpacing="400"
-                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                       HorizontalAlignment="Center" Margin="0,5,0,5"/>
+                                <TextBlock Text="{x:Bind ViewModel.CompanionPairingCode, Mode=OneWay}" 
+                                           FontSize="32" FontWeight="Bold" 
+                                           CharacterSpacing="200"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                           HorizontalAlignment="Center" Margin="0,2,0,2"/>
 
-                            <TextBlock Text="{x:Bind ViewModel.CompanionClientText, Mode=OneWay}" 
-                                       FontSize="14" Foreground="{ThemeResource SystemFillColorSuccessBrush}" 
-                                       HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind ViewModel.CompanionClientText, Mode=OneWay}" 
+                                           FontSize="13" Foreground="{ThemeResource SystemFillColorSuccessBrush}" 
+                                           HorizontalAlignment="Center" FontWeight="SemiBold"/>
 
-                            <TextBlock Text="{x:Bind ViewModel.CompanionServerUrl, Mode=OneWay}" 
-                                       FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
-                                       HorizontalAlignment="Center" IsTextSelectionEnabled="True"/>
+                                <TextBlock Text="{x:Bind ViewModel.CompanionServerUrl, Mode=OneWay}" 
+                                           FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                           HorizontalAlignment="Center" IsTextSelectionEnabled="True"/>
 
-                            <Button Content="Turn Off Server"
-                                    Margin="0,15,0,0"
-                                    HorizontalAlignment="Center"
-                                    Click="CompanionPowerOff_Click"/>
-                        </StackPanel>
+                                <Button Content="Turn Off Server"
+                                        Margin="0,8,0,0" Padding="12,4"
+                                        HorizontalAlignment="Center"
+                                        Click="CompanionPowerOff_Click"/>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
 
@@ -530,7 +532,7 @@
                 </StackPanel>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
-                    <StackPanel Spacing="10">
+                    <StackPanel x:Name="DynamicSettingsStackPanel" Spacing="10">
                         <!-- Theme Settings -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
