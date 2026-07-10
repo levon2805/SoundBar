@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Control your PC audio remotely with SoundBar Remote">
+    <title>SoundBar Remote</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <!-- Pairing Screen -->
+    <div id="pairing-screen" class="screen active">
+        <div class="pairing-container">
+            <div class="pairing-icon">📱</div>
+            <h1>SoundBar Remote</h1>
+            <p class="pairing-subtitle">Enter the pairing code shown on your desktop</p>
+            <div class="pairing-input-group">
+                <input type="text" id="pairing-code" maxlength="2" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="--">
+            </div>
+            <button id="pair-btn" class="btn-primary" disabled>Connect</button>
+            <div id="pairing-error" class="error-text"></div>
+            <div id="connection-status" class="connection-indicator">
+                <span class="status-dot disconnected"></span>
+                <span>Connecting...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Screen -->
+    <div id="app-screen" class="screen">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1 class="app-title">SoundBar</h1>
+            </div>
+            <div class="header-right">
+                <span class="status-dot connected"></span>
+                <span id="client-status" class="status-text">Connected</span>
+            </div>
+        </header>
+
+        <!-- Master Volume -->
+        <section class="card master-card">
+            <div class="card-header">
+                <span class="card-icon">🔊</span>
+                <span class="card-title">Master Volume</span>
+                <button id="master-mute-btn" class="mute-btn" title="Mute">
+                    <span class="mute-icon">🔊</span>
+                </button>
+            </div>
+            <div class="slider-row">
+                <input type="range" id="master-slider" class="volume-slider" min="0" max="100" value="50">
+                <span id="master-value" class="volume-value">50%</span>
+            </div>
+        </section>
+
+        <!-- Now Playing -->
+        <section id="now-playing-card" class="card now-playing-card hidden">
+            <div class="now-playing-content">
+                <div id="album-art-container" class="album-art-container">
+                    <img id="album-art" src="" alt="Album Art">
+                    <div class="album-art-placeholder">🎵</div>
+                </div>
+                <div class="now-playing-info">
+                    <div id="song-title" class="song-title">No music playing</div>
+                    <div id="song-artist" class="song-artist"></div>
+                </div>
+            </div>
+            <div class="progress-container">
+                <input type="range" id="seek-slider" class="seek-slider" min="0" max="100" value="0" step="0.1">
+                <div class="time-display">
+                    <span id="current-time">0:00</span>
+                    <span id="total-time">0:00</span>
+                </div>
+            </div>
+            <div class="media-controls">
+                <button id="prev-btn" class="media-btn" title="Previous">⏮</button>
+                <button id="play-pause-btn" class="media-btn media-btn-primary" title="Play/Pause">⏯</button>
+                <button id="next-btn" class="media-btn" title="Next">⏭</button>
+            </div>
+        </section>
+
+        <!-- App Sliders -->
+        <section class="card apps-card">
+            <div class="card-header">
+                <span class="card-icon">🎧</span>
+                <span class="card-title">Applications</span>
+            </div>
+            <div id="apps-list" class="apps-list">
+                <div class="empty-state">No active audio applications</div>
+            </div>
+        </section>
+
+        <!-- Device Switcher -->
+        <section class="card device-card">
+            <div class="card-header">
+                <span class="card-icon">🎛️</span>
+                <span class="card-title">Output Device</span>
+            </div>
+            <select id="device-select" class="device-select">
+                <option value="">Loading devices...</option>
+            </select>
+        </section>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

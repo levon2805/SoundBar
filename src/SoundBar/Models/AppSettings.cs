@@ -81,6 +81,16 @@ namespace SoundBar.Models
         /// Hotkey configuration string for muting/unmuting the focused app. Format: "Ctrl+Alt+M"
         /// </summary>
         public string MuteHotkey { get; set; } = "Control+Alt+M";
+
+        /// <summary>
+        /// Whether the companion web server should be enabled for remote control from a phone.
+        /// </summary>
+        public bool EnableCompanionServer { get; set; } = false;
+
+        /// <summary>
+        /// The port number for the companion web server.
+        /// </summary>
+        public int CompanionServerPort { get; set; } = 6767;
     }
 
     /// <summary>

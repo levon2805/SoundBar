@@ -24,6 +24,7 @@ namespace SoundBar.ViewModels
         private readonly UpdateService _updateService;
         private readonly MediaInfoService _mediaInfoService;
         private readonly HotkeyService _hotkeyService;
+        private CompanionServerService? _companionServer;
 
         /// <summary>
         /// A list of application executable names that the user prefers to keep out of sight.
@@ -265,6 +266,82 @@ namespace SoundBar.ViewModels
             }
         }
 
+        // Companion Server Properties
+        public bool IsCompanionServerRunning => _companionServer?.IsRunning ?? false;
+
+        public string CompanionServerUrl => _companionServer?.GetConnectionUrl() ?? $"http://localhost:{_settingsService.Settings.CompanionServerPort}";
+
+        public string CompanionPairingCode => _companionServer?.PairingCode ?? "--";
+
+        public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
+
+        public bool EnableCompanionServer
+        {
+            get => _settingsService.Settings.EnableCompanionServer;
+            set
+            {
+                if (_settingsService.Settings.EnableCompanionServer != value)
+                {
+                    _settingsService.Settings.EnableCompanionServer = value;
+                    OnPropertyChanged();
+                    _settingsService.SaveSettings();
+
+                    if (value)
+                        StartCompanionServer();
+                    else
+                        StopCompanionServer();
+                }
+            }
+        }
+
+        public void StartCompanionServer()
+        {
+            if (_companionServer != null && _companionServer.IsRunning) return;
+
+            _companionServer = new CompanionServerService(
+                _audioService,
+                _mediaInfoService,
+                () => Apps,
+                () => AudioDevices,
+                () => SelectedAudioDevice,
+                (deviceId) =>
+                {
+                    _dispatcherQueue.TryEnqueue(() =>
+                    {
+                        var device = AudioDevices.FirstOrDefault(d => d.Id == deviceId);
+                        if (device != null)
+                        {
+                            SelectedAudioDevice = device;
+                        }
+                    });
+                },
+                _settingsService.Settings.CompanionServerPort
+            );
+
+            _companionServer.StateChanged += () =>
+            {
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    OnPropertyChanged(nameof(IsCompanionServerRunning));
+                    OnPropertyChanged(nameof(CompanionServerUrl));
+                    OnPropertyChanged(nameof(CompanionPairingCode));
+                    OnPropertyChanged(nameof(CompanionConnectedClients));
+                });
+            };
+
+            _companionServer.Start();
+            OnPropertyChanged(nameof(IsCompanionServerRunning));
+            OnPropertyChanged(nameof(CompanionServerUrl));
+            OnPropertyChanged(nameof(CompanionPairingCode));
+        }
+
+        public void StopCompanionServer()
+        {
+            _companionServer?.Stop();
+            OnPropertyChanged(nameof(IsCompanionServerRunning));
+            OnPropertyChanged(nameof(CompanionConnectedClients));
+        }
+
         // Timestamp for Master Volume
         private DateTime _lastMasterVolumeChange = DateTime.MinValue;
         private System.Threading.CancellationTokenSource? _masterVolumeDebounce;
@@ -487,6 +564,13 @@ namespace SoundBar.ViewModels
                     }
                 }
             });
+
+            // Ensure Companion Server is always disabled on launch for safety/resources
+            if (_settingsService.Settings.EnableCompanionServer)
+            {
+                _settingsService.Settings.EnableCompanionServer = false;
+                _settingsService.SaveSettings();
+            }
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -1394,6 +1478,8 @@ namespace SoundBar.ViewModels
 
         public void Dispose()
         {
+            _companionServer?.Dispose();
+
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();
             _pollingCts = null;

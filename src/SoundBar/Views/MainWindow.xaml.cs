@@ -280,19 +280,12 @@ namespace SoundBar.Views
             _settingsService.SaveSettings();
         }
 
-        // Updates the pin icon colour based on state
+        // Updates the pin icon visual based on state
         private void UpdatePinButtonVisual(bool isPinned)
         {
             if (PinButton != null)
             {
-                if (isPinned)
-                {
-                    PinButton.Foreground = new SolidColorBrush(Colors.White);
-                }
-                else
-                {
-                    PinButton.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 85, 85, 85));
-                }
+                PinButton.Opacity = isPinned ? 1.0 : 0.4;
             }
         }
 
@@ -481,6 +474,11 @@ namespace SoundBar.Views
             bool isPinned = !IsTopmost();
             SetTopmost(isPinned);
             UpdatePinButtonVisual(isPinned);
+        }
+
+        private async void CompanionButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowCompanionDialogAsync();
         }
 
         private void SetTopmost(bool topmost)
@@ -741,6 +739,8 @@ namespace SoundBar.Views
                 AddCategoryHeader("General");
                 AddExpander("System Integration");
                 AddExpander("About & Updates", aboutExpander);
+
+                // Companion button moved to XAML
             }
             catch (Exception ex)
             {
@@ -759,6 +759,88 @@ namespace SoundBar.Views
                 }
                 FindVisualChildren(child, results);
             }
+        }
+
+        private async System.Threading.Tasks.Task ShowCompanionDialogAsync()
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Mobile Companion",
+                PrimaryButtonText = "Close",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var stack = new StackPanel { Spacing = 15, Width = 350 };
+            stack.Children.Add(new TextBlock 
+            { 
+                Text = "Control SoundBar from your phone over your local network. Turn this on and scan the QR code to connect.", 
+                TextWrapping = TextWrapping.Wrap 
+            });
+
+            var toggle = new ToggleSwitch { Header = "Enable Companion Server" };
+            toggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding 
+            { 
+                Path = new PropertyPath("EnableCompanionServer"), 
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay,
+                Source = ViewModel
+            });
+            stack.Children.Add(toggle);
+
+            var infoPanel = new StackPanel { Spacing = 10 };
+            
+            var qrImage = new Image { Width = 180, Height = 180, HorizontalAlignment = HorizontalAlignment.Center };
+            var urlText = new TextBlock { TextAlignment = TextAlignment.Center, IsTextSelectionEnabled = true, FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray) };
+            var codeText = new TextBlock { FontSize = 36, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextAlignment = TextAlignment.Center, CharacterSpacing = 500 };
+            var clientsText = new TextBlock { TextAlignment = TextAlignment.Center, Foreground = new SolidColorBrush(Microsoft.UI.Colors.LimeGreen), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+
+            void UpdateInfoPanel()
+            {
+                if (ViewModel.IsCompanionServerRunning)
+                {
+                    infoPanel.Visibility = Visibility.Visible;
+                    string url = ViewModel.CompanionServerUrl;
+                    qrImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri($"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={Uri.EscapeDataString(url)}&bgcolor=1a1a1a&color=ffffff&margin=10"));
+                    urlText.Text = url;
+                    codeText.Text = ViewModel.CompanionPairingCode;
+                    
+                    if (ViewModel.CompanionConnectedClients > 0)
+                        clientsText.Text = $"{ViewModel.CompanionConnectedClients} client(s) connected";
+                    else
+                        clientsText.Text = "Waiting for connection...";
+                }
+                else
+                {
+                    infoPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            System.ComponentModel.PropertyChangedEventHandler handler = (s, args) =>
+            {
+                if (args.PropertyName == "IsCompanionServerRunning" || args.PropertyName == "CompanionConnectedClients" || args.PropertyName == "CompanionPairingCode")
+                {
+                    this.DispatcherQueue.TryEnqueue(UpdateInfoPanel);
+                }
+            };
+
+            ViewModel.PropertyChanged += handler;
+
+            // Clean up handler when dialog closes
+            dialog.Closed += (s, e) => { ViewModel.PropertyChanged -= handler; };
+
+            UpdateInfoPanel();
+
+            infoPanel.Children.Add(qrImage);
+            infoPanel.Children.Add(new TextBlock { Text = "Scan this QR code with your phone:", TextAlignment = TextAlignment.Center });
+            infoPanel.Children.Add(urlText);
+            infoPanel.Children.Add(new TextBlock { Text = "Pairing Code:", TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 10, 0, -10), Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray) });
+            infoPanel.Children.Add(codeText);
+            infoPanel.Children.Add(clientsText);
+
+            stack.Children.Add(infoPanel);
+            dialog.Content = stack;
+
+            await dialog.ShowAsync();
         }
     }
 }
