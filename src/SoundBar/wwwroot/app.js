@@ -9,6 +9,7 @@
     let ws = null;
     let isPaired = false;
     let reconnectAttempts = 0;
+    let reconnectTimer = null;
     const MAX_RECONNECT_DELAY = 10000;
     let sliderDebounceTimers = {};
     let lastState = null;
@@ -52,6 +53,15 @@
 
     // --- WebSocket Connection ---
     function connect() {
+        clearTimeout(reconnectTimer);
+        
+        // Clean up ghost sockets
+        if (ws) {
+            ws.onclose = null;
+            ws.onerror = null;
+            ws.close();
+        }
+
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${location.host}/ws`;
 
@@ -89,9 +99,10 @@
     }
 
     function scheduleReconnect() {
+        clearTimeout(reconnectTimer);
         reconnectAttempts++;
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts - 1), MAX_RECONNECT_DELAY);
-        setTimeout(connect, delay);
+        reconnectTimer = setTimeout(connect, delay);
     }
 
     function send(obj) {
@@ -104,18 +115,26 @@
     function handleMessage(msg) {
         switch (msg.type) {
             case 'pairingRequired':
-                updateConnectionStatus('connected');
+                if (isPaired && pairingInput.value.length === 2) {
+                    // Automatically re-authenticate on reconnect
+                    send({ action: 'pair', pairingCode: pairingInput.value });
+                } else {
+                    updateConnectionStatus('connected');
+                }
                 break;
 
             case 'paired':
                 if (msg.success) {
                     isPaired = true;
                     pairingError.textContent = '';
+                    if (clientStatus) clientStatus.textContent = 'Connected';
                     showScreen('app');
                 } else {
+                    isPaired = false;
                     pairingError.textContent = 'Incorrect code. Please try again.';
                     pairingInput.value = '';
                     pairingInput.focus();
+                    showScreen('pairing');
                 }
                 break;
 
@@ -457,6 +476,17 @@
             }
         });
     }
+
+    // --- Mobile Background Fix ---
+    // Browsers often silently sever WebSockets when the phone screen turns off or the app is minimized.
+    // This listener forces an immediate hard-reconnect the millisecond the app comes back to the foreground.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (isPaired) updateConnectionStatus('reconnecting');
+            reconnectAttempts = 0;
+            connect(); // Hard-reset the socket immediately
+        }
+    });
 
     // Register Service Worker
     if ('serviceWorker' in navigator) {
