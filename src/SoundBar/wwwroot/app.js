@@ -115,7 +115,7 @@
     function handleMessage(msg) {
         switch (msg.type) {
             case 'pairingRequired':
-                if (isPaired && pairingInput.value.length === 2) {
+                if (isPaired && pairingInput.value.length === 4) {
                     // Automatically re-authenticate on reconnect
                     send({ action: 'pair', pairingCode: pairingInput.value });
                 } else {
@@ -136,6 +136,16 @@
                     pairingInput.focus();
                     showScreen('pairing');
                 }
+                break;
+
+            case 'error':
+                updateConnectionStatus('error', msg.message);
+                if (ws) {
+                    ws.onclose = null;
+                    ws.close();
+                }
+                clearTimeout(reconnectTimer);
+                pairingInput.disabled = true;
                 break;
 
             case 'state':
@@ -361,7 +371,7 @@
         appScreen.classList.toggle('active', name === 'app');
     }
 
-    function updateConnectionStatus(status) {
+    function updateConnectionStatus(status, message = '') {
         const dot = connectionStatus.querySelector('.status-dot');
         const text = connectionStatus.querySelector('span:last-child');
 
@@ -382,6 +392,10 @@
                     clientStatus.textContent = 'Reconnecting...';
                 }
                 break;
+            case 'error':
+                dot.className = 'status-dot disconnected';
+                text.textContent = message;
+                break;
         }
     }
 
@@ -389,7 +403,7 @@
 
     // Pairing
     pairingInput.addEventListener('input', () => {
-        pairBtn.disabled = pairingInput.value.length !== 2;
+        pairBtn.disabled = pairingInput.value.length !== 4;
         pairingError.textContent = '';
     });
 
@@ -398,7 +412,7 @@
     });
 
     pairingInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && pairingInput.value.length === 2) {
+        if (e.key === 'Enter' && pairingInput.value.length === 4) {
             send({ action: 'pair', pairingCode: pairingInput.value });
         }
     });

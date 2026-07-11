@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.json?v=2">
     <link rel="icon" type="image/png" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    <link rel="stylesheet" href="/style.css?v=2">
+    <link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
     <!-- Pairing Screen -->
@@ -23,7 +23,7 @@
             <h1>SoundBar Remote</h1>
             <p class="pairing-subtitle">Enter the pairing code shown on your desktop</p>
             <div class="pairing-input-group">
-                <input type="text" id="pairing-code" maxlength="2" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="--">
+                <input type="text" id="pairing-code" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="----">
             </div>
             <button id="pair-btn" class="btn-primary" disabled>Connect</button>
             <div id="pairing-error" class="error-text"></div>
@@ -114,6 +114,6 @@
         </section>
     </div>
 
-    <script src="/app.js?v=5"></script>
+    <script src="/app.js?v=7"></script>
 </body>
 </html>

@@ -29,6 +29,7 @@ namespace SoundBar.Services
         private string? _lastBroadcastJson;
         private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
+        private readonly ConcurrentDictionary<string, (int Attempts, DateTime LockoutEnd)> _failedAttempts = new();
         private readonly Random _random = new();
 
         private readonly IAudioMixerService _audioService;
@@ -48,10 +49,10 @@ namespace SoundBar.Services
         private DateTimeOffset _lastTimelineUpdate = DateTimeOffset.MinValue;
 
         /// <summary>
-        /// The two-digit pairing code that mobile clients must enter to connect.
+        /// The four-digit pairing code that mobile clients must enter to connect.
         /// Regenerated each time the server starts.
         /// </summary>
-        public string PairingCode { get; private set; } = "00";
+        public string PairingCode { get; private set; } = "0000";
 
         /// <summary>
         /// The port the server is listening on.
@@ -110,8 +111,8 @@ namespace SoundBar.Services
 
             try
             {
-                // Generate a fresh two-digit pairing code
-                PairingCode = _random.Next(10, 100).ToString();
+                // Generate a fresh four-digit pairing code
+                PairingCode = _random.Next(1000, 10000).ToString();
 
                 _cts = new CancellationTokenSource();
                 _httpListener = new HttpListener();
@@ -422,6 +423,34 @@ namespace SoundBar.Services
 
         private async Task HandleWebSocketAsync(HttpListenerContext httpContext, CancellationToken ct)
         {
+            string clientIp = httpContext.Request.RemoteEndPoint.Address.ToString();
+
+            // 1. Anti-Brute Force Lockout Check
+            if (_failedAttempts.TryGetValue(clientIp, out var tracker))
+            {
+                if (tracker.Attempts >= 5 && DateTime.Now < tracker.LockoutEnd)
+                {
+                    httpContext.Response.StatusCode = 429; // Too Many Requests
+                    httpContext.Response.Close();
+                    return;
+                }
+            }
+
+            // 2. Cross-Site WebSocket Hijacking (CSWSH) Mitigation
+            string origin = httpContext.Request.Headers["Origin"] ?? "";
+            if (!string.IsNullOrEmpty(origin))
+            {
+                if (!origin.StartsWith("http://localhost") && !origin.StartsWith("http://127.0.0.1") && 
+                    !origin.StartsWith("http://192.168.") && !origin.StartsWith("http://10."))
+                {
+                    httpContext.Response.StatusCode = 403; // Forbidden
+                    httpContext.Response.Close();
+                    return;
+                }
+            }
+
+            // (Connection Limits check moved below to allow sending error message via WebSocket)
+
             string clientId = Guid.NewGuid().ToString("N")[..8];
             WebSocket? ws = null;
 
@@ -429,14 +458,37 @@ namespace SoundBar.Services
             {
                 var wsContext = await httpContext.AcceptWebSocketAsync(null);
                 ws = wsContext.WebSocket;
+
+                // 3. DoS Protection - Connection Limits
+                if (_clients.Count >= 20)
+                {
+                    var errorMsg = JsonSerializer.Serialize(new { type = "error", message = "Maximum socket connections reached (20/20)." }, _jsonOptions);
+                    await SendTextAsync(ws, errorMsg, ct);
+                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Connection limit reached", ct);
+                    return;
+                }
+
                 _clients[clientId] = ws;
 
-                System.Diagnostics.Debug.WriteLine($"Companion client connected: {clientId}");
+                System.Diagnostics.Debug.WriteLine($"Companion client connected: {clientId} ({clientIp})");
 
                 // Send a challenge requesting the pairing code
                 var challenge = JsonSerializer.Serialize(new { type = "pairingRequired" }, _jsonOptions);
                 await SendTextAsync(ws, challenge, ct);
 
+                // Disconnect if the client doesn't pair within 30 seconds (Prevents connection starvation)
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(30000, ct);
+                    if (ws.State == WebSocketState.Open && !_pairedClients.ContainsKey(clientId))
+                    {
+                        var timeoutMsg = JsonSerializer.Serialize(new { type = "error", message = "Pairing timeout. Please refresh the page." }, _jsonOptions);
+                        await SendTextAsync(ws, timeoutMsg, ct);
+                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Pairing timeout", ct);
+                    }
+                }, ct);
+
+                // 4. DoS Protection - Payload Limits (Max 4KB per message)
                 var buffer = new byte[4096];
 
                 while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -450,8 +502,15 @@ namespace SoundBar.Services
 
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
+                        // Enforce 4KB max payload size limit by terminating if EndOfMessage is false
+                        if (!result.EndOfMessage)
+                        {
+                            await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "Payload exceeds 4KB limit", ct);
+                            break;
+                        }
+
                         string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        ProcessClientMessage(clientId, ws, message);
+                        ProcessClientMessage(clientId, clientIp, ws, message);
                     }
                 }
             }
@@ -471,7 +530,7 @@ namespace SoundBar.Services
             }
         }
 
-        private void ProcessClientMessage(string clientId, WebSocket ws, string message)
+        private void ProcessClientMessage(string clientId, string clientIp, WebSocket ws, string message)
         {
             try
             {
@@ -481,17 +540,60 @@ namespace SoundBar.Services
                 // If the client hasn't paired yet, only accept pairing commands
                 if (!_pairedClients.ContainsKey(clientId))
                 {
+                    // Enforce lockout for existing sockets that keep trying
+                    if (_failedAttempts.TryGetValue(clientIp, out var tracker) && tracker.Attempts >= 5 && DateTime.Now < tracker.LockoutEnd)
+                    {
+                        var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
+                        _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                        _ = ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Locked out", CancellationToken.None);
+                        return;
+                    }
+
                     if (command.Action == "pair" && command.PairingCode == PairingCode)
                     {
+                        // Check paired limits
+                        if (_pairedClients.Count >= 5)
+                        {
+                            var limitResponse = JsonSerializer.Serialize(new { type = "error", message = "Max paired devices reached (5/5)." }, _jsonOptions);
+                            _ = SendTextAsync(ws, limitResponse, _cts?.Token ?? CancellationToken.None);
+                            return;
+                        }
+
                         _pairedClients[clientId] = true;
+                        
+                        // Reset brute force tracking on success
+                        _failedAttempts.TryRemove(clientIp, out _);
+
                         var response = JsonSerializer.Serialize(new { type = "paired", success = true }, _jsonOptions);
                         _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
                         StateChanged?.Invoke();
                     }
                     else if (command.Action == "pair")
                     {
-                        var response = JsonSerializer.Serialize(new { type = "paired", success = false }, _jsonOptions);
-                        _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                        // Record failed attempt for Brute Force mitigation
+                        bool isLockedOut = false;
+                        _failedAttempts.AddOrUpdate(clientIp,
+                            addValueFactory: _ => (1, DateTime.Now),
+                            updateValueFactory: (_, current) => 
+                            {
+                                int newAttempts = current.Attempts + 1;
+                                // Lock out for 5 minutes if 5 failed attempts reached
+                                DateTime newEnd = newAttempts >= 5 ? DateTime.Now.AddMinutes(5) : current.LockoutEnd;
+                                if (newAttempts >= 5) isLockedOut = true;
+                                return (newAttempts, newEnd);
+                            });
+
+                        if (isLockedOut)
+                        {
+                            var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
+                            _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                            _ = ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Locked out", CancellationToken.None);
+                        }
+                        else
+                        {
+                            var response = JsonSerializer.Serialize(new { type = "paired", success = false }, _jsonOptions);
+                            _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                        }
                     }
                     return;
                 }

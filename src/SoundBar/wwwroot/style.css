@@ -130,16 +130,16 @@ body {
 }
 
 #pairing-code {
-    width: 120px;
+    width: 200px;
     height: 64px;
     text-align: center;
     font-size: 36px;
     font-weight: 700;
-    letter-spacing: 12px;
-    background: var(--bg-card);
-    border: 2px solid var(--border-light);
+    letter-spacing: 8px;
+    color: var(--text-main);
+    background: var(--surface-light);
+    border: 2px solid var(--border);
     border-radius: var(--radius-md);
-    color: var(--text-primary);
     outline: none;
     transition: border-color var(--transition-normal);
     backdrop-filter: var(--glass-blur);
@@ -152,7 +152,7 @@ body {
 
 #pairing-code::placeholder {
     color: var(--text-muted);
-    letter-spacing: 12px;
+    letter-spacing: 8px;
 }
 
 .btn-primary {

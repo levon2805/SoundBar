@@ -1,9 +1,9 @@
-const CACHE_NAME = 'soundbar-remote-v7';
+const CACHE_NAME = 'soundbar-remote-v10';
 const ASSETS = [
     '/',
     '/index.html',
-    '/style.css?v=2',
-    '/app.js?v=2',
+    '/style.css?v=3',
+    '/app.js?v=7',
     '/manifest.json?v=2'
 ];
 
