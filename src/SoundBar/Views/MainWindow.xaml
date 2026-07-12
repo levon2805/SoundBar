@@ -220,6 +220,16 @@
                                    FontSize="14" 
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center"/>
+
+                        <Button Click="RefreshApps_Click"
+                                Background="Transparent" 
+                                BorderBrush="Transparent"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTipService.ToolTip="Force refresh audio sessions"
+                                Padding="4">
+                            <FontIcon Glyph="&#xE72C;" FontSize="12"/>
+                        </Button>
                     </Grid>
                 </StackPanel>
 
