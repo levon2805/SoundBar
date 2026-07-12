@@ -377,6 +377,12 @@ body {
     color: var(--danger);
 }
 
+.mute-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* ============================================
    Now Playing
    ============================================ */
@@ -565,6 +571,15 @@ body {
 .app-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.app-name-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .app-name {
@@ -575,25 +590,26 @@ body {
     text-overflow: ellipsis;
 }
 
+.volume-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
 .app-slider-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 4px;
+    width: 100%;
 }
 
 .app-slider-row .volume-slider {
-    height: 4px;
+    height: 6px;
+    flex: 1;
 }
 
 .app-slider-row .volume-slider::-webkit-slider-thumb {
     width: 18px;
     height: 18px;
-}
-
-.app-slider-row .volume-value {
-    font-size: 12px;
-    min-width: 36px;
 }
 
 .app-mute-btn {

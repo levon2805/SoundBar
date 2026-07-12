@@ -286,15 +286,17 @@
         const hasIcon = app.iconBase64 && app.iconBase64.length > 0;
 
         row.innerHTML = `
-            ${hasIcon
-                ? `<img class="app-icon" src="data:image/png;base64,${app.iconBase64}" alt="${app.name}">`
+            ${hasIcon 
+                ? `<img src="data:image/png;base64,${app.iconBase64}" class="app-icon" alt="">` 
                 : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${app.name}">`
             }
             <div class="app-info">
-                <div class="app-name">${app.name}</div>
+                <div class="app-name-row">
+                    <div class="app-name">${app.name}</div>
+                    <span class="volume-value">${app.volume}%</span>
+                </div>
                 <div class="app-slider-row">
                     <input type="range" class="volume-slider" min="0" max="100" value="${app.volume}" style="--fill: ${app.volume}%">
-                    <span class="volume-value">${app.volume}%</span>
                 </div>
             </div>
             <button class="app-mute-btn ${app.isMuted ? 'muted' : ''}" title="Mute">${app.isMuted ? Icons.volumeMuted : Icons.volumeHigh}</button>
