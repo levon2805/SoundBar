@@ -69,5 +69,10 @@ namespace SoundBar.Services
         /// </summary>
         /// <param name="deviceId">The unique system identifier for the device.</param>
         void SetDefaultAudioDevice(string deviceId);
+
+        /// <summary>
+        /// Clears internal caches to force a full re-evaluation of audio sessions.
+        /// </summary>
+        void ClearCache();
     }
 }
