@@ -65,9 +65,9 @@ namespace SoundBar.Services
         public bool IsMuted { get; set; }
 
         /// <summary>
-        /// Base64-encoded PNG icon of the application, or null if unavailable.
+        /// URL to the app's executable icon in PNG format, or null.
         /// </summary>
-        public string? IconBase64 { get; set; }
+        public string? IconUrl { get; set; }
     }
 
     /// <summary>
@@ -79,9 +79,9 @@ namespace SoundBar.Services
         public string Artist { get; set; } = string.Empty;
 
         /// <summary>
-        /// Base64-encoded JPEG album art, or null if unavailable.
+        /// URL to the JPEG album art, or null if unavailable.
         /// </summary>
-        public string? AlbumArtBase64 { get; set; }
+        public string? AlbumArtUrl { get; set; }
 
         /// <summary>
         /// Current playback position in seconds.

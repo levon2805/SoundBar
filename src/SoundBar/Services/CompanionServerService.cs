@@ -42,7 +42,8 @@ namespace SoundBar.Services
         // Current media state cached from events
         private string _currentTitle = string.Empty;
         private string _currentArtist = string.Empty;
-        private string? _currentAlbumArtBase64;
+        private string? _currentAlbumArtId;
+        private byte[]? _currentAlbumArtBytes;
         private double _currentPositionSeconds;
         private double _currentDurationSeconds;
         private bool _currentIsPlaying;
@@ -381,6 +382,53 @@ namespace SoundBar.Services
                 if (!fullPath.StartsWith(Path.GetFullPath(basePath)))
                 {
                     context.Response.StatusCode = 403;
+                    context.Response.Close();
+                    return;
+                }
+
+                if (path == "/api/albumart")
+                {
+                    if (_currentAlbumArtBytes != null)
+                    {
+                        context.Response.ContentType = "image/jpeg";
+                        context.Response.ContentLength64 = _currentAlbumArtBytes.Length;
+                        context.Response.OutputStream.Write(_currentAlbumArtBytes, 0, _currentAlbumArtBytes.Length);
+                    }
+                    else
+                    {
+                        context.Response.StatusCode = 404;
+                    }
+                    context.Response.Close();
+                    return;
+                }
+
+                if (path == "/api/icon")
+                {
+                    string? iconPath = context.Request.QueryString["path"];
+                    if (!string.IsNullOrEmpty(iconPath) && _iconCache.TryGetValue(iconPath, out var iconBytes) && iconBytes != null)
+                    {
+                        context.Response.ContentType = "image/png";
+                        context.Response.ContentLength64 = iconBytes.Length;
+                        context.Response.OutputStream.Write(iconBytes, 0, iconBytes.Length);
+                    }
+                    else if (!string.IsNullOrEmpty(iconPath))
+                    {
+                        byte[]? newIcon = GetAppIconBytes(iconPath);
+                        if (newIcon != null)
+                        {
+                            context.Response.ContentType = "image/png";
+                            context.Response.ContentLength64 = newIcon.Length;
+                            context.Response.OutputStream.Write(newIcon, 0, newIcon.Length);
+                        }
+                        else
+                        {
+                            context.Response.StatusCode = 404;
+                        }
+                    }
+                    else
+                    {
+                        context.Response.StatusCode = 400;
+                    }
                     context.Response.Close();
                     return;
                 }
@@ -729,7 +777,7 @@ namespace SoundBar.Services
                         RawProcessName = app.RawProcessName ?? "",
                         Volume = app.VolumePercentage,
                         IsMuted = app.IsMuted,
-                        IconBase64 = GetAppIconBase64(app.IconPath)
+                        IconUrl = !string.IsNullOrEmpty(app.IconPath) ? $"/api/icon?path={Uri.EscapeDataString(app.IconPath)}" : null
                     });
                 }
             }
@@ -750,7 +798,7 @@ namespace SoundBar.Services
                 {
                     Title = _currentTitle,
                     Artist = _currentArtist,
-                    AlbumArtBase64 = _currentAlbumArtBase64,
+                    AlbumArtUrl = _currentAlbumArtId != null ? $"/api/albumart?id={_currentAlbumArtId}" : null,
                     PositionSeconds = livePosition,
                     DurationSeconds = _currentDurationSeconds,
                     IsPlaying = _currentIsPlaying
@@ -779,9 +827,9 @@ namespace SoundBar.Services
         }
 
         // Icon cache to avoid re-encoding icons every broadcast
-        private readonly ConcurrentDictionary<string, string?> _iconCache = new();
+        private readonly ConcurrentDictionary<string, byte[]?> _iconCache = new();
 
-        private string? GetAppIconBase64(string? iconPath)
+        private byte[]? GetAppIconBytes(string? iconPath)
         {
             if (string.IsNullOrEmpty(iconPath)) return null;
 
@@ -798,9 +846,9 @@ namespace SoundBar.Services
                 using var bitmap = icon.ToBitmap();
                 using var ms = new MemoryStream();
                 bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                string base64 = Convert.ToBase64String(ms.ToArray());
-                _iconCache[iconPath] = base64;
-                return base64;
+                byte[] bytes = ms.ToArray();
+                _iconCache[iconPath] = bytes;
+                return bytes;
             }
             catch
             {
@@ -827,7 +875,8 @@ namespace SoundBar.Services
             }
             else
             {
-                _currentAlbumArtBase64 = null;
+                _currentAlbumArtId = null;
+                _currentAlbumArtBytes = null;
             }
         }
 
@@ -839,11 +888,13 @@ namespace SoundBar.Services
                 using var netStream = stream.AsStreamForRead();
                 using var ms = new MemoryStream();
                 await netStream.CopyToAsync(ms);
-                _currentAlbumArtBase64 = Convert.ToBase64String(ms.ToArray());
+                _currentAlbumArtBytes = ms.ToArray();
+                _currentAlbumArtId = Guid.NewGuid().ToString("N");
             }
             catch
             {
-                _currentAlbumArtBase64 = null;
+                _currentAlbumArtId = null;
+                _currentAlbumArtBytes = null;
             }
         }
 

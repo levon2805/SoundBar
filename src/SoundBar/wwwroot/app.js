@@ -183,11 +183,14 @@
             songArtist.textContent = state.nowPlaying.artist || '';
 
             // Album Art
-            if (state.nowPlaying.albumArtBase64) {
-                albumArt.src = 'data:image/jpeg;base64,' + state.nowPlaying.albumArtBase64;
+            if (state.nowPlaying.albumArtUrl) {
+                if (albumArt.getAttribute('src') !== state.nowPlaying.albumArtUrl) {
+                    albumArt.src = state.nowPlaying.albumArtUrl;
+                }
                 albumArt.classList.add('visible');
             } else {
                 albumArt.classList.remove('visible');
+                albumArt.removeAttribute('src');
             }
 
             // Seek slider
@@ -269,8 +272,8 @@
 
             // Update icon
             const iconEl = row.querySelector('.app-icon');
-            if (iconEl && app.iconBase64 && !iconEl.src.includes(app.iconBase64.substring(0, 32))) {
-                iconEl.src = 'data:image/png;base64,' + app.iconBase64;
+            if (iconEl && app.iconUrl && iconEl.getAttribute('src') !== app.iconUrl) {
+                iconEl.src = app.iconUrl;
                 iconEl.style.display = 'block';
                 const placeholder = row.querySelector('.app-icon-placeholder');
                 if (placeholder) placeholder.style.display = 'none';
@@ -283,11 +286,11 @@
         row.className = 'app-row';
         row.dataset.processName = app.rawProcessName;
 
-        const hasIcon = app.iconBase64 && app.iconBase64.length > 0;
+        const hasIcon = app.iconUrl && app.iconUrl.length > 0;
 
         row.innerHTML = `
             ${hasIcon 
-                ? `<img src="data:image/png;base64,${app.iconBase64}" class="app-icon" alt="">` 
+                ? `<img src="${app.iconUrl}" class="app-icon" alt="">` 
                 : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${app.name}">`
             }
             <div class="app-info">
@@ -360,7 +363,9 @@
     }
 
     function isSliderActive(slider) {
-        return slider.matches(':active') || document.activeElement === slider;
+        if (slider.matches(':active') || document.activeElement === slider) return true;
+        // Prevent snapping back by ignoring server updates for 1500ms after ANY user interaction
+        return (Date.now() - window.lastGlobalInteraction) < 1500;
     }
 
     function debounceSend(key, fn, ms) {
@@ -461,6 +466,17 @@
     // --- Initialise ---
     // Initialise slider fills
     document.querySelectorAll('.volume-slider, .seek-slider').forEach(updateSliderFill);
+
+    // Track interactions globally to completely prevent any snapping while the user is active
+    window.lastGlobalInteraction = 0;
+    const registerInteraction = () => { window.lastGlobalInteraction = Date.now(); };
+    document.addEventListener('mousedown', registerInteraction, true);
+    document.addEventListener('touchstart', registerInteraction, { passive: true, capture: true });
+    document.addEventListener('mouseup', registerInteraction, true);
+    document.addEventListener('touchend', registerInteraction, { passive: true, capture: true });
+    document.addEventListener('touchcancel', registerInteraction, { passive: true, capture: true });
+    document.addEventListener('input', registerInteraction, true);
+    document.addEventListener('change', registerInteraction, true);
 
     // --- Theme Toggle ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
