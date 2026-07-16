@@ -599,13 +599,6 @@ namespace SoundBar.ViewModels
                     }
                 }
             });
-
-            // Ensure Companion Server is always disabled on launch for safety/resources
-            if (_settingsService.Settings.EnableCompanionServer)
-            {
-                _settingsService.Settings.EnableCompanionServer = false;
-                _settingsService.SaveSettings();
-            }
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -860,7 +853,7 @@ namespace SoundBar.ViewModels
                             {
                                 if (activePid > 0)
                                 {
-                                    var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
                                     activeProcessName = proc.ProcessName;
                                 }
                             }
@@ -1535,6 +1528,10 @@ namespace SoundBar.ViewModels
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();
             _pollingCts = null;
+
+            _masterVolumeDebounce?.Cancel();
+            _masterVolumeDebounce?.Dispose();
+            _masterVolumeDebounce = null;
 
             _progressTimer?.Stop();
 

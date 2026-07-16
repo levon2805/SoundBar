@@ -266,6 +266,8 @@ namespace SoundBar.Services
 
             _clients.Clear();
             _pairedClients.Clear();
+            _iconCache.Clear();
+            _failedAttempts.Clear();
             IsRunning = false;
             
             _cts?.Dispose();
@@ -388,11 +390,12 @@ namespace SoundBar.Services
 
                 if (path == "/api/albumart")
                 {
-                    if (_currentAlbumArtBytes != null)
+                    var artBytes = _currentAlbumArtBytes; // Snapshot to avoid race condition during song change
+                    if (artBytes != null)
                     {
                         context.Response.ContentType = "image/jpeg";
-                        context.Response.ContentLength64 = _currentAlbumArtBytes.Length;
-                        context.Response.OutputStream.Write(_currentAlbumArtBytes, 0, _currentAlbumArtBytes.Length);
+                        context.Response.ContentLength64 = artBytes.Length;
+                        context.Response.OutputStream.Write(artBytes, 0, artBytes.Length);
                     }
                     else
                     {
@@ -714,11 +717,26 @@ namespace SoundBar.Services
 
         private async Task BroadcastLoopAsync(CancellationToken ct)
         {
+            int tickCount = 0;
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
                     await Task.Delay(500, ct);
+                    tickCount++;
+
+                    // Periodically prune expired brute-force lockout entries (every ~30 seconds)
+                    if (tickCount % 60 == 0)
+                    {
+                        var now = DateTime.Now;
+                        foreach (var kvp in _failedAttempts)
+                        {
+                            if (kvp.Value.LockoutEnd < now)
+                            {
+                                _failedAttempts.TryRemove(kvp.Key, out _);
+                            }
+                        }
+                    }
 
                     if (_pairedClients.IsEmpty) continue;
 
@@ -868,7 +886,7 @@ namespace SoundBar.Services
             _currentTitle = e.Title;
             _currentArtist = e.Artist;
 
-            // Convert album art thumbnail to base64 JPEG
+            // Convert album art thumbnail to raw bytes for HTTP serving
             if (e.Thumbnail != null)
             {
                 _ = ConvertThumbnailAsync(e.Thumbnail);
@@ -935,8 +953,7 @@ namespace SoundBar.Services
         {
             _mediaInfoService.MediaInfoChanged -= OnMediaInfoChanged;
             _mediaInfoService.TimelineInfoChanged -= OnTimelineInfoChanged;
-            Stop();
-            _cts?.Dispose();
+            Stop(); // Stop() already disposes _cts and sets it to null
         }
     }
 }

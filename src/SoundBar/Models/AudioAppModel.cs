@@ -312,6 +312,7 @@ namespace SoundBar.Models
         public void Dispose()
         {
             _volumeDebounce?.Cancel();
+            _volumeDebounce?.Dispose();
             _volumeDebounce = null;
         }
 

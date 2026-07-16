@@ -1,6 +1,7 @@
 using CSCore.CoreAudioAPI;
 using SoundBar.Models;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -14,7 +15,7 @@ namespace SoundBar.Services
     /// </summary>
     internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
-        private readonly Dictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
+        private readonly ConcurrentDictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
         private readonly MMDeviceEnumerator _enumerator;
 
         public WindowsAudioMixerService()
@@ -179,7 +180,7 @@ namespace SoundBar.Services
             {
                 if (!seenProcessIdsThisTick.Contains(id))
                 {
-                    _processCache.Remove(id);
+                    _processCache.TryRemove(id, out _);
                 }
             }
 
