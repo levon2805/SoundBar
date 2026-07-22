@@ -1,5 +1,7 @@
 # SoundBar
 
+A sleek, customisable, and powerful audio mixer overlay for Windows, built natively with the Windows App SDK (WinUI 3). 
+
 ## How it looks!
 <p align="center">
   <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/f109dd51-1771-4fb3-b68e-f0a8d6367e25" />
@@ -7,23 +9,36 @@
   <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/61a8ca16-11a7-4436-954b-094548ef6af0" />
 </p>
 
-
 ## Features
+
+### Core Audio Control
 * **Individual App Control:** Granular volume control over every active application on your PC.
-* **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
-* **Master Volume:** Control your entire system's audio.
-* **Music Player Mode:** A beautiful, full-sized music player view that pulls in album artwork and provides a scrubbable timeline for the currently playing song.
-* **Global Media Controls:** Convenient buttons at the bottom of the app to play, pause, skip, and mute system audio.
+* **Master Volume:** Command your entire system's audio from one slider.
 * **Output Device Switching:** Seamlessly change your default Windows playback device directly from the overlay.
+* **Global Media Controls:** Convenient buttons at the bottom of the app to play, pause, skip, and mute system audio.
+* **Music Player Mode:** A beautiful, full-sized music player view that pulls in album artwork and provides a scrubbable timeline for the currently playing song.
+
+### Mobile Companion App
+* **Remote Control:** Control your PC's audio mixer, media playback, and output devices directly from your smartphone or tablet over your local network.
+* **Progressive Web App (PWA):** Install the companion directly onto your phone's home screen for a native app experience.
+* **Real-Time Sync:** Volume and media state instantly synchronise between your PC and mobile device.
+* **Secure Pairing:** Connect safely via a rotating 4-digit security code and dynamic QR code generation.
+
+### Personalisation & UI
 * **Light & Dark Themes:** Fully supports Windows 11 native light, dark, and system themes, letting you customise the look to your exact preference.
-* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper. (Link to folder in settings)
+* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper.
 * **Smart Dimming:** Background dimming elegantly shifts to ensure text remains perfectly readable whether you use Light or Dark mode.
-* **Hearing Protection:** An optional excessive loudness warning helps you protect your ears if the volume stays high for too long.
-* **Always-on-Top & Start at Login:** Pin the SoundBar overlay above all other windows, and optionally have it run quietly in the background when your PC starts up.
-* **Do Not Disturb:** One-click toggle to mute all system notification sounds when you need peace and quiet.
+* **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
+
+### Advanced Features
+* **Customisable Hotkeys:** Focused on a game or meeting? Quickly adjust your focused application's volume with custom global hotkeys!
 * **App Blacklist:** Hide specific applications from your mixer interface to reduce clutter.
 * **Background Audio Controls:** Automatically captures invisible background services and allows you to optionally expose and control them.
-* **Customisable Hotkeys:** Focused on a game or meeting? Quickly adjust your focused applications volume with custom hotkeys!
+* **Hearing Protection:** An optional excessive loudness warning helps protect your ears if the volume stays high for an extended period.
+* **Do Not Disturb:** A one-click toggle to mute all system notification sounds when you need peace and quiet.
+* **Always-on-Top & Start at Login:** Pin the SoundBar overlay above all other windows, and optionally have it run quietly in the background when your PC starts up.
+
+### Convenience
 * **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a neat, 1-click update button.
 * **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek interface with smooth, responsive controls.
 
@@ -33,14 +48,15 @@ The application is built as a completely self-contained, portable `.exe`. You do
 1. Go to the [Releases](../../releases) tab on the right side of this GitHub repository.
 2. Download the latest `SoundBar.zip` file.
 3. Extract the folder anywhere on your computer.
-4. Double click `SoundBar.exe` to run the app!
+4. Double-click `SoundBar.exe` to run the app!
 
 > **Note on Windows SmartScreen:** Because this is a new open-source application, Windows may show a "Windows protected your PC" warning when you first run the app. This is completely normal for new independent software. To run the app, simply click **"More info"** and then **"Run anyway"**.
 
 ## Development Setup
-This project has recently been refactored into a multi-project enterprise structure:
-* `src/SoundBar/` contains the WinUI 3 application.
+This project uses a modern multi-project enterprise structure:
+* `src/SoundBar/` contains the main WinUI 3 application.
 * `tests/SoundBar.Tests/` contains the xUnit automated tests.
+* `ReleaseTools/` contains internal deployment utilities.
 
 Open `SoundBar.slnx` or `src/SoundBar/SoundBar.csproj` in Visual Studio 2022 to get started.
 
