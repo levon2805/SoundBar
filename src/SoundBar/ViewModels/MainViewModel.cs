@@ -1504,6 +1504,30 @@ namespace SoundBar.ViewModels
             }
         }
 
+        public void OpenSettingsFile()
+        {
+            try
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string folder = System.IO.Path.Combine(appData, "SoundBar");
+                string filePath = System.IO.Path.Combine(folder, "config.json");
+                
+                if (System.IO.File.Exists(filePath))
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = filePath,
+                        UseShellExecute = true
+                    };
+                    System.Diagnostics.Process.Start(psi);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to open config file: {ex.Message}");
+            }
+        }
+
         public void OpenReleaseNotes()
         {
             try

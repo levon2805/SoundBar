@@ -674,6 +674,24 @@
                                 </StackPanel>
                             </StackPanel>
                         </Expander>
+
+                        <!-- Advanced Configuration -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Expander.Header>
+                                <TextBlock Text="Advanced Configuration" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel Spacing="15">
+                                <StackPanel>
+                                    <TextBlock Text="Modify hidden settings directly via the config file. (e.g. CompanionServerPort). A restart of the application is required to apply changes." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <Button Content="Open config.json" 
+                                            Click="{x:Bind ViewModel.OpenSettingsFile}" 
+                                            Background="{ThemeResource ControlFillColorDefaultBrush}" 
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                            BorderThickness="1"
+                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

@@ -728,6 +728,7 @@ namespace SoundBar.Views
 
                 AddCategoryHeader("General");
                 AddExpander("System Integration");
+                AddExpander("Advanced Configuration");
                 AddExpander("About & Updates", aboutExpander);
 
                 // Companion button moved to XAML
