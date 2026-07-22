@@ -735,6 +735,11 @@ namespace SoundBar.ViewModels
             }
         }
 
+        public void ForceRefreshAudioSessions()
+        {
+            _audioService.ClearCache();
+        }
+
         public void OpenBackgroundFolder()
         {
             try

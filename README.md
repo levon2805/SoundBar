@@ -1,13 +1,10 @@
 # SoundBar
 
 ## How it looks!
-(Note: This is with my custom background, showing off the potential!)
-
-
 <p align="center">
-  <img alt="Home" src="https://github.com/user-attachments/assets/30a1ccfd-ddf6-4eda-88fe-06bb4cbb5f56" width="30%" />
-  <img alt="SettingsMenu" src="https://github.com/user-attachments/assets/2e9dae97-62c0-49f2-827b-48f65a495014" width="30%" />
-  <img alt="MediaPlayer" src="https://github.com/user-attachments/assets/e40498c5-f609-4bfd-a5f4-55d4cfc0a76b" width="30%" />
+  <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/f109dd51-1771-4fb3-b68e-f0a8d6367e25" />
+  <img width="30%" height="471" alt="image" src="https://github.com/user-attachments/assets/88ce2b7e-2506-4699-a645-7f55477b24ce" />
+  <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/61a8ca16-11a7-4436-954b-094548ef6af0" />
 </p>
 
 
@@ -19,13 +16,14 @@
 * **Global Media Controls:** Convenient buttons at the bottom of the app to play, pause, skip, and mute system audio.
 * **Output Device Switching:** Seamlessly change your default Windows playback device directly from the overlay.
 * **Light & Dark Themes:** Fully supports Windows 11 native light, dark, and system themes, letting you customise the look to your exact preference.
-* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper.
+* **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper. (Link to folder in settings)
 * **Smart Dimming:** Background dimming elegantly shifts to ensure text remains perfectly readable whether you use Light or Dark mode.
 * **Hearing Protection:** An optional excessive loudness warning helps you protect your ears if the volume stays high for too long.
 * **Always-on-Top & Start at Login:** Pin the SoundBar overlay above all other windows, and optionally have it run quietly in the background when your PC starts up.
 * **Do Not Disturb:** One-click toggle to mute all system notification sounds when you need peace and quiet.
 * **App Blacklist:** Hide specific applications from your mixer interface to reduce clutter.
 * **Background Audio Controls:** Automatically captures invisible background services and allows you to optionally expose and control them.
+* **Customisable Hotkeys:** Focused on a game or meeting? Quickly adjust your focused applications volume with custom hotkeys!
 * **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a neat, 1-click update button.
 * **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek interface with smooth, responsive controls.
 

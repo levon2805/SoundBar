@@ -356,6 +356,11 @@ namespace SoundBar.Views
             }
         }
 
+        private void RefreshApps_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ForceRefreshAudioSessions();
+        }
+
         // Triggered when clicking the Hide button next to an app
         private void HideAppButton_Click(object sender, RoutedEventArgs e)
         {

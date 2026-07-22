@@ -61,8 +61,28 @@ namespace SoundBar.Services
                             seenProcessIdsThisTick.Add(processId);
 
                             // FAST PATH: Use cached process info (most ticks hit this)
-                            if (_processCache.TryGetValue(processId, out var cachedApp))
+                            bool hitCache = false;
+                            (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath, DateTime LastChecked) cachedApp = default;
+                            
+                            lock (_processCacheLock)
                             {
+                                hitCache = _processCache.TryGetValue(processId, out cachedApp);
+                            }
+
+                            if (hitCache)
+                            {
+                                // If it was previously a background app, it might have spawned a window now!
+                                // Re-evaluate every 5 seconds to catch games like Blue Prince that delay their window creation.
+                                if (cachedApp.IsBackground && (DateTime.Now - cachedApp.LastChecked).TotalSeconds > 5)
+                                {
+                                    bool stillBackground = CheckIfBackgroundProcess(cachedApp.RawProcessName);
+                                    lock (_processCacheLock)
+                                    {
+                                        _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.Now);
+                                    }
+                                    cachedApp.IsBackground = stillBackground; // update local tuple
+                                }
+
                                 if (addedNames.Contains(cachedApp.DisplayName)) continue;
 
                                 sessions.Add(new AudioSessionData
@@ -152,7 +172,10 @@ namespace SoundBar.Services
                             // Cache so we never run the slow path for this ProcessId again.
                             // We MUST do this before the addedNames check so secondary sessions get cached 
                             // and can respond to volume/mute commands!
-                            _processCache[processId] = (displayName, processName, isBackground, safeIconPath);
+                            lock (_processCacheLock)
+                            {
+                                _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.Now);
+                            }
 
                             // If we already have a slider for this display name, skip adding it to the UI list
                             if (addedNames.Contains(displayName)) continue;
@@ -175,7 +198,12 @@ namespace SoundBar.Services
             }
 
             // Cleanup dead processes from cache
-            var cachedIds = _processCache.Keys.ToList();
+            List<int> cachedIds;
+            lock (_processCacheLock)
+            {
+                cachedIds = _processCache.Keys.ToList();
+            }
+
             foreach (var id in cachedIds)
             {
                 if (!seenProcessIdsThisTick.Contains(id))
@@ -196,6 +224,40 @@ namespace SoundBar.Services
             {
                 volumeControl.MasterVolume = level;
             });
+        }
+
+        private bool CheckIfBackgroundProcess(string rawProcessName)
+        {
+            string safeName = rawProcessName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+            var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+            bool isBackground = true;
+            try
+            {
+                foreach (var p in procs)
+                {
+                    try
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            isBackground = false;
+                        }
+                    }
+                    catch { } // Ignore access denied
+                }
+            }
+            finally
+            {
+                foreach (var p in procs) p.Dispose();
+            }
+            return isBackground;
+        }
+
+        public void ClearCache()
+        {
+            lock (_processCacheLock)
+            {
+                _processCache.Clear();
+            }
         }
 
         /// <summary>
@@ -375,8 +437,17 @@ namespace SoundBar.Services
                                 int processId = sessionControl.ProcessID;
                                 if (processId == 0) continue;
 
-                                if (_processCache.TryGetValue(processId, out var cached) &&
-                                    string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                bool matchFound = false;
+                                lock (_processCacheLock)
+                                {
+                                    if (_processCache.TryGetValue(processId, out var cached) &&
+                                        string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        matchFound = true;
+                                    }
+                                }
+
+                                if (matchFound)
                                 {
                                     action(simpleVolume);
                                 }
