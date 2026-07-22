@@ -127,5 +127,38 @@ namespace SoundBar.Tests
             // Assert
             Assert.False(service.Settings.RunAtStartup);
         }
+
+        // --- New v3.0.0 Tests ---
+
+        [Fact]
+        public void SaveAndLoad_CompanionServerSettings_PersistsCorrectly()
+        {
+            // Arrange
+            var service1 = new SettingsService(_testFilePath);
+            service1.Settings.EnableCompanionServer = true;
+            service1.Settings.CompanionServerPort = 8080;
+            service1.Settings.ShowMediaControls = false;
+
+            // Act
+            service1.SaveSettings();
+            var service2 = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.True(service2.Settings.EnableCompanionServer);
+            Assert.Equal(8080, service2.Settings.CompanionServerPort);
+            Assert.False(service2.Settings.ShowMediaControls);
+        }
+
+        [Fact]
+        public void Load_DefaultSettings_CompanionServerIsConfiguredProperly()
+        {
+            // Arrange & Act
+            var service = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.False(service.Settings.EnableCompanionServer); // Default off
+            Assert.Equal(6767, service.Settings.CompanionServerPort); // Default port
+            Assert.True(service.Settings.ShowMediaControls); // Default on
+        }
     }
 }

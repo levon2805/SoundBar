@@ -280,19 +280,12 @@ namespace SoundBar.Views
             _settingsService.SaveSettings();
         }
 
-        // Updates the pin icon colour based on state
+        // Updates the pin icon visual based on state
         private void UpdatePinButtonVisual(bool isPinned)
         {
             if (PinButton != null)
             {
-                if (isPinned)
-                {
-                    PinButton.Foreground = new SolidColorBrush(Colors.White);
-                }
-                else
-                {
-                    PinButton.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 85, 85, 85));
-                }
+                PinButton.Opacity = isPinned ? 1.0 : 0.4;
             }
         }
 
@@ -488,6 +481,16 @@ namespace SoundBar.Views
             UpdatePinButtonVisual(isPinned);
         }
 
+        private void CompanionButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.IsCompanionViewMode = !ViewModel.IsCompanionViewMode;
+        }
+
+        private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.StopCompanionServer();
+        }
+
         private void SetTopmost(bool topmost)
         {
             if (_appWindow.Presenter is OverlappedPresenter presenter)
@@ -560,22 +563,6 @@ namespace SoundBar.Views
         {
             try
             {
-                // Traverse the visual tree to find all ScrollViewers
-                var scrollViewers = new System.Collections.Generic.List<ScrollViewer>();
-                FindVisualChildren(this.Content, scrollViewers);
-                
-                // The settings ScrollViewer is the one containing a StackPanel
-                StackPanel? settingsPanel = null;
-                
-                foreach (var sv in scrollViewers)
-                {
-                    if (sv.Content is StackPanel sp)
-                    {
-                        settingsPanel = sp;
-                        break;
-                    }
-                }
-
                 // Also find the ItemsControl that holds our Audio Apps
                 var itemsControls = new System.Collections.Generic.List<ItemsControl>();
                 FindVisualChildren(this.Content, itemsControls);
@@ -588,9 +575,10 @@ namespace SoundBar.Views
                     }
                 }
 
+                var settingsPanel = DynamicSettingsStackPanel;
                 if (settingsPanel == null) return;
 
-                // 1. About & Updates Expander (Top)
+                // About & Updates Expander (Top)
                 var aboutExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -605,7 +593,7 @@ namespace SoundBar.Views
                 aboutStack.Children.Add(releaseNotesBtn);
                 aboutExpander.Content = aboutStack;
                 
-                // 2. Global Hotkeys Expander
+                // Global Hotkeys Expander
                 var keybindsExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -642,7 +630,7 @@ namespace SoundBar.Views
                 
                 keybindsExpander.Content = keybindsStack;
                 
-                // 3. Do Not Disturb Expander
+                // Do Not Disturb Expander
                 var dndExpander = new Expander
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -745,7 +733,10 @@ namespace SoundBar.Views
 
                 AddCategoryHeader("General");
                 AddExpander("System Integration");
+                AddExpander("Advanced Configuration");
                 AddExpander("About & Updates", aboutExpander);
+
+                // Companion button moved to XAML
             }
             catch (Exception ex)
             {
@@ -765,5 +756,6 @@ namespace SoundBar.Views
                 FindVisualChildren(child, results);
             }
         }
+
     }
 }

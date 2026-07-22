@@ -9,6 +9,7 @@
     <IsTestProject>true</IsTestProject>
     <Platforms>AnyCPU;x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <WindowsSdkPackageVersion>10.0.19041.38</WindowsSdkPackageVersion>
   </PropertyGroup>
 
   <ItemGroup>

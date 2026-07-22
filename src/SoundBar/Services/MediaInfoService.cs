@@ -45,6 +45,11 @@ namespace SoundBar.Services
             }
         }
 
+        public void Refresh()
+        {
+            UpdateSession();
+        }
+
         private void SessionManager_CurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
         {
             UpdateSession();

@@ -24,6 +24,7 @@ namespace SoundBar.ViewModels
         private readonly UpdateService _updateService;
         private readonly MediaInfoService _mediaInfoService;
         private readonly HotkeyService _hotkeyService;
+        private CompanionServerService? _companionServer;
 
         /// <summary>
         /// A list of application executable names that the user prefers to keep out of sight.
@@ -263,6 +264,117 @@ namespace SoundBar.ViewModels
                     _settingsService.SaveSettings();
                 }
             }
+        }
+
+        // Companion Server Properties
+        public bool IsCompanionServerRunning => _companionServer?.IsRunning ?? false;
+
+        public string CompanionServerUrl => _companionServer?.GetConnectionUrl() ?? $"http://localhost:{_settingsService.Settings.CompanionServerPort}";
+
+        public string CompanionPairingCode => _companionServer?.PairingCode ?? "--";
+
+        public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
+        public string CompanionClientText => CompanionConnectedClients > 0 ? $"{CompanionConnectedClients} client(s) connected" : "Waiting for connection...";
+
+        public Uri? CompanionQrUrl
+        {
+            get
+            {
+                if (!IsCompanionServerRunning || string.IsNullOrEmpty(CompanionServerUrl)) return null;
+                return new Uri($"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={Uri.EscapeDataString(CompanionServerUrl)}&bgcolor=1a1a1a&color=ffffff&margin=10");
+            }
+        }
+
+        public bool EnableCompanionServer
+        {
+            get => _settingsService.Settings.EnableCompanionServer;
+            set
+            {
+                if (_settingsService.Settings.EnableCompanionServer != value)
+                {
+                    _settingsService.Settings.EnableCompanionServer = value;
+                    OnPropertyChanged();
+                    _settingsService.SaveSettings();
+
+                    if (value)
+                        StartCompanionServer();
+                    else
+                        StopCompanionServer();
+                }
+            }
+        }
+
+        public void StartCompanionServer()
+        {
+            if (_companionServer != null && _companionServer.IsRunning) return;
+
+            _companionServer = new CompanionServerService(
+                _audioService,
+                _mediaInfoService,
+                () => Apps,
+                () => AudioDevices,
+                () => SelectedAudioDevice,
+                (deviceId) =>
+                {
+                    _dispatcherQueue.TryEnqueue(() =>
+                    {
+                        var device = AudioDevices.FirstOrDefault(d => d.Id == deviceId);
+                        if (device != null)
+                        {
+                            SelectedAudioDevice = device;
+                        }
+                    });
+                },
+                _settingsService.Settings.CompanionServerPort
+            );
+
+            _companionServer.StateChanged += () =>
+            {
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    OnPropertyChanged(nameof(IsCompanionServerRunning));
+                    OnPropertyChanged(nameof(CompanionServerUrl));
+                    OnPropertyChanged(nameof(CompanionPairingCode));
+                    OnPropertyChanged(nameof(CompanionConnectedClients));
+                    OnPropertyChanged(nameof(CompanionClientText));
+                    OnPropertyChanged(nameof(CompanionQrUrl));
+                    OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+                    OnPropertyChanged(nameof(CompanionActiveUiVisibility));
+                });
+            };
+
+            _companionServer.Start();
+            OnPropertyChanged(nameof(IsCompanionServerRunning));
+            OnPropertyChanged(nameof(CompanionServerUrl));
+            OnPropertyChanged(nameof(CompanionPairingCode));
+            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
+            OnPropertyChanged(nameof(CompanionClientText));
+            OnPropertyChanged(nameof(CompanionQrUrl));
+        }
+
+        public void StopCompanionServer()
+        {
+            if (_companionServer != null)
+            {
+                _companionServer.Dispose();
+                _companionServer = null;
+            }
+
+            // Ensure settings are synced
+            if (_settingsService.Settings.EnableCompanionServer)
+            {
+                _settingsService.Settings.EnableCompanionServer = false;
+                _settingsService.SaveSettings();
+                OnPropertyChanged(nameof(EnableCompanionServer));
+            }
+
+            OnPropertyChanged(nameof(IsCompanionServerRunning));
+            OnPropertyChanged(nameof(CompanionConnectedClients));
+            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
+            OnPropertyChanged(nameof(CompanionClientText));
+            OnPropertyChanged(nameof(CompanionQrUrl));
         }
 
         // Timestamp for Master Volume
@@ -664,8 +776,8 @@ namespace SoundBar.ViewModels
             _pollingCts = new System.Threading.CancellationTokenSource();
             var token = _pollingCts.Token;
 
-            // Create the thread
-            var thread = new Thread(() =>
+            // Use the .NET Thread Pool instead of dedicating a raw OS thread
+            _ = Task.Run(async () =>
             {
                 // Loop forever to keep checking for changes
                 while (!token.IsCancellationRequested)
@@ -746,7 +858,7 @@ namespace SoundBar.ViewModels
                             {
                                 if (activePid > 0)
                                 {
-                                    var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
                                     activeProcessName = proc.ProcessName;
                                 }
                             }
@@ -782,24 +894,16 @@ namespace SoundBar.ViewModels
                         // Ignore errors for now
                     }
 
-                    // Poll every 1 second but respond to cancellation quickly
-                    int slept = 0;
-                    while (slept < 1000 && !token.IsCancellationRequested)
+                    try
                     {
-                        Thread.Sleep(100);
-                        slept += 100;
+                        await Task.Delay(1000, token);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        break;
                     }
                 }
             });
-
-            // Force thread to be MTA
-            thread.SetApartmentState(ApartmentState.MTA);
-
-            // Make this a background thread so it dies when the App closes
-            thread.IsBackground = true;
-
-            // Start the thread
-            thread.Start();
         }
 
         private void HandleAliasChanged(string rawProcessName, string newAlias)
@@ -1097,7 +1201,7 @@ namespace SoundBar.ViewModels
             }
         }
 
-        // --- Music Player Mode ---
+        // --- View Modes ---
         private bool _isMusicPlayerMode = false;
         public bool IsMusicPlayerMode
         {
@@ -1107,6 +1211,8 @@ namespace SoundBar.ViewModels
                 if (_isMusicPlayerMode != value)
                 {
                     _isMusicPlayerMode = value;
+                    if (value) IsCompanionViewMode = false; // Turn off companion view if turning on music player
+                    
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MusicPlayerViewVisibility));
                     OnPropertyChanged(nameof(MixerViewVisibility));
@@ -1114,8 +1220,31 @@ namespace SoundBar.ViewModels
             }
         }
 
+        private bool _isCompanionViewMode = false;
+        public bool IsCompanionViewMode
+        {
+            get => _isCompanionViewMode;
+            set
+            {
+                if (_isCompanionViewMode != value)
+                {
+                    _isCompanionViewMode = value;
+                    if (value) IsMusicPlayerMode = false; // Turn off music player if turning on companion view
+                    
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CompanionViewVisibility));
+                    OnPropertyChanged(nameof(MixerViewVisibility));
+                }
+            }
+        }
+
         public Microsoft.UI.Xaml.Visibility MusicPlayerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        public Microsoft.UI.Xaml.Visibility CompanionViewVisibility => IsCompanionViewMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => (IsMusicPlayerMode || IsCompanionViewMode) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        
+        // Companion Server UI states (Power button vs QR code)
+        public Microsoft.UI.Xaml.Visibility CompanionPowerButtonVisibility => IsCompanionServerRunning ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        public Microsoft.UI.Xaml.Visibility CompanionActiveUiVisibility => IsCompanionServerRunning ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         private string _currentSongTitle = "Not Playing";
         public string CurrentSongTitle
@@ -1380,6 +1509,30 @@ namespace SoundBar.ViewModels
             }
         }
 
+        public void OpenSettingsFile()
+        {
+            try
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string folder = System.IO.Path.Combine(appData, "SoundBar");
+                string filePath = System.IO.Path.Combine(folder, "config.json");
+                
+                if (System.IO.File.Exists(filePath))
+                {
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = filePath,
+                        UseShellExecute = true
+                    };
+                    System.Diagnostics.Process.Start(psi);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to open config file: {ex.Message}");
+            }
+        }
+
         public void OpenReleaseNotes()
         {
             try
@@ -1399,9 +1552,15 @@ namespace SoundBar.ViewModels
 
         public void Dispose()
         {
+            _companionServer?.Dispose();
+
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();
             _pollingCts = null;
+
+            _masterVolumeDebounce?.Cancel();
+            _masterVolumeDebounce?.Dispose();
+            _masterVolumeDebounce = null;
 
             _progressTimer?.Stop();
 
