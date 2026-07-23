@@ -15,7 +15,7 @@ namespace SoundBar.Services
     /// </summary>
     internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
-        private readonly ConcurrentDictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath)> _processCache = new();
+        private readonly ConcurrentDictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath, DateTime LastChecked)> _processCache = new();
         private readonly MMDeviceEnumerator _enumerator;
 
         public WindowsAudioMixerService()
@@ -64,10 +64,7 @@ namespace SoundBar.Services
                             bool hitCache = false;
                             (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath, DateTime LastChecked) cachedApp = default;
                             
-                            lock (_processCacheLock)
-                            {
-                                hitCache = _processCache.TryGetValue(processId, out cachedApp);
-                            }
+                            hitCache = _processCache.TryGetValue(processId, out cachedApp);
 
                             if (hitCache)
                             {
@@ -76,10 +73,7 @@ namespace SoundBar.Services
                                 if (cachedApp.IsBackground && (DateTime.Now - cachedApp.LastChecked).TotalSeconds > 5)
                                 {
                                     bool stillBackground = CheckIfBackgroundProcess(cachedApp.RawProcessName);
-                                    lock (_processCacheLock)
-                                    {
-                                        _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.Now);
-                                    }
+                                    _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.Now);
                                     cachedApp.IsBackground = stillBackground; // update local tuple
                                 }
 
@@ -172,10 +166,7 @@ namespace SoundBar.Services
                             // Cache so we never run the slow path for this ProcessId again.
                             // We MUST do this before the addedNames check so secondary sessions get cached 
                             // and can respond to volume/mute commands!
-                            lock (_processCacheLock)
-                            {
-                                _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.Now);
-                            }
+                            _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.Now);
 
                             // If we already have a slider for this display name, skip adding it to the UI list
                             if (addedNames.Contains(displayName)) continue;
@@ -199,10 +190,7 @@ namespace SoundBar.Services
 
             // Cleanup dead processes from cache
             List<int> cachedIds;
-            lock (_processCacheLock)
-            {
-                cachedIds = _processCache.Keys.ToList();
-            }
+            cachedIds = _processCache.Keys.ToList();
 
             foreach (var id in cachedIds)
             {
@@ -254,10 +242,7 @@ namespace SoundBar.Services
 
         public void ClearCache()
         {
-            lock (_processCacheLock)
-            {
-                _processCache.Clear();
-            }
+            _processCache.Clear();
         }
 
         /// <summary>
@@ -438,13 +423,10 @@ namespace SoundBar.Services
                                 if (processId == 0) continue;
 
                                 bool matchFound = false;
-                                lock (_processCacheLock)
+                                if (_processCache.TryGetValue(processId, out var cached) &&
+                                    string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    if (_processCache.TryGetValue(processId, out var cached) &&
-                                        string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        matchFound = true;
-                                    }
+                                    matchFound = true;
                                 }
 
                                 if (matchFound)
