@@ -26,6 +26,8 @@ namespace SoundBar.Services
     {
         private HttpListener? _httpListener;
         private CancellationTokenSource? _cts;
+        private Task? _broadcastTask;
+        private Task? _acceptTask;
         private string? _lastBroadcastJson;
         private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
@@ -129,10 +131,10 @@ namespace SoundBar.Services
                 _mediaInfoService.Refresh();
 
                 // Start accepting connections on a background thread
-                _ = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
+                _acceptTask = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
 
                 // Broadcast state to all paired clients every 500ms via an async loop
-                _ = Task.Run(() => BroadcastLoopAsync(_cts.Token));
+                _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts.Token));
 
                 StateChanged?.Invoke();
             }
@@ -162,8 +164,8 @@ namespace SoundBar.Services
                     _httpListener.Start();
                     IsRunning = true;
 
-                    _ = Task.Run(() => AcceptConnectionsAsync(_cts!.Token));
-                    _ = Task.Run(() => BroadcastLoopAsync(_cts!.Token));
+                    _acceptTask = Task.Run(() => AcceptConnectionsAsync(_cts!.Token));
+                    _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts!.Token));
 
                     StateChanged?.Invoke();
                 }
@@ -199,7 +201,7 @@ namespace SoundBar.Services
                 };
                 var checkProc = System.Diagnostics.Process.Start(checkPsi);
                 string output = checkProc?.StandardOutput.ReadToEnd() ?? "";
-                checkProc?.WaitForExit();
+                checkProc?.WaitForExit(5000);
 
                 if (output.Contains("SoundBar Companion"))
                 {
@@ -234,6 +236,12 @@ namespace SoundBar.Services
             if (!IsRunning) return;
 
             _cts?.Cancel();
+
+            // Wait for background loops to exit so we don't race with dictionary iteration
+            try { _broadcastTask?.Wait(TimeSpan.FromSeconds(3)); } catch { }
+            try { _acceptTask?.Wait(TimeSpan.FromSeconds(1)); } catch { }
+            _broadcastTask = null;
+            _acceptTask = null;
 
             try
             {
@@ -530,13 +538,17 @@ namespace SoundBar.Services
                 // Disconnect if the client doesn't pair within 30 seconds (Prevents connection starvation)
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(30000, ct);
-                    if (ws.State == WebSocketState.Open && !_pairedClients.ContainsKey(clientId))
+                    try
                     {
-                        var timeoutMsg = JsonSerializer.Serialize(new { type = "error", message = "Pairing timeout. Please refresh the page." }, _jsonOptions);
-                        await SendTextAsync(ws, timeoutMsg, ct);
-                        await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Pairing timeout", ct);
+                        await Task.Delay(30000, ct);
+                        if (ws != null && ws.State == WebSocketState.Open && !_pairedClients.ContainsKey(clientId))
+                        {
+                            var timeoutMsg = JsonSerializer.Serialize(new { type = "error", message = "Pairing timeout. Please refresh the page." }, _jsonOptions);
+                            await SendTextAsync(ws, timeoutMsg, ct);
+                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Pairing timeout", ct);
+                        }
                     }
+                    catch { /* Server stopped or socket already disposed — safe to ignore */ }
                 }, ct);
 
                 // 4. DoS Protection - Payload Limits (Max 4KB per message)

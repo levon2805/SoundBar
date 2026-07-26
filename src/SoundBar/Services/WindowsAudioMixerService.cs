@@ -36,6 +36,8 @@ namespace SoundBar.Services
             // Track what ProcessIds we see this tick to clean up stale cache entries
             var seenProcessIdsThisTick = new HashSet<int>();
 
+            try
+            {
             // Get the default audio device
             using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             {
@@ -187,6 +189,11 @@ namespace SoundBar.Services
                     }
                 }
             }
+            }
+            catch (Exception)
+            {
+                // No audio device connected — return whatever sessions we've collected so far
+            }
 
             // Cleanup dead processes from cache
             List<int> cachedIds;
@@ -260,11 +267,15 @@ namespace SoundBar.Services
 
         public float GetMasterVolume()
         {
-            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
-            using (var volume = AudioEndpointVolume.FromDevice(device))
+            try
             {
-                return volume.MasterVolumeLevelScalar;
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using (var volume = AudioEndpointVolume.FromDevice(device))
+                {
+                    return volume.MasterVolumeLevelScalar;
+                }
             }
+            catch { return 0f; }
         }
 
         public void SetMasterVolume(float level)
@@ -281,11 +292,15 @@ namespace SoundBar.Services
 
         public bool GetMasterMute()
         {
-            using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
-            using (var volume = AudioEndpointVolume.FromDevice(device))
+            try
             {
-                return volume.IsMuted;
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using (var volume = AudioEndpointVolume.FromDevice(device))
+                {
+                    return volume.IsMuted;
+                }
             }
+            catch { return false; }
         }
 
         public void SetMasterMute(bool isMuted)
@@ -304,6 +319,8 @@ namespace SoundBar.Services
         
         public bool GetSystemSoundsMute()
         {
+            try
+            {
             using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
             using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
@@ -323,6 +340,8 @@ namespace SoundBar.Services
                     }
                 }
             }
+            }
+            catch { }
             return false;
         }
 
@@ -365,8 +384,10 @@ namespace SoundBar.Services
         {
             var result = new List<AudioDeviceModel>();
 
-            string defaultDeviceId = string.Empty;
-            using (var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+            try
+            {
+                string defaultDeviceId = string.Empty;
+                using (var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 {
                     if (defaultDevice != null)
                     {
@@ -387,6 +408,8 @@ namespace SoundBar.Services
                         device.Dispose(); // Dispose each individual device after processing
                     }
                 }
+            }
+            catch { /* No audio device available */ }
 
             return result;
         }

@@ -30,7 +30,7 @@ namespace SoundBar
             {
                 // We are a secondary instance! Send our launch args to the main instance
                 var currentArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-                mainInstance.RedirectActivationToAsync(currentArgs).AsTask().Wait();
+                mainInstance.RedirectActivationToAsync(currentArgs).AsTask().GetAwaiter().GetResult();
                 
                 // Terminate this duplicate instance
                 System.Environment.Exit(0);

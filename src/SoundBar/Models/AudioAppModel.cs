@@ -16,6 +16,7 @@ namespace SoundBar.Models
     public class AudioAppModel : INotifyPropertyChanged, IDisposable
     {
         private readonly IAudioMixerService _audioService;
+        private readonly DispatcherQueue? _dispatcherQueue;
 
         /// <summary>
         /// The OS-level process ID.
@@ -253,6 +254,7 @@ namespace SoundBar.Models
         public AudioAppModel(IAudioMixerService audioService)
         {
             _audioService = audioService;
+            _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         }
 
         /// <summary>
@@ -289,14 +291,20 @@ namespace SoundBar.Models
                 if (iconBytes != null)
                 {
                     // Hop back to the UI thread to construct the actual image.
-                    var dispatcher = DispatcherQueue.GetForCurrentThread();
-                    if (dispatcher != null)
+                    if (_dispatcherQueue != null)
                     {
-                        using var ms = new MemoryStream(iconBytes);
-                        using var ras = ms.AsRandomAccessStream();
-                        var bitmap = new BitmapImage();
-                        await bitmap.SetSourceAsync(ras);
-                        AppIcon = bitmap;
+                        _dispatcherQueue.TryEnqueue(async () =>
+                        {
+                            try
+                            {
+                                using var ms = new MemoryStream(iconBytes);
+                                using var ras = ms.AsRandomAccessStream();
+                                var bitmap = new BitmapImage();
+                                await bitmap.SetSourceAsync(ras);
+                                AppIcon = bitmap;
+                            }
+                            catch { }
+                        });
                     }
                 }
             }

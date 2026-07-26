@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v3.0.0";
+        public const string CurrentVersion = "v3.0.1";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -58,6 +58,7 @@ namespace SoundBar.Services
         /// </summary>
         internal static void SetTestMessageHandler(HttpMessageHandler handler)
         {
+            _httpClient?.Dispose();
             _httpClient = new HttpClient(handler);
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SoundBar", "1.0"));
         }
@@ -197,8 +198,13 @@ if "%ERRORLEVEL%"=="0" (
     goto waitloop
 )
 
-:: Copy all files from the extracted update to the current app directory, overwriting old ones
-xcopy "{{sourceDir}}\*" "{{currentAppDir}}\" /s /y /q
+:: Mirror the update into the app directory (copies new files, overwrites changed files, deletes orphaned files).
+:: /MIR = mirror, /XF = exclude files, /XD = exclude directories.
+:: We exclude config/user data that lives alongside the exe, and the update batch itself.
+robocopy "{{sourceDir}}" "{{currentAppDir}}" /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+
+:: Robocopy exit codes 0-7 are success; 8+ are errors. Reset to 0 so the batch continues.
+if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
 
 :: Clean up the temp directory
 rmdir /s /q "{{tempUpdateDir}}"
@@ -228,7 +234,9 @@ del "%~f0"
             Process.Start(processInfo);
 
             // Goodbye old version! The batch script will take it from here.
-            Environment.Exit(0);
+            // Use Application.Current.Exit() for a clean shutdown so Dispose chains run
+            // (keyboard hooks, companion server sockets, settings flush, etc.)
+            Microsoft.UI.Xaml.Application.Current.Exit();
         }
 
         // --- Helper classes just to read the GitHub API JSON ---
