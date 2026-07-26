@@ -299,7 +299,7 @@ namespace SoundBar.ViewModels
                     if (value)
                         StartCompanionServer();
                     else
-                        StopCompanionServer();
+                        StopCompanionServer(userExplicit: true);
                 }
             }
         }
@@ -355,14 +355,21 @@ namespace SoundBar.ViewModels
 
         public void StopCompanionServer()
         {
+            StopCompanionServer(userExplicit: false);
+        }
+
+        public void StopCompanionServer(bool userExplicit)
+        {
             if (_companionServer != null)
             {
                 _companionServer.Dispose();
                 _companionServer = null;
             }
 
-            // Ensure settings are synced
-            if (_settingsService.Settings.EnableCompanionServer)
+            // Only reset the saved preference if the user explicitly turned it off,
+            // NOT if the server crashed or port was unavailable. This preserves their
+            // preference so the server auto-starts again on next launch.
+            if (userExplicit && _settingsService.Settings.EnableCompanionServer)
             {
                 _settingsService.Settings.EnableCompanionServer = false;
                 _settingsService.SaveSettings();
@@ -483,9 +490,8 @@ namespace SoundBar.ViewModels
                     OnPropertyChanged(nameof(MasterVolumePercentage));
 
                     // Send command to Windows (DEBOUNCED to prevent COM/GC pressure when dragging)
-                    _masterVolumeDebounce?.Cancel();
-                    // Don't Dispose the old CTS immediately — the in-flight Task.Delay may still
-                    // reference its Token. Let the GC collect it after the task completes.
+                    var oldCts = _masterVolumeDebounce;
+                    oldCts?.Cancel();
                     _masterVolumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _masterVolumeDebounce.Token;
                     var capturedVolume = _masterVolume;
@@ -501,6 +507,11 @@ namespace SoundBar.ViewModels
                             }
                         }
                         catch (System.Threading.Tasks.TaskCanceledException) { }
+                        finally
+                        {
+                            // Now safe to dispose — the Task.Delay has completed or been cancelled
+                            oldCts?.Dispose();
+                        }
                     });
                 }
             }
@@ -695,7 +706,10 @@ namespace SoundBar.ViewModels
                     var files = System.IO.Directory.GetFiles(folder);
                     return files.FirstOrDefault(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                                                      f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                                     f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase));
+                                                     f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                                     f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) ||
+                                                     f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+                                                     f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
                 });
 
                 if (imagePath != null)
@@ -796,6 +810,19 @@ namespace SoundBar.ViewModels
                         // Get Do Not Disturb status
                         bool systemDnd = _audioService.GetSystemSoundsMute();
 
+                        // Resolve foreground process name on the background thread (avoids UI-thread Process allocations)
+                        uint activePid = Helpers.WindowHelper.GetForegroundProcessId();
+                        string activeProcessName = "";
+                        try
+                        {
+                            if (activePid > 0)
+                            {
+                                using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                                activeProcessName = proc.ProcessName;
+                            }
+                        }
+                        catch { }
+
                         // Update UI thread safely
                         _dispatcherQueue.TryEnqueue(() =>
                         {
@@ -852,18 +879,6 @@ namespace SoundBar.ViewModels
                             UpdateAudioDevices(audioDevices);
 
                             // Update Focus Outline (support multi-process apps like Discord)
-                            uint activePid = WindowHelper.GetForegroundProcessId();
-                            string activeProcessName = "";
-                            try
-                            {
-                                if (activePid > 0)
-                                {
-                                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
-                                    activeProcessName = proc.ProcessName;
-                                }
-                            }
-                            catch { }
-
                             foreach (var app in Apps)
                             {
                                 bool isMatch = false;
