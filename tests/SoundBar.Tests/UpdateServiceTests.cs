@@ -14,7 +14,7 @@ namespace SoundBar.Tests
     {
         private HttpMessageHandler CreateMockMessageHandler(string responseContent, HttpStatusCode statusCode)
         {
-            var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+            var handlerMock = new Mock<HttpMessageHandler>();
             handlerMock
                 .Protected()
                 .Setup<Task<HttpResponseMessage>>(

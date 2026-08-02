@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -13,17 +14,20 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <link rel="stylesheet" href="/style.css?v=4">
 </head>
+
 <body>
     <!-- Pairing Screen -->
     <div id="pairing-screen" class="screen active">
         <div class="pairing-container">
             <div class="pairing-icon">
-                <img src="/icons/icon-192.png" alt="SoundBar Icon" style="width: 72px; height: 72px; border-radius: 16px;">
+                <img src="/icons/icon-192.png" alt="SoundBar Icon"
+                    style="width: 72px; height: 72px; border-radius: 16px;">
             </div>
             <h1>SoundBar Remote</h1>
             <p class="pairing-subtitle">Enter the pairing code shown on your desktop</p>
             <div class="pairing-input-group">
-                <input type="text" id="pairing-code" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="----">
+                <input type="text" id="pairing-code" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+                    autocomplete="off" placeholder="----">
             </div>
             <button id="pair-btn" class="btn-primary" disabled>Connect</button>
             <div id="pairing-error" class="error-text"></div>
@@ -38,10 +42,15 @@
     <div id="app-screen" class="screen">
         <!-- Header -->
         <header class="app-header">
-            <div class="header-left" style="display: flex; align-items: center; gap: 8px; position: relative; z-index: 10;">
+            <div class="header-left"
+                style="display: flex; align-items: center; gap: 8px; position: relative; z-index: 10;">
                 <h1 class="app-title" style="margin: 0;">SoundBar</h1>
-                <button id="theme-toggle-btn" class="theme-btn" title="Toggle Theme" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; margin-left: 4px; border-radius: 50%; pointer-events: auto; touch-action: manipulation; position: relative; z-index: 999;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="moon-icon" style="pointer-events: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <button id="theme-toggle-btn" class="theme-btn" title="Toggle Theme"
+                    style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 8px; margin-left: 4px; border-radius: 50%; pointer-events: auto; touch-action: manipulation; position: relative; z-index: 999;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="moon-icon" style="pointer-events: none;">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
                 </button>
             </div>
             <div class="header-right">
@@ -53,10 +62,20 @@
         <!-- Master Volume -->
         <section class="card master-card">
             <div class="card-header">
-                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></span>
+                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                    </svg></span>
                 <span class="card-title">Master Volume</span>
                 <button id="master-mute-btn" class="mute-btn" title="Mute">
-                    <span class="mute-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg></span>
+                    <span class="mute-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                        </svg></span>
                 </button>
             </div>
             <div class="slider-row">
@@ -70,7 +89,12 @@
             <div class="now-playing-content">
                 <div id="album-art-container" class="album-art-container">
                     <img id="album-art" src="" alt="Album Art">
-                    <div class="album-art-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>
+                    <div class="album-art-placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18V5l12-2v13"></path>
+                            <circle cx="6" cy="18" r="3"></circle>
+                            <circle cx="18" cy="16" r="3"></circle>
+                        </svg></div>
                 </div>
                 <div class="now-playing-info">
                     <div id="song-title" class="song-title">No music playing</div>
@@ -85,16 +109,39 @@
                 </div>
             </div>
             <div class="media-controls">
-                <button id="prev-btn" class="media-btn" title="Previous"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"></line></svg></button>
-                <button id="play-pause-btn" class="media-btn media-btn-primary" title="Play/Pause"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>
-                <button id="next-btn" class="media-btn" title="Next"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"></line></svg></button>
+                <button id="prev-btn" class="media-btn" title="Previous"><svg width="20" height="20" viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                        <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"></line>
+                    </svg></button>
+                <button id="play-pause-btn" class="media-btn media-btn-primary" title="Play/Pause"><svg width="20"
+                        height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg></button>
+                <button id="next-btn" class="media-btn" title="Next"><svg width="20" height="20" viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                        <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"></line>
+                    </svg></button>
             </div>
         </section>
 
         <!-- App Sliders -->
         <section class="card apps-card">
             <div class="card-header">
-                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></span>
+                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="4" y1="21" x2="4" y2="14"></line>
+                        <line x1="4" y1="10" x2="4" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12" y2="3"></line>
+                        <line x1="20" y1="21" x2="20" y2="16"></line>
+                        <line x1="20" y1="12" x2="20" y2="3"></line>
+                        <line x1="1" y1="14" x2="7" y2="14"></line>
+                        <line x1="9" y1="8" x2="15" y2="8"></line>
+                        <line x1="17" y1="16" x2="23" y2="16"></line>
+                    </svg></span>
                 <span class="card-title">Applications</span>
             </div>
             <div id="apps-list" class="apps-list">
@@ -105,15 +152,42 @@
         <!-- Device Switcher -->
         <section class="card device-card">
             <div class="card-header">
-                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg></span>
+                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                        <path
+                            d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z">
+                        </path>
+                    </svg></span>
                 <span class="card-title">Output Device</span>
             </div>
             <select id="device-select" class="device-select">
                 <option value="">Loading devices...</option>
             </select>
         </section>
+
+        <!-- Input Device Switcher -->
+        <section class="card device-card">
+            <div class="card-header">
+                <span class="card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg></span>
+                <span class="card-title">Input Device</span>
+                <button id="input-mute-btn" class="mute-btn" title="Mute Microphone">
+                    <span class="mute-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>
+                </button>
+            </div>
+            <select id="input-device-select" class="device-select" style="margin-top: 12px;">
+                <option value="">Loading microphones...</option>
+            </select>
+        </section>
     </div>
 
-    <script src="/app.js?v=11"></script>
+    <script src="/app.js?v=12"></script>
 </body>
+
 </html>

@@ -24,7 +24,9 @@
         pause: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`,
         link: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: sub; margin-right: 4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`,
         sun: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
-        moon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
+        moon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
+        mic: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`,
+        micMuted: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`
     };
 
     // --- DOM References ---
@@ -50,6 +52,8 @@
     const nextBtn = document.getElementById('next-btn');
     const appsList = document.getElementById('apps-list');
     const deviceSelect = document.getElementById('device-select');
+    const inputDeviceSelect = document.getElementById('input-device-select');
+    const inputMuteBtn = document.getElementById('input-mute-btn');
 
     // --- WebSocket Connection ---
     function connect() {
@@ -212,7 +216,20 @@
         updateAppsList(state.apps || []);
 
         // Devices
-        updateDeviceList(state.devices || [], state.selectedDeviceId);
+        updateDeviceList(deviceSelect, state.devices || [], state.selectedDeviceId);
+        updateDeviceList(inputDeviceSelect, state.inputDevices || [], state.selectedInputDeviceId);
+
+        // Input Mute
+        if (inputMuteBtn) {
+            const muteIcon = inputMuteBtn.querySelector('.mute-icon');
+            if (state.inputMuted) {
+                inputMuteBtn.classList.add('muted');
+                muteIcon.innerHTML = Icons.micMuted;
+            } else {
+                inputMuteBtn.classList.remove('muted');
+                muteIcon.innerHTML = Icons.mic;
+            }
+        }
     }
 
     function updateAppsList(apps) {
@@ -327,25 +344,25 @@
         return row;
     }
 
-    function updateDeviceList(devices, selectedId) {
-        if (devices.length === 0) return;
+    function updateDeviceList(selectElement, devices, selectedId) {
+        if (!selectElement || devices.length === 0) return;
 
         // Only rebuild if devices changed
-        const currentOptions = Array.from(deviceSelect.options).map(o => o.value);
+        const currentOptions = Array.from(selectElement.options).map(o => o.value);
         const newIds = devices.map(d => d.id);
 
         if (JSON.stringify(currentOptions) !== JSON.stringify(newIds)) {
-            deviceSelect.innerHTML = '';
+            selectElement.innerHTML = '';
             devices.forEach(device => {
                 const option = document.createElement('option');
                 option.value = device.id;
                 option.textContent = device.name;
-                deviceSelect.appendChild(option);
+                selectElement.appendChild(option);
             });
         }
 
-        if (selectedId && deviceSelect.value !== selectedId) {
-            deviceSelect.value = selectedId;
+        if (selectedId && selectElement.value !== selectedId) {
+            selectElement.value = selectedId;
         }
     }
 
@@ -462,6 +479,19 @@
     deviceSelect.addEventListener('change', () => {
         send({ action: 'setOutputDevice', deviceId: deviceSelect.value });
     });
+
+    if (inputDeviceSelect) {
+        inputDeviceSelect.addEventListener('change', () => {
+            send({ action: 'setInputDevice', deviceId: inputDeviceSelect.value });
+        });
+    }
+
+    if (inputMuteBtn) {
+        inputMuteBtn.addEventListener('click', () => {
+            const isMuted = !inputMuteBtn.classList.contains('muted');
+            send({ action: 'setInputMute', boolValue: isMuted });
+        });
+    }
 
     // --- Initialise ---
     // Initialise slider fills

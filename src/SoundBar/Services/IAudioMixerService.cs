@@ -74,5 +74,33 @@ namespace SoundBar.Services
         /// Clears internal caches to force a full re-evaluation of audio sessions.
         /// </summary>
         void ClearCache();
+
+        // --- Input Device (Microphone) Methods ---
+
+        /// <summary>
+        /// Asks Windows for a list of all the microphones and input devices plugged in right now.
+        /// </summary>
+        List<AudioDeviceModel> GetInputDevices();
+
+        /// <summary>
+        /// Tells Windows to switch the default recording device to a different microphone.
+        /// </summary>
+        /// <param name="deviceId">The unique system identifier for the input device.</param>
+        void SetDefaultInputDevice(string deviceId);
+
+        /// <summary>
+        /// Checks if the default microphone is currently muted.
+        /// </summary>
+        bool GetInputMute();
+
+        /// <summary>
+        /// Mutes or unmutes the default microphone.
+        /// </summary>
+        void SetInputMute(bool isMuted);
+
+        /// <summary>
+        /// Fetches the current volume level of the default microphone (0.0 to 1.0).
+        /// </summary>
+        float GetInputVolume();
     }
 }

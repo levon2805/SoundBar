@@ -419,6 +419,92 @@ namespace SoundBar.Services
             AudioDeviceSwitcher.SetDefaultDevice(deviceId);
         }
 
+        // --- Input Device (Microphone) Implementation ---
+
+        public List<AudioDeviceModel> GetInputDevices()
+        {
+            var result = new List<AudioDeviceModel>();
+
+            try
+            {
+                string defaultDeviceId = string.Empty;
+                try
+                {
+                    using (var defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+                    {
+                        if (defaultDevice != null)
+                        {
+                            defaultDeviceId = defaultDevice.DeviceID;
+                        }
+                    }
+                }
+                catch { /* No default capture device */ }
+
+                using (var devices = _enumerator.EnumAudioEndpoints(DataFlow.Capture, DeviceState.Active))
+                {
+                    foreach (var device in devices)
+                    {
+                        result.Add(new AudioDeviceModel
+                        {
+                            Id = device.DeviceID,
+                            Name = device.FriendlyName,
+                            IsDefault = device.DeviceID == defaultDeviceId
+                        });
+                        device.Dispose();
+                    }
+                }
+            }
+            catch { /* No input device available */ }
+
+            return result;
+        }
+
+        public void SetDefaultInputDevice(string deviceId)
+        {
+            // The SetDefaultEndpoint COM call is device-type agnostic — it works for both
+            // render (output) and capture (input) devices based on the device ID.
+            AudioDeviceSwitcher.SetDefaultDevice(deviceId);
+        }
+
+        public bool GetInputMute()
+        {
+            try
+            {
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+                using (var volume = AudioEndpointVolume.FromDevice(device))
+                {
+                    return volume.IsMuted;
+                }
+            }
+            catch { return false; }
+        }
+
+        public void SetInputMute(bool isMuted)
+        {
+            try
+            {
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+                using (var volume = AudioEndpointVolume.FromDevice(device))
+                {
+                    volume.IsMuted = isMuted;
+                }
+            }
+            catch { }
+        }
+
+        public float GetInputVolume()
+        {
+            try
+            {
+                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+                using (var volume = AudioEndpointVolume.FromDevice(device))
+                {
+                    return volume.MasterVolumeLevelScalar;
+                }
+            }
+            catch { return 0f; }
+        }
+
         public void Dispose()
         {
             _enumerator?.Dispose();

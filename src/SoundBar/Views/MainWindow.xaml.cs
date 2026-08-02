@@ -65,6 +65,10 @@ namespace SoundBar.Views
             ApplyTheme(ViewModel.SelectedTheme);
             ViewModel.ThemeChanged += (s, theme) => ApplyTheme(theme);
 
+            // Handle layout changes for I/O strip
+            ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            UpdateIODeviceLayout(); // Initial setup
+
             // Start focus outline visual updater
             _focusOutlineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _focusOutlineTimer.Tick += FocusOutlineTimer_Tick;
@@ -94,9 +98,91 @@ namespace SoundBar.Views
             RestoreWindowPosition();
         }
 
+        private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.ShowOutputDevice) || 
+                e.PropertyName == nameof(MainViewModel.ShowInputDevice))
+            {
+                UpdateIODeviceLayout();
+            }
+        }
+
+        private void UpdateIODeviceLayout()
+        {
+            if (ViewModel == null) return;
+
+            if (ViewModel.ShowOutputDevice)
+            {
+                OutputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                InputColumnDef.Width = GridLength.Auto;
+                InputDeviceComboBox.MaxWidth = 160;
+            }
+            else
+            {
+                OutputColumnDef.Width = GridLength.Auto;
+                InputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                InputDeviceComboBox.MaxWidth = double.PositiveInfinity;
+            }
+        }
+
+        private async void RecordHotkey_Click(string propertyName, string title)
+        {
+            if (ViewModel == null) return;
+            
+            ViewModel.IsRecordingHotkey = true;
+
+            var dialog = new ContentDialog
+            {
+                Title = title,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var stack = new StackPanel { Spacing = 10 };
+            stack.Children.Add(new TextBlock { Text = "Press any key combination now..." });
+            
+            var recordedText = new TextBlock 
+            { 
+                FontSize = 24, 
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 20, 0, 20)
+            };
+            recordedText.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding 
+            { 
+                Path = new PropertyPath("RecordedHotkeyString"),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay 
+            });
+            
+            stack.Children.Add(recordedText);
+            dialog.Content = stack;
+            dialog.DataContext = ViewModel;
+
+            var result = await dialog.ShowAsync();
+
+            ViewModel.IsRecordingHotkey = false;
+
+            if (result == ContentDialogResult.Primary)
+            {
+                if (ViewModel.RecordedHotkeyString != "Listening..." && !string.IsNullOrWhiteSpace(ViewModel.RecordedHotkeyString))
+                {
+                    typeof(MainViewModel).GetProperty(propertyName)?.SetValue(ViewModel, ViewModel.RecordedHotkeyString);
+                }
+            }
+        }
+
         private void FocusOutlineTimer_Tick(object? sender, object e)
         {
             if (ViewModel == null) return;
+
+            // Sync Mic Mute icon colour
+            if (MicMuteIcon != null)
+            {
+                MicMuteIcon.Foreground = ViewModel.IsInputMuted
+                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 80, 80))  // Red when muted
+                    : new SolidColorBrush(Microsoft.UI.Colors.White);                    // Normal when live
+            }
 
             // Lazily find the ItemsControl because XAML bindings might not be evaluated immediately in the constructor
             if (_appsItemsControl == null)
@@ -486,6 +572,11 @@ namespace SoundBar.Views
             ViewModel.IsCompanionViewMode = !ViewModel.IsCompanionViewMode;
         }
 
+        private void MicMuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ToggleInputMute();
+        }
+
         private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.StopCompanionServer();
@@ -604,29 +695,29 @@ namespace SoundBar.Views
                 var keybindsStack = new StackPanel { Spacing = 15 };
                 keybindsStack.Children.Add(new TextBlock { Text = "Control the volume of the app you are currently using without leaving it.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
                 
-                // Volume Up
-                var volUpStack = new StackPanel();
-                volUpStack.Children.Add(new TextBlock { Text = "Volume Up Hotkey", Margin = new Thickness(0, 0, 0, 5) });
-                var volUpBox = new TextBox { PlaceholderText = "e.g. Control+Alt+Up" };
-                volUpBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("VolumeUpHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                volUpStack.Children.Add(volUpBox);
-                keybindsStack.Children.Add(volUpStack);
+                // Helper for hotkey buttons
+                void AddHotkeyButton(StackPanel parent, string title, string propertyName)
+                {
+                    var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
+                    stack.Children.Add(new TextBlock { Text = title, Margin = new Thickness(0, 0, 0, 5) });
+                    
+                    var btn = new Button { HorizontalAlignment = HorizontalAlignment.Stretch };
+                    btn.SetBinding(Button.ContentProperty, new Microsoft.UI.Xaml.Data.Binding 
+                    { 
+                        Path = new PropertyPath(propertyName), 
+                        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay 
+                    });
+                    
+                    btn.Click += (s, e) => RecordHotkey_Click(propertyName, "Edit " + title);
+                    
+                    stack.Children.Add(btn);
+                    parent.Children.Add(stack);
+                }
                 
-                // Volume Down
-                var volDownStack = new StackPanel();
-                volDownStack.Children.Add(new TextBlock { Text = "Volume Down Hotkey", Margin = new Thickness(0, 0, 0, 5) });
-                var volDownBox = new TextBox { PlaceholderText = "e.g. Control+Alt+Down" };
-                volDownBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("VolumeDownHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                volDownStack.Children.Add(volDownBox);
-                keybindsStack.Children.Add(volDownStack);
-                
-                // Mute
-                var muteStack = new StackPanel();
-                muteStack.Children.Add(new TextBlock { Text = "Mute Hotkey", Margin = new Thickness(0, 0, 0, 5) });
-                var muteBox = new TextBox { PlaceholderText = "e.g. Control+Alt+M" };
-                muteBox.SetBinding(TextBox.TextProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("MuteHotkey"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                muteStack.Children.Add(muteBox);
-                keybindsStack.Children.Add(muteStack);
+                AddHotkeyButton(keybindsStack, "Volume Up Hotkey (Active App)", "VolumeUpHotkey");
+                AddHotkeyButton(keybindsStack, "Volume Down Hotkey (Active App)", "VolumeDownHotkey");
+                AddHotkeyButton(keybindsStack, "Mute Hotkey (Active App)", "MuteHotkey");
+                AddHotkeyButton(keybindsStack, "Mute Microphone Hotkey", "InputMuteHotkey");
                 
                 keybindsExpander.Content = keybindsStack;
                 
@@ -718,14 +809,58 @@ namespace SoundBar.Views
                         });
                         appearanceStack.Children.Add(highlightToggle);
                     }
+
                 }
+
+                // --- Layout Editor ---
+                var layoutExpander = new Expander
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Header = new TextBlock { Text = "Layout Settings", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
+                };
+                var layoutStack = new StackPanel { Spacing = 10 };
+                layoutStack.Children.Add(new TextBlock 
+                { 
+                    Text = "Toggle which sections are visible on the main page. Hidden sections are still functional via hotkeys.", 
+                    FontSize = 12, 
+                    TextWrapping = TextWrapping.Wrap 
+                });
+
+                // Output Device toggle
+                var showOutputToggle = new ToggleSwitch { Header = "Output Device Picker", OnContent = "Visible", OffContent = "Hidden" };
+                showOutputToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowOutputDevice"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                layoutStack.Children.Add(showOutputToggle);
+
+                // Input Device toggle
+                var showInputToggle = new ToggleSwitch { Header = "Input Device (Microphone)", OnContent = "Visible", OffContent = "Hidden" };
+                showInputToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowInputDevice"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                layoutStack.Children.Add(showInputToggle);
+
+                // Master Volume toggle
+                var showMasterToggle = new ToggleSwitch { Header = "Master Volume Slider", OnContent = "Visible", OffContent = "Hidden" };
+                showMasterToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowMasterVolume"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                layoutStack.Children.Add(showMasterToggle);
+
+                // Active Apps toggle
+                var showAppsToggle = new ToggleSwitch { Header = "Active Apps List", OnContent = "Visible", OffContent = "Hidden" };
+                showAppsToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowActiveApps"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                layoutStack.Children.Add(showAppsToggle);
+
+                // Media Controls toggle
+                var showMediaToggle = new ToggleSwitch { Header = "Media Controls", OnContent = "Visible", OffContent = "Hidden" };
+                showMediaToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowMediaControls"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
+                layoutStack.Children.Add(showMediaToggle);
+
+                layoutExpander.Content = layoutStack;
+                settingsPanel.Children.Add(layoutExpander);
+
                 AddExpander("Custom Background");
 
                 AddCategoryHeader("Audio & Focus");
                 AddExpander("Global Hotkeys", keybindsExpander);
                 AddExpander("Do Not Disturb Mode", dndExpander);
                 AddExpander("Hearing Protection");
-                AddExpander("Media Controls");
 
                 AddCategoryHeader("App Management");
                 AddExpander("Hidden Apps");

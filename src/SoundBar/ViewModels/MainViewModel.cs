@@ -325,6 +325,19 @@ namespace SoundBar.ViewModels
                         }
                     });
                 },
+                () => InputDevices,
+                () => SelectedInputDevice,
+                (deviceId) =>
+                {
+                    _dispatcherQueue.TryEnqueue(() =>
+                    {
+                        var device = InputDevices.FirstOrDefault(d => d.Id == deviceId);
+                        if (device != null)
+                        {
+                            SelectedInputDevice = device;
+                        }
+                    });
+                },
                 _settingsService.Settings.CompanionServerPort
             );
 
@@ -406,6 +419,153 @@ namespace SoundBar.ViewModels
         }
 
         public Microsoft.UI.Xaml.Visibility MediaControlsVisibility => ShowMediaControls ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        // --- Input Device (Microphone) Properties ---
+
+        public ObservableCollection<AudioDeviceModel> InputDevices { get; } = new();
+
+        private AudioDeviceModel? _selectedInputDevice;
+        public AudioDeviceModel? SelectedInputDevice
+        {
+            get => _selectedInputDevice;
+            set
+            {
+                if (_selectedInputDevice != value)
+                {
+                    _selectedInputDevice = value;
+                    OnPropertyChanged();
+
+                    if (_selectedInputDevice != null && !_isUpdatingInputDeviceFromSystem)
+                    {
+                        _audioService.SetDefaultInputDevice(_selectedInputDevice.Id);
+                    }
+                }
+            }
+        }
+        private bool _isUpdatingInputDeviceFromSystem = false;
+
+        private bool _isInputMuted;
+        public bool IsInputMuted
+        {
+            get => _isInputMuted;
+            set
+            {
+                if (_isInputMuted != value)
+                {
+                    _isInputMuted = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(InputMuteIcon));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the appropriate mic glyph: muted mic (red) or live mic.
+        /// The colour is handled in XAML binding.
+        /// </summary>
+        public string InputMuteIcon => IsInputMuted ? "\uF12E" : "\uE720"; // F12E is MicOff (slash), E720 is live Mic
+
+        public void ToggleInputMute()
+        {
+            bool newState = !_isInputMuted;
+            _audioService.SetInputMute(newState);
+            IsInputMuted = newState;
+        }
+
+        private void UpdateInputDevices(List<AudioDeviceModel> inputDevices)
+        {
+            if (inputDevices.Count == 0 && InputDevices.Count == 0) return;
+
+            // Only rebuild if the device list actually changed
+            var currentIds = InputDevices.Select(d => d.Id).ToList();
+            var newIds = inputDevices.Select(d => d.Id).ToList();
+
+            if (!currentIds.SequenceEqual(newIds))
+            {
+                _isUpdatingInputDeviceFromSystem = true;
+                InputDevices.Clear();
+                foreach (var device in inputDevices)
+                {
+                    InputDevices.Add(device);
+                }
+                _isUpdatingInputDeviceFromSystem = false;
+            }
+
+            // Sync the selected device
+            var defaultDevice = inputDevices.FirstOrDefault(d => d.IsDefault);
+            if (defaultDevice != null && (_selectedInputDevice == null || _selectedInputDevice.Id != defaultDevice.Id))
+            {
+                _isUpdatingInputDeviceFromSystem = true;
+                SelectedInputDevice = InputDevices.FirstOrDefault(d => d.Id == defaultDevice.Id);
+                _isUpdatingInputDeviceFromSystem = false;
+            }
+        }
+
+        // --- Layout Visibility Properties ---
+
+        public bool ShowOutputDevice
+        {
+            get => _settingsService.Settings.ShowOutputDevice;
+            set
+            {
+                if (_settingsService.Settings.ShowOutputDevice != value)
+                {
+                    _settingsService.Settings.ShowOutputDevice = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(OutputDeviceVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Visibility OutputDeviceVisibility => ShowOutputDevice ? Visibility.Visible : Visibility.Collapsed;
+
+        public bool ShowInputDevice
+        {
+            get => _settingsService.Settings.ShowInputDevice;
+            set
+            {
+                if (_settingsService.Settings.ShowInputDevice != value)
+                {
+                    _settingsService.Settings.ShowInputDevice = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(InputDeviceVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Visibility InputDeviceVisibility => ShowInputDevice ? Visibility.Visible : Visibility.Collapsed;
+
+        public bool ShowMasterVolume
+        {
+            get => _settingsService.Settings.ShowMasterVolume;
+            set
+            {
+                if (_settingsService.Settings.ShowMasterVolume != value)
+                {
+                    _settingsService.Settings.ShowMasterVolume = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(MasterVolumeVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Visibility MasterVolumeVisibility => ShowMasterVolume ? Visibility.Visible : Visibility.Collapsed;
+
+        public bool ShowActiveApps
+        {
+            get => _settingsService.Settings.ShowActiveApps;
+            set
+            {
+                if (_settingsService.Settings.ShowActiveApps != value)
+                {
+                    _settingsService.Settings.ShowActiveApps = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(ActiveAppsVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Visibility ActiveAppsVisibility => ShowActiveApps ? Visibility.Visible : Visibility.Collapsed;
 
         // Run At Startup Property
         private bool _runAtStartup;
@@ -588,6 +748,20 @@ namespace SoundBar.ViewModels
             {
                 string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
 
+                if (IsRecordingHotkey)
+                {
+                    RecordedHotkeyString = pressedString;
+                    e.Handled = true;
+                    return;
+                }
+
+                if (pressedString == InputMuteHotkey)
+                {
+                    ToggleInputMute();
+                    e.Handled = true;
+                    return;
+                }
+
                 var activeApps = Apps.Where(a => a.IsFocused).ToList();
                 if (!activeApps.Any()) return;
 
@@ -659,6 +833,49 @@ namespace SoundBar.ViewModels
                 {
                     _settingsService.Settings.MuteHotkey = value;
                     _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string InputMuteHotkey
+        {
+            get => _settingsService.Settings.InputMuteHotkey;
+            set
+            {
+                if (_settingsService.Settings.InputMuteHotkey != value)
+                {
+                    _settingsService.Settings.InputMuteHotkey = value;
+                    _settingsService.SaveSettings();
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private bool _isRecordingHotkey;
+        public bool IsRecordingHotkey
+        {
+            get => _isRecordingHotkey;
+            set
+            {
+                if (_isRecordingHotkey != value)
+                {
+                    _isRecordingHotkey = value;
+                    OnPropertyChanged();
+                    if (value) RecordedHotkeyString = "Listening...";
+                }
+            }
+        }
+
+        private string _recordedHotkeyString = "Listening...";
+        public string RecordedHotkeyString
+        {
+            get => _recordedHotkeyString;
+            set
+            {
+                if (_recordedHotkeyString != value)
+                {
+                    _recordedHotkeyString = value;
                     OnPropertyChanged();
                 }
             }
@@ -807,6 +1024,10 @@ namespace SoundBar.ViewModels
                         // Get Audio Devices
                         var audioDevices = _audioService.GetAudioDevices();
 
+                        // Get Input Devices and Mic Mute status
+                        var inputDevices = _audioService.GetInputDevices();
+                        bool inputMuted = _audioService.GetInputMute();
+
                         // Get Do Not Disturb status
                         bool systemDnd = _audioService.GetSystemSoundsMute();
 
@@ -877,6 +1098,15 @@ namespace SoundBar.ViewModels
 
                             // Sync Audio Devices
                             UpdateAudioDevices(audioDevices);
+
+                            // Sync Input Devices
+                            UpdateInputDevices(inputDevices);
+
+                            // Sync Mic Mute status from system
+                            if (_isInputMuted != inputMuted)
+                            {
+                                IsInputMuted = inputMuted;
+                            }
 
                             // Update Focus Outline (support multi-process apps like Discord)
                             foreach (var app in Apps)
