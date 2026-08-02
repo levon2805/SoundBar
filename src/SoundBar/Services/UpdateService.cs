@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v3.0.1";
+        public const string CurrentVersion = "v3.1.0";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.

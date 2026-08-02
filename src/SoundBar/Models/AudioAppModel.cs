@@ -254,7 +254,15 @@ namespace SoundBar.Models
         public AudioAppModel(IAudioMixerService audioService)
         {
             _audioService = audioService;
-            _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            try
+            {
+                _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            }
+            catch (Exception)
+            {
+                // In a unit test environment without a UI thread, DispatcherQueue may throw a COMException.
+                _dispatcherQueue = null;
+            }
         }
 
         /// <summary>

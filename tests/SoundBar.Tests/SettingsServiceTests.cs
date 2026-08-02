@@ -160,5 +160,42 @@ namespace SoundBar.Tests
             Assert.Equal(6767, service.Settings.CompanionServerPort); // Default port
             Assert.True(service.Settings.ShowMediaControls); // Default on
         }
+
+        // --- New v3.1.0 Tests ---
+
+        [Fact]
+        public void SaveAndLoad_LayoutSettings_PersistsCorrectly()
+        {
+            // Arrange
+            var service1 = new SettingsService(_testFilePath);
+            service1.Settings.ShowOutputDevice = false;
+            service1.Settings.ShowInputDevice = false;
+            service1.Settings.ShowMasterVolume = false;
+            service1.Settings.ShowActiveApps = false;
+
+            // Act
+            service1.SaveSettings();
+            var service2 = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.False(service2.Settings.ShowOutputDevice);
+            Assert.False(service2.Settings.ShowInputDevice);
+            Assert.False(service2.Settings.ShowMasterVolume);
+            Assert.False(service2.Settings.ShowActiveApps);
+        }
+
+        [Fact]
+        public void Load_DefaultSettings_LayoutAndHotkeysAreConfiguredProperly()
+        {
+            // Arrange & Act
+            var service = new SettingsService(_testFilePath);
+
+            // Assert
+            Assert.True(service.Settings.ShowOutputDevice);
+            Assert.True(service.Settings.ShowInputDevice);
+            Assert.True(service.Settings.ShowMasterVolume);
+            Assert.True(service.Settings.ShowActiveApps);
+            Assert.Equal("Control+Alt+I", service.Settings.InputMuteHotkey);
+        }
     }
 }

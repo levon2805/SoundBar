@@ -83,6 +83,11 @@ namespace SoundBar.Models
         public string MuteHotkey { get; set; } = "Control+Alt+M";
 
         /// <summary>
+        /// Hotkey configuration string for muting/unmuting the microphone. Format: "Ctrl+Alt+I"
+        /// </summary>
+        public string InputMuteHotkey { get; set; } = "Control+Alt+I";
+
+        /// <summary>
         /// Whether the companion web server should be enabled for remote control from a phone.
         /// </summary>
         public bool EnableCompanionServer { get; set; } = false;
@@ -91,6 +96,29 @@ namespace SoundBar.Models
         /// The port number for the companion web server.
         /// </summary>
         public int CompanionServerPort { get; set; } = 6767;
+
+        // --- Layout Visibility Settings ---
+        // These let the user customise which sections appear on the main page.
+
+        /// <summary>
+        /// Whether the output device picker is visible on the main page.
+        /// </summary>
+        public bool ShowOutputDevice { get; set; } = true;
+
+        /// <summary>
+        /// Whether the input device (microphone) controls are visible on the main page.
+        /// </summary>
+        public bool ShowInputDevice { get; set; } = true;
+
+        /// <summary>
+        /// Whether the master volume slider is visible on the main page.
+        /// </summary>
+        public bool ShowMasterVolume { get; set; } = true;
+
+        /// <summary>
+        /// Whether the active apps list is visible on the main page.
+        /// </summary>
+        public bool ShowActiveApps { get; set; } = true;
     }
 
     /// <summary>

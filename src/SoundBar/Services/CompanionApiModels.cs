@@ -19,6 +19,16 @@ namespace SoundBar.Services
         public bool MasterMuted { get; set; }
 
         /// <summary>
+        /// Input volume as a percentage (0–100).
+        /// </summary>
+        public int InputVolume { get; set; }
+
+        /// <summary>
+        /// Whether the microphone is muted.
+        /// </summary>
+        public bool InputMuted { get; set; }
+
+        /// <summary>
         /// All active audio applications with their current volumes.
         /// </summary>
         public List<CompanionAppState> Apps { get; set; } = new();
@@ -37,6 +47,16 @@ namespace SoundBar.Services
         /// The ID of the currently selected output device.
         /// </summary>
         public string? SelectedDeviceId { get; set; }
+
+        /// <summary>
+        /// All available audio input devices.
+        /// </summary>
+        public List<CompanionAudioDevice> InputDevices { get; set; } = new();
+
+        /// <summary>
+        /// The ID of the currently selected input device.
+        /// </summary>
+        public string? SelectedInputDeviceId { get; set; }
     }
 
     /// <summary>
@@ -118,8 +138,9 @@ namespace SoundBar.Services
         /// <summary>
         /// The action to perform. Supported values:
         /// "setAppVolume", "setAppMute", "setMasterVolume", "setMasterMute",
+        /// "setInputVolume", "setInputMute",
         /// "mediaPlayPause", "mediaNext", "mediaPrevious", "mediaSeek",
-        /// "setOutputDevice", "pair"
+        /// "setOutputDevice", "setInputDevice", "pair"
         /// </summary>
         public string Action { get; set; } = string.Empty;
 

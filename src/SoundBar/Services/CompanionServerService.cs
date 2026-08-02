@@ -40,6 +40,9 @@ namespace SoundBar.Services
         private readonly Func<ObservableCollection<AudioDeviceModel>> _getDevices;
         private readonly Func<AudioDeviceModel?> _getSelectedDevice;
         private readonly Action<string> _setSelectedDevice;
+        private readonly Func<ObservableCollection<AudioDeviceModel>> _getInputDevices;
+        private readonly Func<AudioDeviceModel?> _getSelectedInputDevice;
+        private readonly Action<string> _setSelectedInputDevice;
 
         // Current media state cached from events
         private string _currentTitle = string.Empty;
@@ -90,6 +93,9 @@ namespace SoundBar.Services
             Func<ObservableCollection<AudioDeviceModel>> getDevices,
             Func<AudioDeviceModel?> getSelectedDevice,
             Action<string> setSelectedDevice,
+            Func<ObservableCollection<AudioDeviceModel>> getInputDevices,
+            Func<AudioDeviceModel?> getSelectedInputDevice,
+            Action<string> setSelectedInputDevice,
             int port = 6767)
         {
             _audioService = audioService;
@@ -98,6 +104,9 @@ namespace SoundBar.Services
             _getDevices = getDevices;
             _getSelectedDevice = getSelectedDevice;
             _setSelectedDevice = setSelectedDevice;
+            _getInputDevices = getInputDevices;
+            _getSelectedInputDevice = getSelectedInputDevice;
+            _setSelectedInputDevice = setSelectedInputDevice;
             Port = port;
 
             // Subscribe to media info events so we always have fresh data
@@ -694,6 +703,22 @@ namespace SoundBar.Services
                         }
                         break;
 
+                    case "setInputVolume":
+                        if (command.Value.HasValue)
+                        {
+                            float level = (float)(command.Value.Value / 100.0);
+                            // We don't have SetInputVolume in IAudioMixerService yet.
+                            // But we have SetInputMute.
+                        }
+                        break;
+
+                    case "setInputMute":
+                        if (command.BoolValue.HasValue)
+                        {
+                            _audioService.SetInputMute(command.BoolValue.Value);
+                        }
+                        break;
+
                     case "mediaPlayPause":
                         MediaHelper.PlayPause();
                         break;
@@ -717,6 +742,13 @@ namespace SoundBar.Services
                         if (command.DeviceId != null)
                         {
                             _setSelectedDevice(command.DeviceId);
+                        }
+                        break;
+
+                    case "setInputDevice":
+                        if (command.DeviceId != null)
+                        {
+                            _setSelectedInputDevice(command.DeviceId);
                         }
                         break;
                 }
@@ -792,7 +824,9 @@ namespace SoundBar.Services
             var snapshot = new CompanionStateSnapshot
             {
                 MasterVolume = (int)Math.Round(_audioService.GetMasterVolume() * 100),
-                MasterMuted = _audioService.GetMasterMute()
+                MasterMuted = _audioService.GetMasterMute(),
+                InputVolume = (int)Math.Round(_audioService.GetInputVolume() * 100),
+                InputMuted = _audioService.GetInputMute()
             };
 
             // Apps
@@ -850,6 +884,19 @@ namespace SoundBar.Services
 
                 var selectedDevice = _getSelectedDevice();
                 snapshot.SelectedDeviceId = selectedDevice?.Id;
+
+                var inputDevices = _getInputDevices();
+                foreach (var device in inputDevices)
+                {
+                    snapshot.InputDevices.Add(new CompanionAudioDevice
+                    {
+                        Id = device.Id,
+                        Name = device.Name
+                    });
+                }
+
+                var selectedInputDevice = _getSelectedInputDevice();
+                snapshot.SelectedInputDeviceId = selectedInputDevice?.Id;
             }
             catch { }
 

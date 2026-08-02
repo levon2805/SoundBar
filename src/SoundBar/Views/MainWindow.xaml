@@ -183,71 +183,126 @@
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="Output Device" 
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                               FontSize="14" 
-                               FontWeight="SemiBold"
-                               Margin="0,0,0,5"/>
-                    <ComboBox x:Name="DeviceComboBox"
-                              HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding AudioDevices}"
-                              SelectedItem="{Binding SelectedAudioDevice, Mode=TwoWay}"
-                              DisplayMemberPath="Name"
-                              PlaceholderText="Select Output Device..."
-                              Background="{ThemeResource ControlFillColorDefaultBrush}"
-                              BorderThickness="1"
-                              BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                              Margin="0,0,0,15"/>
-
-                    <TextBlock Text="Master Volume" 
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
-                               FontSize="14" 
-                               FontWeight="SemiBold"
-                               Margin="0,0,0,5"/>
-
-                    <Grid>
+                    <!-- Combined I/O Device Strip -->
+                    <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="40"/>
+                            <ColumnDefinition x:Name="OutputColumnDef" Width="*"/>
+                            <ColumnDefinition x:Name="InputColumnDef" Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Slider Grid.Column="0"
-                                Minimum="0" 
-                                Maximum="100" 
-                                Value="{Binding MasterVolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                Margin="0,0,10,0"/>
+                        <!-- Output Device Picker -->
+                        <ComboBox x:Name="DeviceComboBox"
+                                  Grid.Column="0"
+                                  HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AudioDevices}"
+                                  SelectedItem="{Binding SelectedAudioDevice, Mode=TwoWay}"
+                                  DisplayMemberPath="Name"
+                                  PlaceholderText="&#xE767;  Output Device..."
+                                  Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                  BorderThickness="1"
+                                  BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  Margin="0,0,8,0"
+                                  Visibility="{x:Bind ViewModel.OutputDeviceVisibility, Mode=OneWay}"/>
 
-                        <TextBlock Grid.Column="1" 
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Right">
-                            <Run Text="{Binding MasterVolumePercentage}" /><Run Text="%" />
-                        </TextBlock>
+                        <!-- Input Device (Mic) Controls -->
+                        <Grid Grid.Column="1"
+                              Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <!-- Mic Mute Toggle Button -->
+                            <Button x:Name="MicMuteButton"
+                                    Grid.Column="0"
+                                    Margin="0,0,6,0"
+                                    Width="36" Height="32"
+                                    Padding="0" MinWidth="0" MinHeight="0"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    CornerRadius="4"
+                                    Click="MicMuteButton_Click"
+                                    ToolTipService.ToolTip="Mute/Unmute Microphone">
+                                <TextBlock x:Name="MicMuteIcon"
+                                           Text="{x:Bind ViewModel.InputMuteIcon, Mode=OneWay}"
+                                           FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                           FontSize="14"/>
+                            </Button>
+
+                            <!-- Input Device Picker -->
+                            <ComboBox x:Name="InputDeviceComboBox"
+                                      Grid.Column="1"
+                                      HorizontalAlignment="Stretch"
+                                      MinWidth="100"
+                                      MaxWidth="160"
+                                      ItemsSource="{Binding InputDevices}"
+                                      SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}"
+                                      DisplayMemberPath="Name"
+                                      PlaceholderText="Input..."
+                                      Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                      BorderThickness="1"
+                                      BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </Grid>
                     </Grid>
 
-                    <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
-
-                    <Grid Margin="0,0,0,10">
-                        <TextBlock Text="Active Apps" 
+                    <!-- Master Volume -->
+                    <StackPanel Visibility="{x:Bind ViewModel.MasterVolumeVisibility, Mode=OneWay}">
+                        <TextBlock Text="Master Volume" 
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                    FontSize="14" 
                                    FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
+                                   Margin="0,0,0,5"/>
 
-                        <Button Click="RefreshApps_Click"
-                                Background="Transparent" 
-                                BorderBrush="Transparent"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                ToolTipService.ToolTip="Force refresh audio sessions"
-                                Padding="4">
-                            <FontIcon Glyph="&#xE72C;" FontSize="12"/>
-                        </Button>
-                    </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Slider Grid.Column="0"
+                                    Minimum="0" 
+                                    Maximum="100" 
+                                    Value="{Binding MasterVolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    Margin="0,0,10,0"/>
+
+                            <TextBlock Grid.Column="1" 
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right">
+                                <Run Text="{Binding MasterVolumePercentage}" /><Run Text="%" />
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+
+                    <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
+
+                    <!-- Active Apps Header + List -->
+                    <StackPanel Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}">
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="Active Apps" 
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                       FontSize="14" 
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+
+                            <Button Click="RefreshApps_Click"
+                                    Background="Transparent" 
+                                    BorderBrush="Transparent"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    ToolTipService.ToolTip="Force refresh audio sessions"
+                                    Padding="4">
+                                <FontIcon Glyph="&#xE72C;" FontSize="12"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}">
                     <ItemsControl ItemsSource="{Binding Apps}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
