@@ -111,17 +111,33 @@ namespace SoundBar.Views
         {
             if (ViewModel == null) return;
 
-            if (ViewModel.ShowOutputDevice)
+            if (ViewModel.ShowOutputDevice && ViewModel.ShowInputDevice)
             {
                 OutputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                MuteButtonColumnDef.Width = GridLength.Auto;
+                InputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                DeviceComboBox.Margin = new Thickness(0, 0, 6, 0);
+                MicMuteButton.Margin = new Thickness(0, 0, 6, 0);
+            }
+            else if (ViewModel.ShowOutputDevice && !ViewModel.ShowInputDevice)
+            {
+                OutputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                MuteButtonColumnDef.Width = GridLength.Auto;
                 InputColumnDef.Width = GridLength.Auto;
-                InputDeviceComboBox.MaxWidth = 160;
+                DeviceComboBox.Margin = new Thickness(0);
+            }
+            else if (!ViewModel.ShowOutputDevice && ViewModel.ShowInputDevice)
+            {
+                OutputColumnDef.Width = GridLength.Auto;
+                MuteButtonColumnDef.Width = GridLength.Auto;
+                InputColumnDef.Width = new GridLength(1, GridUnitType.Star);
+                MicMuteButton.Margin = new Thickness(0, 0, 6, 0);
             }
             else
             {
                 OutputColumnDef.Width = GridLength.Auto;
-                InputColumnDef.Width = new GridLength(1, GridUnitType.Star);
-                InputDeviceComboBox.MaxWidth = double.PositiveInfinity;
+                MuteButtonColumnDef.Width = GridLength.Auto;
+                InputColumnDef.Width = GridLength.Auto;
             }
         }
 

@@ -187,6 +187,7 @@
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition x:Name="OutputColumnDef" Width="*"/>
+                            <ColumnDefinition x:Name="MuteButtonColumnDef" Width="Auto"/>
                             <ColumnDefinition x:Name="InputColumnDef" Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
@@ -202,50 +203,42 @@
                                   BorderThickness="1"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                  Margin="0,0,8,0"
+                                  Margin="0,0,6,0"
                                   Visibility="{x:Bind ViewModel.OutputDeviceVisibility, Mode=OneWay}"/>
 
-                        <!-- Input Device (Mic) Controls -->
-                        <Grid Grid.Column="1"
-                              Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- Mic Mute Toggle Button -->
-                            <Button x:Name="MicMuteButton"
-                                    Grid.Column="0"
-                                    Margin="0,0,6,0"
-                                    Width="36" Height="32"
-                                    Padding="0" MinWidth="0" MinHeight="0"
-                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    Click="MicMuteButton_Click"
-                                    ToolTipService.ToolTip="Mute/Unmute Microphone">
-                                <TextBlock x:Name="MicMuteIcon"
-                                           Text="{x:Bind ViewModel.InputMuteIcon, Mode=OneWay}"
-                                           FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                           FontSize="14"/>
-                            </Button>
+                        <!-- Mic Mute Toggle Button -->
+                        <Button x:Name="MicMuteButton"
+                                Grid.Column="1"
+                                Margin="0,0,6,0"
+                                Width="36" Height="32"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                CornerRadius="4"
+                                Click="MicMuteButton_Click"
+                                Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}"
+                                ToolTipService.ToolTip="Mute/Unmute Microphone">
+                            <TextBlock x:Name="MicMuteIcon"
+                                       Text="{x:Bind ViewModel.InputMuteIcon, Mode=OneWay}"
+                                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                       FontSize="14"/>
+                        </Button>
 
-                            <!-- Input Device Picker -->
-                            <ComboBox x:Name="InputDeviceComboBox"
-                                      Grid.Column="1"
-                                      HorizontalAlignment="Stretch"
-                                      MinWidth="100"
-                                      MaxWidth="160"
-                                      ItemsSource="{Binding InputDevices}"
-                                      SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}"
-                                      DisplayMemberPath="Name"
-                                      PlaceholderText="Input..."
-                                      Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                      BorderThickness="1"
-                                      BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        </Grid>
+                        <!-- Input Device Picker -->
+                        <ComboBox x:Name="InputDeviceComboBox"
+                                  Grid.Column="2"
+                                  HorizontalAlignment="Stretch"
+                                  MinWidth="100"
+                                  ItemsSource="{Binding InputDevices}"
+                                  SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}"
+                                  DisplayMemberPath="Name"
+                                  PlaceholderText="Input..."
+                                  Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                  BorderThickness="1"
+                                  BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                  Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}"/>
                     </Grid>
 
                     <!-- Master Volume -->
