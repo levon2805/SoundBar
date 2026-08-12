@@ -6,7 +6,7 @@ A sleek, customisable, and powerful audio mixer overlay for Windows, built nativ
 
 ## How it looks!
 <p align="center">
-  <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/f109dd51-1771-4fb3-b68e-f0a8d6367e25" />
+  <img width="30%" height="437" alt="Home" src="https://github.com/user-attachments/assets/4a978b15-3d88-46e3-b657-400a839cde90" />
   <img width="30%" height="471" alt="image" src="https://github.com/user-attachments/assets/88ce2b7e-2506-4699-a645-7f55477b24ce" />
   <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/61a8ca16-11a7-4436-954b-094548ef6af0" />
 </p>
