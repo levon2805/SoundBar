@@ -2,6 +2,8 @@
 
 A sleek, customisable, and powerful audio mixer overlay for Windows, built natively with the Windows App SDK (WinUI 3). 
 
+**[Jump to: How to Install?](#how-to-install)**
+
 ## How it looks!
 <p align="center">
   <img width="30%" height="469" alt="image" src="https://github.com/user-attachments/assets/f109dd51-1771-4fb3-b68e-f0a8d6367e25" />
@@ -42,8 +44,16 @@ A sleek, customisable, and powerful audio mixer overlay for Windows, built nativ
 * **Automated Updates:** The app will periodically check GitHub for updates and notify you when a new release is available with a neat, 1-click update button.
 * **Modern WinUI 3 Design:** Built natively with the Windows App SDK for a sleek interface with smooth, responsive controls.
 
-## Download & Install (For Users)
-The application is built as a completely self-contained, portable `.exe`. You do not need to install anything or download the Windows App SDK runtime!
+## How to Install?
+
+### Option 1: Install via Winget (Recommended)
+You can easily install SoundBar using the Windows Package Manager (Winget). Open your command prompt or PowerShell and run:
+```powershell
+winget install levon2805.SoundBar
+```
+
+### Option 2: Portable Download
+The application is also built as a completely self-contained, portable `.exe`. You do not need to install anything or download the Windows App SDK runtime!
 
 1. Go to the [Releases](../../releases) tab on the right side of this GitHub repository.
 2. Download the latest `SoundBar.zip` file.
@@ -53,7 +63,7 @@ The application is built as a completely self-contained, portable `.exe`. You do
 > **Note on Windows SmartScreen:** Because this is a new open-source application, Windows may show a "Windows protected your PC" warning when you first run the app. This is completely normal for new independent software. To run the app, simply click **"More info"** and then **"Run anyway"**.
 
 ## Development Setup
-This project uses a modern multi-project enterprise structure:
+Structure:
 * `src/SoundBar/` contains the main WinUI 3 application.
 * `tests/SoundBar.Tests/` contains the xUnit automated tests.
 * `ReleaseTools/` contains internal deployment utilities.

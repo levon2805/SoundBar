@@ -172,6 +172,7 @@ namespace SoundBar.Tests
             service1.Settings.ShowInputDevice = false;
             service1.Settings.ShowMasterVolume = false;
             service1.Settings.ShowActiveApps = false;
+            service1.Settings.InputMuteHotkey = "Control+Shift+M";
 
             // Act
             service1.SaveSettings();
@@ -182,6 +183,7 @@ namespace SoundBar.Tests
             Assert.False(service2.Settings.ShowInputDevice);
             Assert.False(service2.Settings.ShowMasterVolume);
             Assert.False(service2.Settings.ShowActiveApps);
+            Assert.Equal("Control+Shift+M", service2.Settings.InputMuteHotkey);
         }
 
         [Fact]

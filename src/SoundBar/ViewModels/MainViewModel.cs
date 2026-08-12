@@ -46,9 +46,15 @@ namespace SoundBar.ViewModels
         /// </summary>
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
-        // Saved presets
-        public ObservableCollection<AudioPreset> Presets { get; }
-        public ObservableCollection<AudioDeviceModel> AudioDevices { get; }
+        /// <summary>
+        /// A collection of the user's saved audio presets.
+        /// </summary>
+        public ObservableCollection<AudioPreset> Presets { get; private set; }
+        
+        /// <summary>
+        /// The list of audio output devices currently detected by the system.
+        /// </summary>
+        public ObservableCollection<AudioDeviceModel> AudioDevices { get; private set; }
 
         private AudioDeviceModel? _selectedAudioDevice;
         public AudioDeviceModel? SelectedAudioDevice
@@ -316,7 +322,7 @@ namespace SoundBar.ViewModels
                 () => SelectedAudioDevice,
                 (deviceId) =>
                 {
-                    _dispatcherQueue.TryEnqueue(() =>
+                    RunOnUIThread(() =>
                     {
                         var device = AudioDevices.FirstOrDefault(d => d.Id == deviceId);
                         if (device != null)
@@ -329,7 +335,7 @@ namespace SoundBar.ViewModels
                 () => SelectedInputDevice,
                 (deviceId) =>
                 {
-                    _dispatcherQueue.TryEnqueue(() =>
+                    RunOnUIThread(() =>
                     {
                         var device = InputDevices.FirstOrDefault(d => d.Id == deviceId);
                         if (device != null)
@@ -343,7 +349,7 @@ namespace SoundBar.ViewModels
 
             _companionServer.StateChanged += () =>
             {
-                _dispatcherQueue.TryEnqueue(() =>
+                RunOnUIThread(() =>
                 {
                     OnPropertyChanged(nameof(IsCompanionServerRunning));
                     OnPropertyChanged(nameof(CompanionServerUrl));
@@ -422,6 +428,9 @@ namespace SoundBar.ViewModels
 
         // --- Input Device (Microphone) Properties ---
 
+        /// <summary>
+        /// The list of audio input devices (like microphones) currently detected by the system.
+        /// </summary>
         public ObservableCollection<AudioDeviceModel> InputDevices { get; } = new();
 
         private AudioDeviceModel? _selectedInputDevice;
@@ -474,8 +483,6 @@ namespace SoundBar.ViewModels
 
         private void UpdateInputDevices(List<AudioDeviceModel> inputDevices)
         {
-            if (inputDevices.Count == 0 && InputDevices.Count == 0) return;
-
             // Only rebuild if the device list actually changed
             var currentIds = InputDevices.Select(d => d.Id).ToList();
             var newIds = inputDevices.Select(d => d.Id).ToList();
@@ -497,6 +504,13 @@ namespace SoundBar.ViewModels
             {
                 _isUpdatingInputDeviceFromSystem = true;
                 SelectedInputDevice = InputDevices.FirstOrDefault(d => d.Id == defaultDevice.Id);
+                _isUpdatingInputDeviceFromSystem = false;
+            }
+            else if (inputDevices.Count == 0 && _selectedInputDevice != null)
+            {
+                // No devices available — clear selection so placeholder text is shown
+                _isUpdatingInputDeviceFromSystem = true;
+                SelectedInputDevice = null;
                 _isUpdatingInputDeviceFromSystem = false;
             }
         }
@@ -688,21 +702,37 @@ namespace SoundBar.ViewModels
         }
 
         // Dispatcher to safely update UI from background threads
-        private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
+        private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
-        // Constructor
-        public MainViewModel(SettingsService settingsService)
+        // Constructor for DI / Testing
+        internal MainViewModel(SettingsService settingsService, IAudioMixerService audioService, UpdateService updateService = null, MediaInfoService mediaInfoService = null, HotkeyService hotkeyService = null)
         {
             _settingsService = settingsService;
-            _updateService = new UpdateService();
-            _mediaInfoService = new MediaInfoService();
-            _hotkeyService = new HotkeyService();
+            _updateService = updateService ?? new UpdateService();
+            _mediaInfoService = mediaInfoService ?? new MediaInfoService();
+            _hotkeyService = hotkeyService ?? new HotkeyService();
             _hotkeyService.KeyPressed += HotkeyService_KeyPressed;
-            _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            try { _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); } catch { _dispatcherQueue = null; }
+            _audioService = audioService;
 
-            // Connect to audio service
-            _audioService = new WindowsAudioMixerService();
+            InitializeInternal();
+        }
 
+        private void RunOnUIThread(Microsoft.UI.Dispatching.DispatcherQueueHandler action)
+        {
+            if (_dispatcherQueue != null)
+                _dispatcherQueue.TryEnqueue(action);
+            else
+                action();
+        }
+
+        // Default Constructor
+        public MainViewModel(SettingsService settingsService) : this(settingsService, new WindowsAudioMixerService())
+        {
+        }
+
+        private void InitializeInternal()
+        {
             // Setup data container
             Apps = new ObservableCollection<AudioAppModel>();
             HiddenApps = new ObservableCollection<string>(_settingsService.Settings.HiddenApps);
@@ -711,9 +741,13 @@ namespace SoundBar.ViewModels
             Presets = new ObservableCollection<AudioPreset>(_settingsService.Settings.Presets);
             AudioDevices = new ObservableCollection<AudioDeviceModel>();
 
-            _progressTimer = new DispatcherTimer();
-            _progressTimer.Interval = TimeSpan.FromMilliseconds(500);
-            _progressTimer.Tick += ProgressTimer_Tick;
+            try 
+            {
+                _progressTimer = new DispatcherTimer();
+                _progressTimer.Interval = TimeSpan.FromMilliseconds(500);
+                _progressTimer.Tick += ProgressTimer_Tick;
+            }
+            catch { }
 
             _mediaInfoService.MediaInfoChanged += MediaInfoService_MediaInfoChanged;
             _mediaInfoService.TimelineInfoChanged += MediaInfoService_TimelineInfoChanged;
@@ -744,7 +778,7 @@ namespace SoundBar.ViewModels
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
         {
-            _dispatcherQueue.TryEnqueue(() =>
+            RunOnUIThread(() =>
             {
                 string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
 
@@ -886,7 +920,7 @@ namespace SoundBar.ViewModels
             bool hasUpdate = await _updateService.CheckForUpdatesAsync();
             if (hasUpdate)
             {
-                _dispatcherQueue.TryEnqueue(() =>
+                RunOnUIThread(() =>
                 {
                     LatestVersion = _updateService.LatestVersion;
                     UpdateAvailable = true;
@@ -913,7 +947,7 @@ namespace SoundBar.ViewModels
                 if (!System.IO.Directory.Exists(folder))
                 {
                     System.IO.Directory.CreateDirectory(folder);
-                    _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+                    RunOnUIThread(() => BackgroundImage = null);
                     return; 
                 }
 
@@ -931,7 +965,7 @@ namespace SoundBar.ViewModels
 
                 if (imagePath != null)
                 {
-                    _dispatcherQueue.TryEnqueue(async () =>
+                    RunOnUIThread(async () =>
                     {
                         try
                         {
@@ -957,12 +991,12 @@ namespace SoundBar.ViewModels
                 }
                 else
                 {
-                    _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+                    RunOnUIThread(() => BackgroundImage = null);
                 }
             }
             catch
             {
-                _dispatcherQueue.TryEnqueue(() => BackgroundImage = null);
+                RunOnUIThread(() => BackgroundImage = null);
             }
         }
 
@@ -1045,7 +1079,7 @@ namespace SoundBar.ViewModels
                         catch { }
 
                         // Update UI thread safely
-                        _dispatcherQueue.TryEnqueue(() =>
+                        RunOnUIThread(() =>
                         {
                             UpdateCollection(sessions);
 
@@ -1164,7 +1198,7 @@ namespace SoundBar.ViewModels
                 if (app != null)
                 {
                     // Execute on the next UI tick so the TextBox has finished its TwoWay update
-                    _dispatcherQueue.TryEnqueue(() =>
+                    RunOnUIThread(() =>
                     {
                         app.AliasChanged -= HandleAliasChanged; // Temporarily unsubscribe to prevent loop
                         app.Name = app.DisplayName;
@@ -1537,7 +1571,7 @@ namespace SoundBar.ViewModels
         public Microsoft.UI.Xaml.Visibility FallbackIconVisibility => CurrentSongThumbnail == null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         // --- Timeline & Scrubbing ---
-        private DispatcherTimer _progressTimer;
+        private DispatcherTimer? _progressTimer;
         private TimeSpan _basePosition;
         private DateTimeOffset _lastUpdatedTime;
         private bool _isPlaying;
@@ -1603,7 +1637,7 @@ namespace SoundBar.ViewModels
 
         private void MediaInfoService_TimelineInfoChanged(object? sender, TimelineInfoEventArgs e)
         {
-            _dispatcherQueue.TryEnqueue(() =>
+            RunOnUIThread(() =>
             {
                 _basePosition = e.Position;
                 _lastUpdatedTime = e.LastUpdatedTime;
@@ -1616,10 +1650,10 @@ namespace SoundBar.ViewModels
                     CurrentSongPositionSeconds = e.Position.TotalSeconds;
                 }
 
-                if (_isPlaying && !_progressTimer.IsEnabled)
-                    _progressTimer.Start();
-                else if (!_isPlaying && _progressTimer.IsEnabled)
-                    _progressTimer.Stop();
+                if (_isPlaying && (_progressTimer?.IsEnabled == false))
+                    _progressTimer?.Start();
+                else if (!_isPlaying && (_progressTimer?.IsEnabled == true))
+                    _progressTimer?.Stop();
             });
         }
 
@@ -1648,7 +1682,7 @@ namespace SoundBar.ViewModels
 
         private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {
-            _dispatcherQueue.TryEnqueue(async () =>
+            RunOnUIThread(async () =>
             {
                 CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
                 CurrentSongArtist = e.Artist;
@@ -1721,6 +1755,11 @@ namespace SoundBar.ViewModels
                 if (newDefault != null && (SelectedAudioDevice == null || SelectedAudioDevice.Id != newDefault.Id))
                 {
                     SelectedAudioDevice = newDefault;
+                }
+                else if (latestDevices.Count == 0 && SelectedAudioDevice != null)
+                {
+                    // No devices available — clear selection so placeholder text is shown
+                    SelectedAudioDevice = null;
                 }
                 _isUpdatingDeviceFromSystem = false;
             }
@@ -1821,6 +1860,11 @@ namespace SoundBar.ViewModels
             if (_audioService is IDisposable disposable)
             {
                 disposable.Dispose();
+            }
+
+            if (_updateService is IDisposable updateDisposable)
+            {
+                updateDisposable.Dispose();
             }
         }
     }
