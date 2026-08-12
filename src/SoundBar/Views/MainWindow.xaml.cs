@@ -195,9 +195,14 @@ namespace SoundBar.Views
             // Sync Mic Mute icon colour
             if (MicMuteIcon != null)
             {
-                MicMuteIcon.Foreground = ViewModel.IsInputMuted
-                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 80, 80))  // Red when muted
-                    : new SolidColorBrush(Microsoft.UI.Colors.White);                    // Normal when live
+                if (ViewModel.IsInputMuted)
+                {
+                    MicMuteIcon.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 80, 80)); // Red when muted
+                }
+                else
+                {
+                    MicMuteIcon.ClearValue(TextBlock.ForegroundProperty); // Fall back to theme
+                }
             }
 
             // Lazily find the ItemsControl because XAML bindings might not be evaluated immediately in the constructor
@@ -311,7 +316,7 @@ namespace SoundBar.Views
             TitleBarGrid.PointerReleased += TitleBarGrid_PointerReleased;
             TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
 
-            this.Closed += (s, e) => { ViewModel.Dispose(); };
+            this.Closed += (s, e) => { _focusOutlineTimer?.Stop(); ViewModel.Dispose(); };
 
             SongPositionSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed), true);
 
@@ -750,7 +755,7 @@ namespace SoundBar.Views
                 var dndToggle = new ToggleSwitch { OnContent = "Enabled", OffContent = "Disabled" };
                 dndToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("IsDoNotDisturbEnabled"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
                 
-                // Keep the icon color logic synced if they toggle from settings menu
+                // Keep the icon colour logic synced if they toggle from settings menu
                 dndToggle.Toggled += DndToggleButton_Changed;
                 
                 dndStack.Children.Add(dndToggle);

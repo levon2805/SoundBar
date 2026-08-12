@@ -198,7 +198,7 @@
                                   ItemsSource="{Binding AudioDevices}"
                                   SelectedItem="{Binding SelectedAudioDevice, Mode=TwoWay}"
                                   DisplayMemberPath="Name"
-                                  PlaceholderText="&#xE767;  Output Device..."
+                                  PlaceholderText="No output devices detected"
                                   Background="{ThemeResource ControlFillColorDefaultBrush}"
                                   BorderThickness="1"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -233,7 +233,7 @@
                                   ItemsSource="{Binding InputDevices}"
                                   SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}"
                                   DisplayMemberPath="Name"
-                                  PlaceholderText="Input..."
+                                  PlaceholderText="No input devices detected"
                                   Background="{ThemeResource ControlFillColorDefaultBrush}"
                                   BorderThickness="1"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -270,7 +270,7 @@
                         </Grid>
                     </StackPanel>
 
-                    <Border Height="1" Background="#555555" Margin="0,20,0,10"/>
+                    <Border Height="1" Background="{ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,20,0,10"/>
 
                     <!-- Active Apps Header + List -->
                     <StackPanel Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}">
@@ -373,7 +373,7 @@
                                 </Image>
                             </Border>
                             <!-- Fallback Icon behind image -->
-                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="#444444" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
                         </Grid>
                     </Viewbox>
 
@@ -486,7 +486,7 @@
 
                 <!-- Media Controls -->
                 <StackPanel Grid.Row="2" Margin="0,10,0,-10" Visibility="{x:Bind ViewModel.MediaControlsVisibility, Mode=OneWay}">
-                    <Border Height="1" Background="#555555" Margin="0,0,0,8"/>
+                    <Border Height="1" Background="{ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,0,0,8"/>
                     
                     <Grid>
                         <!-- Music Player Mode Toggle -->
