@@ -48,9 +48,14 @@ namespace SoundBar.Models
         public System.Collections.Generic.List<string> AllowedBackgroundApps { get; set; } = new System.Collections.Generic.List<string>();
 
         /// <summary>
-        /// A lovely collection of audio presets you can quickly switch between.
+        /// Whether the user has completed the guided feature tour.
         /// </summary>
-        public System.Collections.Generic.List<AudioPreset> Presets { get; set; } = new System.Collections.Generic.List<AudioPreset>();
+        public bool HasCompletedTour { get; set; } = false;
+
+        /// <summary>
+        /// Whether to show the Feature Tour button in settings.
+        /// </summary>
+        public bool ShowFeatureTour { get; set; } = true;
 
         /// <summary>
         /// Any custom nicknames the user has given to their apps (e.g. renaming 'chrome' to 'Browser').
@@ -131,25 +136,4 @@ namespace SoundBar.Models
         Dark
     }
 
-    /// <summary>
-    /// Represents a saved configuration of volumes for your various apps.
-    /// </summary>
-    public class AudioPreset
-    {
-        /// <summary>
-        /// The name of the preset, chosen by the user.
-        /// </summary>
-        public string Name { get; set; } = string.Empty;
-
-        /// <summary>
-        /// The overall system volume level to apply with this preset.
-        /// </summary>
-        public float MasterVolume { get; set; }
-        
-        /// <summary>
-        /// Stores the volume level for individual applications.
-        /// The key is the raw executable name (like 'spotify.exe') and the value is the volume.
-        /// </summary>
-        public System.Collections.Generic.Dictionary<string, float> AppVolumes { get; set; } = new System.Collections.Generic.Dictionary<string, float>();
-    }
 }

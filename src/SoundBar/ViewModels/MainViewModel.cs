@@ -46,10 +46,6 @@ namespace SoundBar.ViewModels
         /// </summary>
         public ObservableCollection<AudioAppModel> Apps { get; set; }
 
-        /// <summary>
-        /// A collection of the user's saved audio presets.
-        /// </summary>
-        public ObservableCollection<AudioPreset> Presets { get; private set; }
         
         /// <summary>
         /// The list of audio output devices currently detected by the system.
@@ -76,23 +72,7 @@ namespace SoundBar.ViewModels
         }
         private bool _isUpdatingDeviceFromSystem = false;
 
-        private AudioPreset? _selectedPreset;
-        public AudioPreset? SelectedPreset
-        {
-            get => _selectedPreset;
-            set
-            {
-                if (_selectedPreset != value)
-                {
-                    _selectedPreset = value;
-                    OnPropertyChanged();
-                    if (_selectedPreset != null)
-                    {
-                        ApplyPreset(_selectedPreset);
-                    }
-                }
-            }
-        }
+
 
         public List<AppTheme> AvailableThemes { get; } = new List<AppTheme>
         {
@@ -738,7 +718,6 @@ namespace SoundBar.ViewModels
             HiddenApps = new ObservableCollection<string>(_settingsService.Settings.HiddenApps);
             SystemBackgroundApps = new ObservableCollection<string>();
             AllowedBackgroundApps = new ObservableCollection<string>(_settingsService.Settings.AllowedBackgroundApps);
-            Presets = new ObservableCollection<AudioPreset>(_settingsService.Settings.Presets);
             AudioDevices = new ObservableCollection<AudioDeviceModel>();
 
             try 
@@ -1415,68 +1394,49 @@ namespace SoundBar.ViewModels
             }
         }
 
-        // Presets Logic
-        public void SavePreset(string presetName)
+        /// <summary>
+        /// Opens the Windows System Sounds control panel so the user
+        /// can manage sound schemes and programme event sounds.
+        /// </summary>
+        public void OpenSystemSounds()
         {
-            if (string.IsNullOrWhiteSpace(presetName)) return;
-
-            var newPreset = new AudioPreset
+            try
             {
-                Name = presetName,
-                MasterVolume = MasterVolumePercentage / 100f
-            };
-
-            foreach (var app in Apps)
-            {
-                if (!string.IsNullOrEmpty(app.RawProcessName))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    newPreset.AppVolumes[app.RawProcessName] = app.Volume;
-                }
+                    FileName = "rundll32.exe",
+                    Arguments = "shell32.dll,Control_RunDLL mmsys.cpl,,2",
+                    UseShellExecute = false
+                });
             }
-
-            // Remove if preset with same name exists
-            var existing = Presets.FirstOrDefault(p => p.Name == presetName);
-            if (existing != null)
-            {
-                Presets.Remove(existing);
-            }
-
-            Presets.Add(newPreset);
-            _settingsService.Settings.Presets = Presets.ToList();
-            _settingsService.SaveSettings();
-
-            SelectedPreset = newPreset;
+            catch { }
         }
 
-        public void ApplyPreset(AudioPreset preset)
+        /// <summary>
+        /// Whether the user has completed the guided feature tour.
+        /// </summary>
+        public bool HasCompletedTour
         {
-            if (preset == null) return;
-
-            // Apply Master Volume
-            MasterVolumePercentage = (int)Math.Round(preset.MasterVolume * 100);
-
-            // Apply App Volumes
-            foreach (var app in Apps)
+            get => _settingsService.Settings.HasCompletedTour;
+            set
             {
-                if (!string.IsNullOrEmpty(app.RawProcessName) && preset.AppVolumes.ContainsKey(app.RawProcessName))
-                {
-                    app.Volume = preset.AppVolumes[app.RawProcessName];
-                    app.PushVolumeToOS(); // Force OS to sync immediately
-                }
+                _settingsService.Settings.HasCompletedTour = value;
+                _settingsService.SaveSettings();
+                OnPropertyChanged();
             }
         }
 
-        public void DeletePreset(AudioPreset preset)
+        /// <summary>
+        /// Whether to show the Feature Tour button in settings.
+        /// </summary>
+        public bool ShowFeatureTour
         {
-            if (preset == null || !Presets.Contains(preset)) return;
-
-            Presets.Remove(preset);
-            _settingsService.Settings.Presets = Presets.ToList();
-            _settingsService.SaveSettings();
-
-            if (SelectedPreset == preset)
+            get => _settingsService.Settings.ShowFeatureTour;
+            set
             {
-                SelectedPreset = null;
+                _settingsService.Settings.ShowFeatureTour = value;
+                _settingsService.SaveSettings();
+                OnPropertyChanged();
             }
         }
 

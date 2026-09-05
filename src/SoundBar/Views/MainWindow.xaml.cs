@@ -31,6 +31,7 @@ namespace SoundBar.Views
         private AppWindow _appWindow;
         private DispatcherTimer? _focusOutlineTimer;
         private ItemsControl? _appsItemsControl;
+        private int _tourStepIndex = -1;
 
         /// <summary>
         /// Sets up the window, wires up the ViewModel, and restores our saved settings.
@@ -377,7 +378,7 @@ namespace SoundBar.Views
             var size = _appWindow.Size;
             var isPinned = IsTopmost();
 
-            // Update the existing settings object so we don't erase HiddenApps/BackgroundApps/Presets
+            // Update the existing settings object so we don't erase HiddenApps/BackgroundApps
             _settingsService.Settings.WindowTop = position.Y;
             _settingsService.Settings.WindowLeft = position.X;
             _settingsService.Settings.WindowWidth = size.Width;
@@ -530,41 +531,263 @@ namespace SoundBar.Views
             ViewModel.DismissLoudnessWarning();
         }
 
-        private async void SavePresetButton_Click(object sender, RoutedEventArgs e)
+        private void OpenSystemSounds_Click(object sender, RoutedEventArgs e)
         {
-            var textBox = new TextBox { PlaceholderText = "e.g., Gaming Mode, Focus Mode", Margin = new Thickness(0, 10, 0, 0) };
-            
-            var dialog = new ContentDialog
-            {
-                Title = "Save New Audio Preset",
-                Content = new StackPanel 
-                { 
-                    Children = 
-                    { 
-                        new TextBlock { Text = "Enter a name for this preset to save your current active volumes:" },
-                        textBox
-                    }
-                },
-                PrimaryButtonText = "Save",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.Content.XamlRoot
-            };
+            ViewModel.OpenSystemSounds();
+        }
 
-            var result = await dialog.ShowAsync();
+        private Border? _tourOverlay;
+        private Border? _tourHighlight;
+        private FrameworkElement? _currentHighlightedElement;
 
-            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
+        private void StartGuidedTour()
+        {
+            // Close settings and show the main view so the user can see the actual UI
+            SettingsContentGrid.Visibility = Visibility.Collapsed;
+            MainContentGrid.Visibility = Visibility.Visible;
+            SettingsButton.Visibility = Visibility.Visible;
+
+            // Force Mixer view so the tour elements are visible
+            ViewModel.IsMusicPlayerMode = false;
+
+            _tourStepIndex = -1;
+            AdvanceTour();
+        }
+
+        private void AdvanceTour()
+        {
+            // Remove previous highlight
+            RemoveHighlight();
+
+            _tourStepIndex++;
+
+            var steps = BuildTourSteps();
+
+            // Skip steps whose target element is collapsed
+            while (_tourStepIndex < steps.Count &&
+                   steps[_tourStepIndex].Target is FrameworkElement fe &&
+                   fe.Visibility == Visibility.Collapsed)
             {
-                ViewModel.SavePreset(textBox.Text);
+                _tourStepIndex++;
+            }
+
+            if (_tourStepIndex >= steps.Count)
+            {
+                EndTour();
+                return;
+            }
+
+            var step = steps[_tourStepIndex];
+            var isLast = _tourStepIndex >= steps.Count - 1;
+
+            // Apply highlight to the target element
+            ApplyHighlight(step.Target);
+
+            // Build or update the overlay card
+            ShowTourCard(step.Title, step.Body, _tourStepIndex + 1, steps.Count, isLast);
+        }
+
+        private void ApplyHighlight(FrameworkElement? target)
+        {
+            if (target == null) return;
+            _currentHighlightedElement = target;
+
+            // Create a highlight border overlay positioned on top of the target element
+            try
+            {
+                var rootGrid = (Grid)TitleBarGrid.Parent;
+                var transform = target.TransformToVisual(rootGrid);
+                var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+                _tourHighlight = new Border
+                {
+                    BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                    BorderThickness = new Thickness(2),
+                    CornerRadius = new CornerRadius(4),
+                    Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(30, 30, 144, 255)),
+                    Width = target.ActualWidth + 4,
+                    Height = target.ActualHeight + 4,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(position.X - 2, position.Y - 2, 0, 0),
+                    IsHitTestVisible = false
+                };
+
+                Grid.SetRow(_tourHighlight, 0);
+                Grid.SetRowSpan(_tourHighlight, 2);
+                Canvas.SetZIndex(_tourHighlight, 99);
+                rootGrid.Children.Add(_tourHighlight);
+            }
+            catch
+            {
+                // If transform fails, just skip the highlight
             }
         }
 
-        private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
+        private void RemoveHighlight()
         {
-            if (ViewModel.SelectedPreset != null)
+            if (_tourHighlight != null)
             {
-                ViewModel.DeletePreset(ViewModel.SelectedPreset);
+                var rootGrid = (Grid)TitleBarGrid.Parent;
+                rootGrid.Children.Remove(_tourHighlight);
+                _tourHighlight = null;
             }
+            _currentHighlightedElement = null;
+        }
+
+        private void ShowTourCard(string title, string body, int stepNum, int totalSteps, bool isLast)
+        {
+            // Remove existing overlay if any
+            if (_tourOverlay != null)
+            {
+                var rootGrid = (Grid)TitleBarGrid.Parent;
+                rootGrid.Children.Remove(_tourOverlay);
+                _tourOverlay = null;
+            }
+
+            // Determine card position based on where the highlighted element is
+            bool showAtTop = true;
+            if (_currentHighlightedElement != null)
+            {
+                try
+                {
+                    var rootGrid = (Grid)TitleBarGrid.Parent;
+                    var transform = _currentHighlightedElement.TransformToVisual(rootGrid);
+                    var pos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                    double windowMid = rootGrid.ActualHeight / 2.0;
+                    // If the element is in the top half, show card at bottom, and vice versa
+                    showAtTop = pos.Y > windowMid;
+                }
+                catch { }
+            }
+
+            // Build the card content
+            var card = new StackPanel { Spacing = 4 };
+
+            card.Children.Add(new TextBlock
+            {
+                Text = $"Step {stepNum}/{totalSteps}",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            card.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            card.Children.Add(new TextBlock
+            {
+                Text = body,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            });
+
+            // Buttons
+            var btnStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 6, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var skipBtn = new Button 
+            { 
+                Content = "Skip", 
+                FontSize = 12, 
+                Padding = new Thickness(10, 4, 10, 4),
+                MinHeight = 0
+            };
+            skipBtn.Click += (s, e) => EndTour();
+
+            var nextBtn = new Button
+            {
+                Content = isLast ? "Finish" : "Next",
+                FontSize = 12,
+                Padding = new Thickness(10, 4, 10, 4),
+                MinHeight = 0,
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"]
+            };
+            nextBtn.Click += (s, e) => AdvanceTour();
+
+            btnStack.Children.Add(skipBtn);
+            btnStack.Children.Add(nextBtn);
+            card.Children.Add(btnStack);
+
+            // Wrap in a styled border - compact, opaque, dynamically positioned
+            _tourOverlay = new Border
+            {
+                Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 40, 40, 40)),
+                BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 10, 14, 10),
+                VerticalAlignment = showAtTop ? VerticalAlignment.Top : VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = showAtTop ? new Thickness(0, 50, 12, 0) : new Thickness(0, 0, 12, 12),
+                MaxWidth = 240,
+                Child = card
+            };
+
+            // Add to root grid, spanning both rows, with high Z-index
+            Grid.SetRow(_tourOverlay, 0);
+            Grid.SetRowSpan(_tourOverlay, 2);
+            Canvas.SetZIndex(_tourOverlay, 100);
+
+            var rootGrid2 = (Grid)TitleBarGrid.Parent;
+            rootGrid2.Children.Add(_tourOverlay);
+        }
+
+        private void EndTour()
+        {
+            RemoveHighlight();
+
+            if (_tourOverlay != null)
+            {
+                var rootGrid = (Grid)TitleBarGrid.Parent;
+                rootGrid.Children.Remove(_tourOverlay);
+                _tourOverlay = null;
+            }
+
+            ViewModel.HasCompletedTour = true;
+        }
+
+        private System.Collections.Generic.List<(FrameworkElement? Target, string Title, string Body)> BuildTourSteps()
+        {
+            return new System.Collections.Generic.List<(FrameworkElement? Target, string Title, string Body)>
+            {
+                (DeviceComboBox, "Switch Audio Devices",
+                 "Use the highlighted dropdown to switch between your output devices."),
+
+                (MicMuteButton, "Microphone Controls",
+                 "Tap the highlighted button to mute or unmute your mic. It turns red when muted."),
+
+                (InputDeviceComboBox, "Input Device Switcher",
+                 "Switch between your microphones and other input devices using this dropdown."),
+
+                (ActiveAppsHeaderPanel, "Per-App Volume",
+                 "Each app has its own slider. Click the icon to mute, or click the name to rename it."),
+
+                (MediaControlsPanel, "Media Controls",
+                 "Skip tracks, play/pause, and control playback from any view."),
+
+                (MusicPlayerToggleButton, "Music Player Mode",
+                 "Tap to switch to a full music player with album art and a scrubbable timeline."),
+
+                (PinButton, "Always on Top",
+                 "Pin the window so SoundBar stays above your other apps."),
+
+                (CompanionButton, "Mobile Companion",
+                 "Control your PC audio from your phone! Start the server and scan the QR code."),
+
+                (SettingsButton, "Explore Settings",
+                 "Hotkeys, themes, custom backgrounds, layout options, and system sounds are all in here!")
+            };
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -797,6 +1020,64 @@ namespace SoundBar.Views
 
                 // --- Build New Ordered UI ---
 
+                // Feature Tour button at top of settings (with hide button)
+                var tourRow = new Grid { Margin = new Thickness(0, 0, 0, 5) };
+                tourRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                tourRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                tourRow.Visibility = ViewModel.ShowFeatureTour ? Visibility.Visible : Visibility.Collapsed;
+
+                var tourBtn = new Button 
+                { 
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Padding = new Thickness(12, 10, 12, 10),
+                    Background = (SolidColorBrush)Application.Current.Resources["ControlFillColorDefaultBrush"],
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = (SolidColorBrush)Application.Current.Resources["ControlStrokeColorDefaultBrush"]
+                };
+                var tourBtnContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+                tourBtnContent.Children.Add(new TextBlock 
+                { 
+                    Text = "\uE7BE", 
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"), 
+                    FontSize = 16, 
+                    VerticalAlignment = VerticalAlignment.Center 
+                });
+                tourBtnContent.Children.Add(new TextBlock 
+                { 
+                    Text = "Take a Feature Tour", 
+                    FontSize = 14, 
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center 
+                });
+                tourBtn.Content = tourBtnContent;
+                tourBtn.Click += (s, e) => StartGuidedTour();
+                Grid.SetColumn(tourBtn, 0);
+                tourRow.Children.Add(tourBtn);
+
+                var hideTourBtn = new Button
+                {
+                    Content = "\uE711",
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
+                    Width = 36, Height = 36,
+                    Padding = new Thickness(0), MinWidth = 0, MinHeight = 0,
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                    BorderThickness = new Thickness(0),
+                    FontSize = 12,
+                    Margin = new Thickness(4, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                ToolTipService.SetToolTip(hideTourBtn, "Hide this button");
+                hideTourBtn.Click += (s, e) =>
+                {
+                    ViewModel.ShowFeatureTour = false;
+                    tourRow.Visibility = Visibility.Collapsed;
+                };
+                Grid.SetColumn(hideTourBtn, 1);
+                tourRow.Children.Add(hideTourBtn);
+
+                settingsPanel.Children.Add(tourRow);
+
                 AddCategoryHeader("Personalisation", true);
                 AddExpander("Appearance");
 
@@ -873,6 +1154,16 @@ namespace SoundBar.Views
                 showMediaToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowMediaControls"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
                 layoutStack.Children.Add(showMediaToggle);
 
+                // Feature Tour button toggle
+                var showTourToggle = new ToggleSwitch { Header = "Feature Tour Button", OnContent = "Visible", OffContent = "Hidden" };
+                showTourToggle.IsOn = ViewModel.ShowFeatureTour;
+                showTourToggle.Toggled += (s, e) =>
+                {
+                    ViewModel.ShowFeatureTour = showTourToggle.IsOn;
+                    tourRow.Visibility = showTourToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
+                };
+                layoutStack.Children.Add(showTourToggle);
+
                 layoutExpander.Content = layoutStack;
                 settingsPanel.Children.Add(layoutExpander);
 
@@ -881,6 +1172,27 @@ namespace SoundBar.Views
                 AddCategoryHeader("Audio & Focus");
                 AddExpander("Global Hotkeys", keybindsExpander);
                 AddExpander("Do Not Disturb Mode", dndExpander);
+
+                // System Sounds Expander
+                var systemSoundsExpander = new Expander
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    Header = new TextBlock { Text = "System Sounds", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
+                };
+                var systemSoundsStack = new StackPanel { Spacing = 15 };
+                systemSoundsStack.Children.Add(new TextBlock 
+                { 
+                    Text = "Opens the Windows Sound settings where you can manage sound schemes, change notification sounds, and configure programme event audio.", 
+                    FontSize = 12, 
+                    TextWrapping = TextWrapping.Wrap 
+                });
+                var openSoundsBtn = new Button { Content = "Open System Sounds" };
+                openSoundsBtn.Click += OpenSystemSounds_Click;
+                systemSoundsStack.Children.Add(openSoundsBtn);
+                systemSoundsExpander.Content = systemSoundsStack;
+                settingsPanel.Children.Add(systemSoundsExpander);
+
                 AddExpander("Hearing Protection");
 
                 AddCategoryHeader("App Management");

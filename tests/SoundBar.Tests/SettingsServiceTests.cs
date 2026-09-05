@@ -36,7 +36,7 @@ namespace SoundBar.Tests
             Assert.False(settings.IsPinned);
             Assert.Empty(settings.HiddenApps);
             Assert.Empty(settings.AllowedBackgroundApps);
-            Assert.Empty(settings.Presets);
+            Assert.False(settings.HasCompletedTour);
         }
 
         [Fact]
