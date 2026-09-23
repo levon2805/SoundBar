@@ -64,7 +64,7 @@ namespace SoundBar.Views
 
             // Apply initial theme and listen for changes
             ApplyTheme(ViewModel.SelectedTheme);
-            ViewModel.ThemeChanged += (s, theme) => ApplyTheme(theme);
+            ViewModel.ThemeChanged += ViewModel_ThemeChanged;
 
             // Handle layout changes for I/O strip
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -254,8 +254,8 @@ namespace SoundBar.Views
                             {
                                 if (app.IsMuted)
                                 {
-                                    tb.Text = "\uE74F"; // Segoe Fluent VolumeMute icon
-                                    tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons");
+                                    tb.Text = "\uE74F"; // VolumeMute icon
+                                    tb.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"];
                                     tb.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
                                     tb.FontSize = 16;
                                 }
@@ -317,11 +317,32 @@ namespace SoundBar.Views
             TitleBarGrid.PointerReleased += TitleBarGrid_PointerReleased;
             TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
 
-            this.Closed += (s, e) => { _focusOutlineTimer?.Stop(); ViewModel.Dispose(); };
+            this.Closed += MainWindow_Closed;
 
             SongPositionSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed), true);
 
             CreateDesktopShortcut();
+        }
+
+        private void ViewModel_ThemeChanged(object? sender, AppTheme theme)
+        {
+            ApplyTheme(theme);
+        }
+
+        private void MainWindow_Closed(object sender, WindowEventArgs args)
+        {
+            if (_focusOutlineTimer != null)
+            {
+                _focusOutlineTimer.Tick -= FocusOutlineTimer_Tick;
+                _focusOutlineTimer.Stop();
+            }
+
+            if (ViewModel != null)
+            {
+                ViewModel.ThemeChanged -= ViewModel_ThemeChanged;
+                ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                ViewModel.Dispose();
+            }
         }
 
         private void CreateDesktopShortcut()
@@ -408,7 +429,7 @@ namespace SoundBar.Views
                 }
                 else
                 {
-                    DndToggleButton.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 85, 85, 85)); // Dim Gray
+                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorDisabledBrush"];
                 }
             }
         }
@@ -676,7 +697,8 @@ namespace SoundBar.Views
             {
                 Text = title,
                 FontSize = 14,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorPrimaryBrush"]
             });
 
             card.Children.Add(new TextBlock
@@ -722,8 +744,8 @@ namespace SoundBar.Views
             // Wrap in a styled border - compact, opaque, dynamically positioned
             _tourOverlay = new Border
             {
-                Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 40, 40, 40)),
-                BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
+                Background = (SolidColorBrush)Application.Current.Resources["LayerFillColorDefaultBrush"],
+                BorderBrush = (SolidColorBrush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(14, 10, 14, 10),
@@ -1038,7 +1060,7 @@ namespace SoundBar.Views
                 tourBtnContent.Children.Add(new TextBlock 
                 { 
                     Text = "\uE7BE", 
-                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"), 
+                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"], 
                     FontSize = 16, 
                     VerticalAlignment = VerticalAlignment.Center 
                 });
@@ -1057,7 +1079,7 @@ namespace SoundBar.Views
                 var hideTourBtn = new Button
                 {
                     Content = "\uE711",
-                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
+                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"],
                     Width = 36, Height = 36,
                     Padding = new Thickness(0), MinWidth = 0, MinHeight = 0,
                     Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
