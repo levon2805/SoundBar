@@ -23,6 +23,9 @@ namespace SoundBar.Services
             _enumerator = new MMDeviceEnumerator();
         }
 
+        private readonly HashSet<string> _addedNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<int> _seenProcessIdsThisTick = new();
+
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
         /// </summary>
@@ -30,11 +33,8 @@ namespace SoundBar.Services
         {
             var sessions = new List<AudioSessionData>();
 
-            // We track which display names we've already seen to prevent annoying duplicates.
-            var addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            // Track what ProcessIds we see this tick to clean up stale cache entries
-            var seenProcessIdsThisTick = new HashSet<int>();
+            _addedNames.Clear();
+            _seenProcessIdsThisTick.Clear();
 
             try
             {
@@ -60,7 +60,7 @@ namespace SoundBar.Services
                             int processId = sessionControl.ProcessID;
                             if (processId == 0) continue;
                             
-                            seenProcessIdsThisTick.Add(processId);
+                            _seenProcessIdsThisTick.Add(processId);
 
                             // FAST PATH: Use cached process info (most ticks hit this)
                             bool hitCache = false;
@@ -79,7 +79,7 @@ namespace SoundBar.Services
                                     cachedApp.IsBackground = stillBackground; // update local tuple
                                 }
 
-                                if (addedNames.Contains(cachedApp.DisplayName)) continue;
+                                if (_addedNames.Contains(cachedApp.DisplayName)) continue;
 
                                 sessions.Add(new AudioSessionData
                                 {
@@ -92,7 +92,7 @@ namespace SoundBar.Services
                                     IconPath = cachedApp.IconPath
                                 });
 
-                                addedNames.Add(cachedApp.DisplayName);
+                                _addedNames.Add(cachedApp.DisplayName);
                                 continue;
                             }
 
@@ -166,12 +166,12 @@ namespace SoundBar.Services
                             safeIconPath = GetExecutablePathSafely(process);
 
                             // Cache so we never run the slow path for this ProcessId again.
-                            // We MUST do this before the addedNames check so secondary sessions get cached 
+                            // We MUST do this before the _addedNames check so secondary sessions get cached 
                             // and can respond to volume/mute commands!
                             _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.Now);
 
                             // If we already have a slider for this display name, skip adding it to the UI list
-                            if (addedNames.Contains(displayName)) continue;
+                            if (_addedNames.Contains(displayName)) continue;
 
                             sessions.Add(new AudioSessionData
                             {
@@ -184,7 +184,7 @@ namespace SoundBar.Services
                                 IconPath = safeIconPath
                             });
 
-                            addedNames.Add(displayName);
+                            _addedNames.Add(displayName);
                         }
                     }
                 }
@@ -201,7 +201,7 @@ namespace SoundBar.Services
 
             foreach (var id in cachedIds)
             {
-                if (!seenProcessIdsThisTick.Contains(id))
+                if (!_seenProcessIdsThisTick.Contains(id))
                 {
                     _processCache.TryRemove(id, out _);
                 }

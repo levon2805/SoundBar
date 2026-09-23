@@ -265,6 +265,8 @@ namespace SoundBar.Models
             }
         }
 
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> _iconCache = new();
+
         /// <summary>
         /// Attempts to extract a lovely icon from the application's executable.
         /// We do the heavy lifting in the background to keep the UI smooth.
@@ -275,26 +277,37 @@ namespace SoundBar.Models
 
             try
             {
-                // Pop onto a background thread for disk reads.
-                byte[]? iconBytes = await Task.Run(() =>
+                byte[]? iconBytes = null;
+
+                if (_iconCache.TryGetValue(IconPath, out var cachedBytes))
                 {
-                    try
+                    iconBytes = cachedBytes;
+                }
+                else
+                {
+                    // Pop onto a background thread for disk reads.
+                    iconBytes = await Task.Run(() =>
                     {
-                        using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
-                        if (sysIcon != null)
+                        try
                         {
-                            using var bmp = sysIcon.ToBitmap();
-                            using var ms = new MemoryStream();
-                            bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                            return ms.ToArray();
+                            using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
+                            if (sysIcon != null)
+                            {
+                                using var bmp = sysIcon.ToBitmap();
+                                using var ms = new MemoryStream();
+                                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                                var bytes = ms.ToArray();
+                                _iconCache[IconPath] = bytes;
+                                return bytes;
+                            }
                         }
-                    }
-                    catch
-                    {
-                        // Some apps are notoriously stubborn about their icons. We'll just ignore them.
-                    }
-                    return null;
-                });
+                        catch
+                        {
+                            // Some apps are notoriously stubborn about their icons. We'll just ignore them.
+                        }
+                        return null;
+                    });
+                }
 
                 if (iconBytes != null)
                 {

@@ -27,30 +27,29 @@ namespace SoundBar.ViewModels
         private CompanionServerService? _companionServer;
 
         /// <summary>
-        /// A list of application executable names that the user prefers to keep out of sight.
+        /// Applications that the user explicitly wants hidden.
         /// </summary>
-        public ObservableCollection<string> HiddenApps { get; set; }
+        public ObservableCollection<string> HiddenApps { get; set; } = new();
 
         /// <summary>
-        /// A list of background applications that the user explicitly wants to see in the mixer.
+        /// Background applications that the user explicitly wants to control the volume of.
         /// </summary>
-        public ObservableCollection<string> AllowedBackgroundApps { get; set; }
+        public ObservableCollection<string> AllowedBackgroundApps { get; set; } = new();
 
         /// <summary>
-        /// A raw list of background apps detected by the system, just so the UI can show them in settings.
+        /// Background applications currently running but not shown in the main view.
         /// </summary>
-        public ObservableCollection<string> SystemBackgroundApps { get; set; }
+        public ObservableCollection<string> SystemBackgroundApps { get; set; } = new();
 
         /// <summary>
-        /// The main collection of active audio applications. When we add or remove items here, the UI updates automatically.
+        /// The main collection of active audio applications presented to the user.
         /// </summary>
-        public ObservableCollection<AudioAppModel> Apps { get; set; }
+        public ObservableCollection<AudioAppModel> Apps { get; set; } = new();
 
-        
         /// <summary>
-        /// The list of audio output devices currently detected by the system.
+        /// Hardware playback devices (e.g. Speakers, Headphones).
         /// </summary>
-        public ObservableCollection<AudioDeviceModel> AudioDevices { get; private set; }
+        public ObservableCollection<AudioDeviceModel> AudioDevices { get; private set; } = new();
 
         private AudioDeviceModel? _selectedAudioDevice;
         public AudioDeviceModel? SelectedAudioDevice
@@ -685,7 +684,7 @@ namespace SoundBar.ViewModels
         private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
         // Constructor for DI / Testing
-        internal MainViewModel(SettingsService settingsService, IAudioMixerService audioService, UpdateService updateService = null, MediaInfoService mediaInfoService = null, HotkeyService hotkeyService = null)
+        internal MainViewModel(SettingsService settingsService, IAudioMixerService audioService, UpdateService? updateService = null, MediaInfoService? mediaInfoService = null, HotkeyService? hotkeyService = null)
         {
             _settingsService = settingsService;
             _updateService = updateService ?? new UpdateService();
@@ -1237,7 +1236,10 @@ namespace SoundBar.ViewModels
 
                     if (isProcessDead)
                     {
+                        var appToRemove = Apps[i];
+                        appToRemove.AliasChanged -= HandleAliasChanged;
                         Apps.RemoveAt(i);
+                        appToRemove.Dispose();
                     }
                     else
                     {
@@ -1263,7 +1265,12 @@ namespace SoundBar.ViewModels
                         
                         // Remove from active Apps if it was previously there
                         var existingBg = Apps.FirstOrDefault(a => string.Equals(a.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase));
-                        if (existingBg != null) Apps.Remove(existingBg);
+                        if (existingBg != null)
+                        {
+                            existingBg.AliasChanged -= HandleAliasChanged;
+                            Apps.Remove(existingBg);
+                            existingBg.Dispose();
+                        }
                         
                         continue;
                     }
@@ -1273,7 +1280,12 @@ namespace SoundBar.ViewModels
                 if (HiddenApps.Any(a => string.Equals(a, sessionData.DisplayName, StringComparison.OrdinalIgnoreCase)))
                 {
                     var existingHidden = Apps.FirstOrDefault(a => string.Equals(a.RawProcessName, sessionData.RawProcessName, StringComparison.OrdinalIgnoreCase));
-                    if (existingHidden != null) Apps.Remove(existingHidden);
+                    if (existingHidden != null)
+                    {
+                        existingHidden.AliasChanged -= HandleAliasChanged;
+                        Apps.Remove(existingHidden);
+                        existingHidden.Dispose();
+                    }
                     continue;
                 }
 
@@ -1353,7 +1365,9 @@ namespace SoundBar.ViewModels
             var appToRemove = Apps.FirstOrDefault(a => string.Equals(a.DisplayName, appName, StringComparison.OrdinalIgnoreCase));
             if (appToRemove != null)
             {
+                appToRemove.AliasChanged -= HandleAliasChanged;
                 Apps.Remove(appToRemove);
+                appToRemove.Dispose();
             }
         }
 
@@ -1644,7 +1658,13 @@ namespace SoundBar.ViewModels
         {
             RunOnUIThread(async () =>
             {
-                CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
+                string newTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
+                if (CurrentSongTitle == newTitle && CurrentSongArtist == e.Artist && CurrentSongThumbnail != null)
+                {
+                    return;
+                }
+
+                CurrentSongTitle = newTitle;
                 CurrentSongArtist = e.Artist;
 
                 if (e.Thumbnail != null)
@@ -1806,10 +1826,24 @@ namespace SoundBar.ViewModels
             _masterVolumeDebounce?.Dispose();
             _masterVolumeDebounce = null;
 
-            _progressTimer?.Stop();
+            if (_progressTimer != null)
+            {
+                _progressTimer.Tick -= ProgressTimer_Tick;
+                _progressTimer.Stop();
+            }
 
-            _mediaInfoService?.Dispose();
-            _hotkeyService?.Dispose();
+            if (_mediaInfoService != null)
+            {
+                _mediaInfoService.MediaInfoChanged -= MediaInfoService_MediaInfoChanged;
+                _mediaInfoService.TimelineInfoChanged -= MediaInfoService_TimelineInfoChanged;
+                _mediaInfoService.Dispose();
+            }
+
+            if (_hotkeyService != null)
+            {
+                _hotkeyService.KeyPressed -= HotkeyService_KeyPressed;
+                _hotkeyService.Dispose();
+            }
 
             // Dispose all AudioAppModels to cancel any in-flight debounce tasks
             foreach (var app in Apps)
