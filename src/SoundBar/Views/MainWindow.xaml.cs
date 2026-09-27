@@ -65,8 +65,7 @@ namespace SoundBar.Views
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             UpdateIODeviceLayout(); // Initial setup
 
-            this.ExtendsContentIntoTitleBar = true;
-            this.SetTitleBar(null);
+            // Title bar is configured in RestoreWindowPosition()
 
             IntPtr hWnd = WindowNative.GetWindowHandle(this);
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);

@@ -107,6 +107,7 @@ namespace SoundBar.Models
 
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(VolumePercentage));
+                    OnPropertyChanged(nameof(MuteDisplayText));
 
                     // Cancel any pending volume changes so we don't spam the OS while sliding.
                     if (_volumeDebounce != null)
@@ -152,6 +153,7 @@ namespace SoundBar.Models
                 _volume = volume;
                 OnPropertyChanged(nameof(Volume));
                 OnPropertyChanged(nameof(VolumePercentage));
+                    OnPropertyChanged(nameof(MuteDisplayText));
             }
         }
 
@@ -165,6 +167,7 @@ namespace SoundBar.Models
             {
                 _isMuted = isMuted;
                 OnPropertyChanged(nameof(IsMuted));
+                OnPropertyChanged(nameof(MuteDisplayText));
             }
         }
 
@@ -241,6 +244,7 @@ namespace SoundBar.Models
                     LastModified = DateTime.Now;
 
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(MuteDisplayText));
 
                     // Actually tell Windows to shut it up (or let it sing).
                     string osName = RawProcessName ?? DisplayName ?? "";

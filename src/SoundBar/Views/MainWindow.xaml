@@ -41,11 +41,7 @@
 
         <Grid>
             <!-- Background Image Layer -->
-            <Image Stretch="UniformToFill">
-                <Image.Source>
-                    <BitmapImage UriSource="{x:Bind ViewModel.BackgroundImage, Mode=OneWay}" DecodePixelWidth="800" />
-                </Image.Source>
-            </Image>
+            <Image Stretch="UniformToFill" Source="{Binding BackgroundImage}" />
             <!-- Dimming Overlay Layer -->
             <Border Background="{ThemeResource DimmingOverlayBrush}" />
 
@@ -318,8 +314,14 @@
                 <ListView Grid.Row="1" 
                           Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}"
                           ItemsSource="{Binding Apps}" 
-                          SelectionMode="None" 
-                          >
+                          SelectionMode="None">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,0,0,15" Background="{Binding IsFocused, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
@@ -389,10 +391,7 @@
                     <Viewbox Grid.Row="0" Margin="10" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="280">
                         <Grid>
                             <Border CornerRadius="12" Background="{ThemeResource LayerFillColorAltBrush}" Width="250" Height="250">
-                                <Image Stretch="UniformToFill">
-                                    <Image.Source>
-                                        <BitmapImage UriSource="{x:Bind ViewModel.CurrentSongThumbnail, Mode=OneWay}" DecodePixelWidth="250" />
-                                    </Image.Source>
+                                <Image Stretch="UniformToFill" Source="{Binding CurrentSongThumbnail}">
                                     <ToolTipService.ToolTip>
                                         <ToolTip Content="No Artwork Available" />
                                     </ToolTipService.ToolTip>
@@ -619,18 +618,73 @@
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
                     <StackPanel x:Name="DynamicSettingsStackPanel" Spacing="10">
                         
-                        <!-- About & Updates Expander -->
+                        <!-- Appearance & Layout Header -->
+                        <TextBlock Text="Appearance &amp; Layout" FontSize="13" FontWeight="SemiBold" 
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,10,0,5"/>
+
+                        <!-- Appearance (Theme) -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
-                                <TextBlock Text="About &amp; Updates" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="Appearance" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
                             </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <TextBlock Text="Check out the latest features and changes in this version." FontSize="12" TextWrapping="Wrap"/>
-                                <Button Content="View Release Notes" Click="VersionHyperlink_Click"/>
+                            <StackPanel>
+                                <TextBlock Text="Choose whether the app should follow your system settings or force Light/Dark mode." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ComboBox HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding AvailableThemes}"
+                                          SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                                          Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                          BorderThickness="1"
+                                          BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                          Margin="0,0,0,15"/>
+
+                                <TextBlock Text="Highlights the active application so you know which volume you are controlling via hotkeys." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <ToggleSwitch Header="Active App Highlight" 
+                                              IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}" 
+                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </StackPanel>
                         </Expander>
 
-                        <!-- Global Hotkeys Expander -->
+                        <!-- Layout Settings -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Expander.Header>
+                                <TextBlock Text="Layout Settings" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Toggle which sections are visible on the main page. Hidden sections are still functional via hotkeys." FontSize="12" TextWrapping="Wrap"/>
+                                <ToggleSwitch Header="Output Device Picker" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowOutputDevice, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Input Device (Microphone)" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowInputDevice, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Feature Tour Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowFeatureTour, Mode=TwoWay}" Toggled="FeatureTourToggle_Toggled"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- Custom Background -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Expander.Header>
+                                <TextBlock Text="Custom Background" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Place a .jpg or .png image in the backgrounds folder to personalise your SoundBar." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <Grid Margin="0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="Open Folder" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="OpenBackgroundFolder_Click"/>
+                                    <Button Grid.Column="2" Content="Reload" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="ReloadBackground_Click"/>
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- Audio & Focus Header -->
+                        <TextBlock Text="Audio &amp; Focus" FontSize="13" FontWeight="SemiBold" 
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
+
+                        <!-- Global Hotkeys -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
                                 <TextBlock Text="Global Hotkeys" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
@@ -656,7 +710,7 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Do Not Disturb Mode Expander -->
+                        <!-- Do Not Disturb Mode -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
                                 <TextBlock Text="Do Not Disturb Mode" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
@@ -667,23 +721,7 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Layout Settings -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Layout Settings" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="Toggle which sections are visible on the main page. Hidden sections are still functional via hotkeys." FontSize="12" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Output Device Picker" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowOutputDevice, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Input Device (Microphone)" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowInputDevice, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Feature Tour Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowFeatureTour, Mode=TwoWay}" Toggled="FeatureTourToggle_Toggled"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <!-- System Sounds Expander -->
+                        <!-- System Sounds -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
                                 <TextBlock Text="System Sounds" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
@@ -691,29 +729,6 @@
                             <StackPanel Spacing="15">
                                 <TextBlock Text="Opens the Windows Sound settings where you can manage sound schemes, change notification sounds, and configure programme event audio." FontSize="12" TextWrapping="Wrap"/>
                                 <Button Content="Open System Sounds" Click="OpenSystemSounds_Click"/>
-                            </StackPanel>
-                        </Expander>
-
-                          <!-- Theme Settings -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Appearance" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Choose whether the app should follow your system settings or force Light/Dark mode." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ComboBox HorizontalAlignment="Stretch"
-                                          ItemsSource="{Binding AvailableThemes}"
-                                          SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
-                                          Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                          BorderThickness="1"
-                                          BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                          Margin="0,0,0,15"/>
-
-                                <TextBlock Text="Highlights the active application so you know which volume you are controlling via hotkeys." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Active App Highlight" 
-                                              IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}" 
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </StackPanel>
                         </Expander>
 
@@ -730,24 +745,9 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Custom Background -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Custom Background" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Place a .jpg or .png image in the backgrounds folder to personalise your SoundBar." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <Grid Margin="0,5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Content="Open Folder" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="OpenBackgroundFolder_Click"/>
-                                    <Button Grid.Column="2" Content="Reload" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="ReloadBackground_Click"/>
-                                </Grid>
-                            </StackPanel>
-                        </Expander>
+                        <!-- App Management Header -->
+                        <TextBlock Text="App Management" FontSize="13" FontWeight="SemiBold" 
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
 
                         <!-- Hidden Apps -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
@@ -774,7 +774,7 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Background Apps Second -->
+                        <!-- Background Apps -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
                                 <TextBlock Text="Background Apps" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
@@ -799,20 +799,11 @@
                             </StackPanel>
                         </Expander>
 
-                        <!-- Media Controls Settings -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Media Controls" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Shows global media controls at the bottom of the application (Previous, Play/Pause, Next, Mute)." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Show Media Controls" 
-                                              IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}" 
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                            </StackPanel>
-                        </Expander>
+                        <!-- General Header -->
+                        <TextBlock Text="General" FontSize="13" FontWeight="SemiBold" 
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
 
-                        <!-- System Integration Settings -->
+                        <!-- System Integration -->
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Expander.Header>
                                 <TextBlock Text="System Integration" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
@@ -853,6 +844,18 @@
                                 </StackPanel>
                             </StackPanel>
                         </Expander>
+
+                        <!-- About & Updates -->
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Expander.Header>
+                                <TextBlock Text="About &amp; Updates" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                            </Expander.Header>
+                            <StackPanel Spacing="15">
+                                <TextBlock Text="Check out the latest features and changes in this version." FontSize="12" TextWrapping="Wrap"/>
+                                <Button Content="View Release Notes" Click="VersionHyperlink_Click"/>
+                            </StackPanel>
+                        </Expander>
+
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

@@ -1633,10 +1633,6 @@ namespace SoundBar.ViewModels
             RunOnUIThread(async () =>
             {
                 string newTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
-                if (CurrentSongTitle == newTitle && CurrentSongArtist == e.Artist && CurrentSongThumbnail != null)
-                {
-                    return;
-                }
 
                 CurrentSongTitle = newTitle;
                 CurrentSongArtist = e.Artist;
@@ -1645,12 +1641,18 @@ namespace SoundBar.ViewModels
                 {
                     try
                     {
-                        string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBar_Thumbnail.png");
+                        string oldThumb = CurrentSongThumbnail;
+                        string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"SoundBar_Thumbnail_{Guid.NewGuid():N}.png");
                         using var stream = await e.Thumbnail.OpenReadAsync();
                         using var classicStream = stream.AsStreamForRead();
                         using var fs = System.IO.File.Open(tempPath, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
                         await classicStream.CopyToAsync(fs);
                         CurrentSongThumbnail = tempPath;
+                        
+                        if (oldThumb != null && System.IO.File.Exists(oldThumb))
+                        {
+                            try { System.IO.File.Delete(oldThumb); } catch { }
+                        }
                     }
                     catch
                     {
