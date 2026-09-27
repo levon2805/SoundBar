@@ -1,0 +1,18 @@
+            }
+            catch (Exception)
+            {
+                // No audio device connected — return whatever sessions we've collected so far
+            }
+
+            // Cleanup dead processes from cache
+            List<int> cachedIds;
+            cachedIds = _processCache.Keys.ToList();
+
+            foreach (var id in cachedIds)
+            {
+                if (!_seenProcessIdsThisTick.Contains(id))
+                {
+                    _processCache.TryRemove(id, out _);
+                }
+            }
+
