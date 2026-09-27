@@ -478,6 +478,7 @@ namespace SoundBar.ViewModels
                     InputDevices.Add(device);
                 }
                 _isUpdatingInputDeviceFromSystem = false;
+                InputDevicesSnapshot = InputDevices.ToArray();
             }
 
             // Sync the selected device
@@ -1720,6 +1721,7 @@ namespace SoundBar.ViewModels
                     SelectedAudioDevice = null;
                 }
                 _isUpdatingDeviceFromSystem = false;
+                AudioDevicesSnapshot = AudioDevices.ToArray();
             }
         }
 
