@@ -19,15 +19,20 @@
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8202020" />
                     </ResourceDictionary>
                 </ResourceDictionary.ThemeDictionaries>
+                <SolidColorBrush x:Key="FocusTrueBrush" Color="#280078D7"/>
+                <SolidColorBrush x:Key="FocusFalseBrush" Color="Transparent"/>
+                <SolidColorBrush x:Key="MuteTrueBrush" Color="Red"/>
+                <FontFamily x:Key="SegoeFont">Segoe UI</FontFamily>
+
                 <helpers:BoolToBrushConverter x:Key="FocusedToBrushConverter" 
-                                             TrueBrush="#280078D7" 
-                                             FalseBrush="Transparent"/>
+                                             TrueBrush="{StaticResource FocusTrueBrush}" 
+                                             FalseBrush="{StaticResource FocusFalseBrush}"/>
                 <helpers:BoolToBrushConverter x:Key="MutedToForegroundConverter" 
-                                             TrueBrush="Red" 
+                                             TrueBrush="{StaticResource MuteTrueBrush}" 
                                              FalseBrush="{ThemeResource TextFillColorSecondaryBrush}"/>
                 <helpers:BoolToFontFamilyConverter x:Key="MutedToFontFamilyConverter"
                                                   TrueFont="{ThemeResource SymbolThemeFontFamily}"
-                                                  FalseFont="Segoe UI"/>
+                                                  FalseFont="{StaticResource SegoeFont}"/>
                 <helpers:BoolToDoubleConverter x:Key="MutedToFontSizeConverter"
                                               TrueValue="16"
                                               FalseValue="14"/>
