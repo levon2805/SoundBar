@@ -16,7 +16,7 @@ namespace SoundBar.Models
     public class AudioAppModel : INotifyPropertyChanged, IDisposable
     {
         private readonly IAudioMixerService _audioService;
-        private readonly DispatcherQueue? _dispatcherQueue;
+        
 
         /// <summary>
         /// The OS-level process ID.
@@ -62,11 +62,11 @@ namespace SoundBar.Models
         /// </summary>
         public string? IconPath { get; set; }
 
-        private Microsoft.UI.Xaml.Media.ImageSource? _appIcon;
+        private string? _appIcon;
         /// <summary>
         /// The visual icon loaded for the UI.
         /// </summary>
-        public Microsoft.UI.Xaml.Media.ImageSource? AppIcon
+        public string? AppIcon
         {
             get => _appIcon;
             private set
@@ -182,6 +182,11 @@ namespace SoundBar.Models
         }
 
         /// <summary>
+        /// Provides either the volume percentage text or the mute icon glyph.
+        /// </summary>
+        public string MuteDisplayText => IsMuted ? "\uE74F" : $"{VolumePercentage}%";
+
+        /// <summary>
         /// A friendly percentage representation of the volume, perfect for UI bindings.
         /// </summary>
         public int VolumePercentage
@@ -254,18 +259,10 @@ namespace SoundBar.Models
         public AudioAppModel(IAudioMixerService audioService)
         {
             _audioService = audioService;
-            try
-            {
-                _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            }
-            catch (Exception)
-            {
-                // In a unit test environment without a UI thread, DispatcherQueue may throw a COMException.
-                _dispatcherQueue = null;
-            }
         }
 
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> _iconCache = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _iconCache = new();
+        private static readonly string _iconDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarIcons");
 
         /// <summary>
         /// Attempts to extract a lovely icon from the application's executable.
@@ -277,62 +274,49 @@ namespace SoundBar.Models
 
             try
             {
-                byte[]? iconBytes = null;
-
-                if (_iconCache.TryGetValue(IconPath, out var cachedBytes))
+                if (_iconCache.TryGetValue(IconPath, out var cachedPath))
                 {
-                    iconBytes = cachedBytes;
-                }
-                else
-                {
-                    // Pop onto a background thread for disk reads.
-                    iconBytes = await Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
-                            if (sysIcon != null)
-                            {
-                                using var bmp = sysIcon.ToBitmap();
-                                using var ms = new MemoryStream();
-                                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                                var bytes = ms.ToArray();
-                                _iconCache[IconPath] = bytes;
-                                return bytes;
-                            }
-                        }
-                        catch
-                        {
-                            // Some apps are notoriously stubborn about their icons. We'll just ignore them.
-                        }
-                        return null;
-                    });
+                    AppIcon = cachedPath;
+                    return;
                 }
 
-                if (iconBytes != null)
+                // Pop onto a background thread for disk reads.
+                string? generatedPath = await Task.Run(() =>
                 {
-                    // Hop back to the UI thread to construct the actual image.
-                    if (_dispatcherQueue != null)
+                    try
                     {
-                        _dispatcherQueue.TryEnqueue(async () =>
+                        if (!System.IO.Directory.Exists(_iconDir)) System.IO.Directory.CreateDirectory(_iconDir);
+                        
+                        using var sha1 = System.Security.Cryptography.SHA1.Create();
+                        var hashBytes = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(IconPath));
+                        var hash = System.BitConverter.ToString(hashBytes).Replace("-", "");
+                        string targetPath = System.IO.Path.Combine(_iconDir, hash + ".png");
+
+                        if (System.IO.File.Exists(targetPath))
                         {
-                            try
-                            {
-                                using var ms = new MemoryStream(iconBytes);
-                                using var ras = ms.AsRandomAccessStream();
-                                var bitmap = new BitmapImage();
-                                await bitmap.SetSourceAsync(ras);
-                                AppIcon = bitmap;
-                            }
-                            catch { }
-                        });
+                            _iconCache[IconPath] = targetPath;
+                            return targetPath;
+                        }
+
+                        using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
+                        if (sysIcon != null)
+                        {
+                            using var bmp = sysIcon.ToBitmap();
+                            bmp.Save(targetPath, System.Drawing.Imaging.ImageFormat.Png);
+                            _iconCache[IconPath] = targetPath;
+                            return targetPath;
+                        }
                     }
+                    catch { }
+                    return null;
+                });
+
+                if (generatedPath != null)
+                {
+                    AppIcon = generatedPath;
                 }
             }
-            catch
-            {
-                // Access denied or something similar. No big deal.
-            }
+            catch { }
         }
 
         /// <summary>

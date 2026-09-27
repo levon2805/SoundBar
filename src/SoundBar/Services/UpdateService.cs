@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v3.3.0";
+        public const string CurrentVersion = "v3.3.1";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -187,6 +187,9 @@ namespace SoundBar.Services
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
+            string EscapeForBatch(string path) => "\"" + path.Replace("\"", "\"\"") + "\"";
+            string EscapeForPowerShell(string path) => path.Replace("'", "''");
+
             string batContent = $$"""
 @echo off
 echo Updating SoundBar... Please wait.
@@ -201,22 +204,22 @@ if "%ERRORLEVEL%"=="0" (
 :: Mirror the update into the app directory (copies new files, overwrites changed files, deletes orphaned files).
 :: /MIR = mirror, /XF = exclude files, /XD = exclude directories.
 :: We exclude config/user data that lives alongside the exe, and the update batch itself.
-robocopy "{{sourceDir}}" "{{currentAppDir}}" /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+robocopy {{EscapeForBatch(sourceDir)}} {{EscapeForBatch(currentAppDir)}} /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
 
 :: Robocopy exit codes 0-7 are success; 8+ are errors. Reset to 0 so the batch continues.
 if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
 
 :: Clean up the temp directory
-rmdir /s /q "{{tempUpdateDir}}"
+rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
 
 :: Create a desktop shortcut if it doesn't exist
 set "LNK_PATH=%USERPROFILE%\Desktop\SoundBar.lnk"
 if not exist "%LNK_PATH%" (
-    powershell -Command "$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('%LNK_PATH%'); $s.TargetPath = '{{currentExePath}}'; $s.WorkingDirectory = '{{currentAppDir}}'; $s.Save()"
+    powershell -Command "$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('%LNK_PATH%'); $s.TargetPath = '{{EscapeForPowerShell(currentExePath)}}'; $s.WorkingDirectory = '{{EscapeForPowerShell(currentAppDir)}}'; $s.Save()"
 )
 
 :: Restart the application
-start "" "{{currentExePath}}"
+start "" {{EscapeForBatch(currentExePath)}}
 
 :: Delete this batch file
 del "%~f0"

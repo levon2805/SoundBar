@@ -14,10 +14,16 @@ namespace SoundBar.Services
         private readonly string _filePath;
         private readonly object _fileLock = new object();
 
+        private AppSettings _settings = new AppSettings();
+        
         /// <summary>
         /// The currently loaded settings, ready to be used.
         /// </summary>
-        public AppSettings Settings { get; private set; }
+        public AppSettings Settings
+        {
+            get { lock (_fileLock) { return _settings; } }
+            private set { lock (_fileLock) { _settings = value; } }
+        }
 
         /// <summary>
         /// Sets up the service and figures out where to stick the config file.
@@ -63,17 +69,13 @@ namespace SoundBar.Services
             {
                 if (!File.Exists(_filePath))
                     return new AppSettings();
-
                 try
                 {
                     string json = File.ReadAllText(_filePath);
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
-                catch
-                {
-                    // Oh dear, the file is corrupt. Let's just return a fresh slate rather than crashing.
-                    return new AppSettings();
-                }
+                catch (JsonException) { return new AppSettings(); }
+                catch (IOException) { return Settings ?? new AppSettings(); }
             }
         }
 
@@ -86,16 +88,13 @@ namespace SoundBar.Services
             {
                 try
                 {
-                    // WriteIndented makes the JSON much nicer for humans to read.
                     var options = new JsonSerializerOptions { WriteIndented = true };
                     string json = JsonSerializer.Serialize(settings, options);
-                    File.WriteAllText(_filePath, json);
+                    string tempPath = _filePath + ".tmp";
+                    File.WriteAllText(tempPath, json);
+                    File.Move(tempPath, _filePath, overwrite: true);
                 }
-                catch
-                {
-                    // We just ignore save errors to prevent interrupting the user.
-                    // It's not ideal, but better than a hard crash.
-                }
+                catch { }
             }
         }
     }

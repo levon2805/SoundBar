@@ -29,8 +29,11 @@ namespace SoundBar.Services
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
         /// </summary>
+        private readonly object _pollLock = new object();
         public List<AudioSessionData> GetActiveAudioSessions()
         {
+            lock (_pollLock)
+            {
             var sessions = new List<AudioSessionData>();
 
             _addedNames.Clear();
@@ -189,25 +192,23 @@ namespace SoundBar.Services
                     }
                 }
             }
+                            // Cleanup dead processes from cache
+                List<int> cachedIds = _processCache.Keys.ToList();
+                foreach (var id in cachedIds)
+                {
+                    if (!_seenProcessIdsThisTick.Contains(id))
+                    {
+                        _processCache.TryRemove(id, out _);
+                    }
+                }
             }
             catch (Exception)
             {
-                // No audio device connected — return whatever sessions we've collected so far
-            }
-
-            // Cleanup dead processes from cache
-            List<int> cachedIds;
-            cachedIds = _processCache.Keys.ToList();
-
-            foreach (var id in cachedIds)
-            {
-                if (!_seenProcessIdsThisTick.Contains(id))
-                {
-                    _processCache.TryRemove(id, out _);
-                }
+                // No audio device connected
             }
 
             return sessions;
+            }
         }
 
         /// <summary>
@@ -282,7 +283,8 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using var localEnumerator = new MMDeviceEnumerator();
+                using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 using (var volume = AudioEndpointVolume.FromDevice(device))
                 {
                     volume.MasterVolumeLevelScalar = level;
@@ -307,7 +309,8 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                using var localEnumerator = new MMDeviceEnumerator();
+                using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                 using (var volume = AudioEndpointVolume.FromDevice(device))
                 {
                     volume.IsMuted = isMuted;
@@ -351,7 +354,8 @@ namespace SoundBar.Services
             {
                 try
                 {
-                    using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using var localEnumerator = new MMDeviceEnumerator();
+                    using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                     using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
                     using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
                     {
@@ -516,7 +520,8 @@ namespace SoundBar.Services
             {
                 try
                 {
-                    using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using var localEnumerator = new MMDeviceEnumerator();
+                    using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
                     using (var sessionManager = AudioSessionManager2.FromMMDevice(device))
                     using (var sessionEnumerator = sessionManager.GetSessionEnumerator())
                     {

@@ -45,11 +45,13 @@ namespace SoundBar.ViewModels
         /// The main collection of active audio applications presented to the user.
         /// </summary>
         public ObservableCollection<AudioAppModel> Apps { get; set; } = new();
+        public IEnumerable<AudioAppModel> AppsSnapshot { get; private set; } = Array.Empty<AudioAppModel>();
 
         /// <summary>
         /// Hardware playback devices (e.g. Speakers, Headphones).
         /// </summary>
         public ObservableCollection<AudioDeviceModel> AudioDevices { get; private set; } = new();
+        public IEnumerable<AudioDeviceModel> AudioDevicesSnapshot { get; private set; } = Array.Empty<AudioDeviceModel>();
 
         private AudioDeviceModel? _selectedAudioDevice;
         public AudioDeviceModel? SelectedAudioDevice
@@ -149,8 +151,8 @@ namespace SoundBar.ViewModels
         public string AppVersionText => $"SoundBar {UpdateService.CurrentVersion}";
 
         // Background Image Property
-        private Microsoft.UI.Xaml.Media.ImageSource? _backgroundImage;
-        public Microsoft.UI.Xaml.Media.ImageSource? BackgroundImage
+        private string? _backgroundImage;
+        public string? BackgroundImage
         {
             get => _backgroundImage;
             private set
@@ -296,8 +298,8 @@ namespace SoundBar.ViewModels
             _companionServer = new CompanionServerService(
                 _audioService,
                 _mediaInfoService,
-                () => Apps,
-                () => AudioDevices,
+                () => AppsSnapshot,
+                () => AudioDevicesSnapshot,
                 () => SelectedAudioDevice,
                 (deviceId) =>
                 {
@@ -310,7 +312,7 @@ namespace SoundBar.ViewModels
                         }
                     });
                 },
-                () => InputDevices,
+                () => InputDevicesSnapshot,
                 () => SelectedInputDevice,
                 (deviceId) =>
                 {
@@ -411,6 +413,7 @@ namespace SoundBar.ViewModels
         /// The list of audio input devices (like microphones) currently detected by the system.
         /// </summary>
         public ObservableCollection<AudioDeviceModel> InputDevices { get; } = new();
+        public IEnumerable<AudioDeviceModel> InputDevicesSnapshot { get; private set; } = Array.Empty<AudioDeviceModel>();
 
         private AudioDeviceModel? _selectedInputDevice;
         public AudioDeviceModel? SelectedInputDevice
@@ -914,7 +917,6 @@ namespace SoundBar.ViewModels
             await _updateService.DownloadAndApplyUpdateAsync();
             IsUpdating = false;
         }
-
         public async void LoadBackgroundImageAsync()
         {
             try
@@ -941,36 +943,7 @@ namespace SoundBar.ViewModels
                                                      f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
                 });
 
-                if (imagePath != null)
-                {
-                    RunOnUIThread(async () =>
-                    {
-                        try
-                        {
-                            var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
-                            
-                            // MEMORY OPTIMISATION: Constrain the decoded image size.
-                            // A raw 4K wallpaper consumes ~33MB of RAM. Limiting it to 800px width 
-                            // keeps memory usage tiny while looking crystal clear on the widget.
-                            bitmap.DecodePixelWidth = 800;
-
-                            // Use FileShare.ReadWrite so we don't crash if the user is mid-copying a file
-                            using var stream = System.IO.File.Open(imagePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
-                            using var randomAccessStream = stream.AsRandomAccessStream();
-                            await bitmap.SetSourceAsync(randomAccessStream);
-                            BackgroundImage = bitmap;
-                        }
-                        catch
-                        {
-                            // If the file is heavily locked or corrupted, silently ignore
-                            // rather than clearing their existing background.
-                        }
-                    });
-                }
-                else
-                {
-                    RunOnUIThread(() => BackgroundImage = null);
-                }
+                RunOnUIThread(() => BackgroundImage = imagePath);
             }
             catch
             {
@@ -1341,6 +1314,7 @@ namespace SoundBar.ViewModels
                     }
                 }
             }
+            AppsSnapshot = Apps.ToArray();
         }
 
         // Hides an app from the main view
@@ -1527,8 +1501,8 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private Microsoft.UI.Xaml.Media.Imaging.BitmapImage? _currentSongThumbnail;
-        public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? CurrentSongThumbnail
+        private string? _currentSongThumbnail;
+        public string? CurrentSongThumbnail
         {
             get => _currentSongThumbnail;
             set
@@ -1671,10 +1645,12 @@ namespace SoundBar.ViewModels
                 {
                     try
                     {
-                        var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                        string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBar_Thumbnail.png");
                         using var stream = await e.Thumbnail.OpenReadAsync();
-                        await bmp.SetSourceAsync(stream);
-                        CurrentSongThumbnail = bmp;
+                        using var classicStream = stream.AsStreamForRead();
+                        using var fs = System.IO.File.Open(tempPath, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
+                        await classicStream.CopyToAsync(fs);
+                        CurrentSongThumbnail = tempPath;
                     }
                     catch
                     {

@@ -78,9 +78,10 @@ namespace SoundBar.Services
         /// <param name="deviceId">The unique ID of the device you want to switch to.</param>
         public static void SetDefaultDevice(string deviceId)
         {
+            object? pcc = null;
             try
             {
-                var pcc = new PolicyConfigClient();
+                pcc = new PolicyConfigClient();
                 
                 // Try Windows 10/11 version
                 if (pcc is IPolicyConfig config)
@@ -88,7 +89,6 @@ namespace SoundBar.Services
                     config.SetDefaultEndpoint(deviceId, 0); // eConsole
                     config.SetDefaultEndpoint(deviceId, 1); // eMultimedia
                     config.SetDefaultEndpoint(deviceId, 2); // eCommunications
-                    Marshal.ReleaseComObject(pcc);
                     return;
                 }
 
@@ -98,7 +98,6 @@ namespace SoundBar.Services
                     configVista.SetDefaultEndpoint(deviceId, 0);
                     configVista.SetDefaultEndpoint(deviceId, 1);
                     configVista.SetDefaultEndpoint(deviceId, 2);
-                    Marshal.ReleaseComObject(pcc);
                     return;
                 }
 
@@ -108,16 +107,16 @@ namespace SoundBar.Services
                     configClassic.SetDefaultEndpoint(deviceId, 0);
                     configClassic.SetDefaultEndpoint(deviceId, 1);
                     configClassic.SetDefaultEndpoint(deviceId, 2);
-                    Marshal.ReleaseComObject(pcc);
                     return;
                 }
-
-                // Release if no interface matched
-                Marshal.ReleaseComObject(pcc);
             }
             catch
             {
                 // Silently fail if COM is unavailable on this system
+            }
+            finally
+            {
+                if (pcc != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(pcc);
             }
         }
     }
