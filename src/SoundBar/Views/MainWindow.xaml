@@ -311,7 +311,7 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,0,0,15" Background="{Binding IsFocused, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
+                                <Grid Margin="0,0,0,15" Background="{Binding IsHighlightVisible, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="30"/>
                                         <ColumnDefinition Width="140"/>
@@ -644,8 +644,7 @@
                                 <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Feature Tour Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowFeatureTour, Mode=TwoWay}" Toggled="FeatureTourToggle_Toggled"/>
-                            </StackPanel>
+                                </StackPanel>
                         </Expander>
 
                         <!-- Custom Background -->

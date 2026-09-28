@@ -223,6 +223,23 @@ namespace SoundBar.Models
             }
         }
 
+        private bool _isHighlightVisible;
+        /// <summary>
+        /// True if this app is focused AND the user has the highlight setting enabled.
+        /// </summary>
+        public bool IsHighlightVisible
+        {
+            get => _isHighlightVisible;
+            set
+            {
+                if (_isHighlightVisible != value)
+                {
+                    _isHighlightVisible = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         /// <summary>
         /// Lets us know if the Windows Audio Session is still breathing.
         /// </summary>

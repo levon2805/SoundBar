@@ -249,6 +249,12 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.EnableFocusHighlight = value;
                     OnPropertyChanged();
                     _settingsService.SaveSettings();
+                    
+                    // Update all apps immediately so the UI reflects the toggle
+                    foreach (var app in Apps)
+                    {
+                        app.IsHighlightVisible = app.IsFocused && value;
+                    }
                 }
             }
         }
@@ -1117,6 +1123,7 @@ namespace SoundBar.ViewModels
                                     }
                                 }
                                 app.IsFocused = isMatch;
+                                app.IsHighlightVisible = isMatch && EnableFocusHighlight;
                             }
                         });
                     }
@@ -1401,34 +1408,6 @@ namespace SoundBar.ViewModels
             catch { }
         }
 
-        /// <summary>
-        /// Whether the user has completed the guided feature tour.
-        /// </summary>
-        public bool HasCompletedTour
-        {
-            get => _settingsService.Settings.HasCompletedTour;
-            set
-            {
-                _settingsService.Settings.HasCompletedTour = value;
-                _settingsService.SaveSettings();
-                OnPropertyChanged();
-            }
-        }
-
-        /// <summary>
-        /// Whether to show the Feature Tour button in settings.
-        /// </summary>
-        public bool ShowFeatureTour
-        {
-            get => _settingsService.Settings.ShowFeatureTour;
-            set
-            {
-                _settingsService.Settings.ShowFeatureTour = value;
-                _settingsService.SaveSettings();
-                OnPropertyChanged();
-            }
-        }
-
         // --- View Modes ---
         private bool _isMusicPlayerMode = false;
         public bool IsMusicPlayerMode
@@ -1642,7 +1621,7 @@ namespace SoundBar.ViewModels
                 {
                     try
                     {
-                        string oldThumb = CurrentSongThumbnail;
+                        string? oldThumb = CurrentSongThumbnail;
                         string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"SoundBar_Thumbnail_{Guid.NewGuid():N}.png");
                         using var stream = await e.Thumbnail.OpenReadAsync();
                         using var classicStream = stream.AsStreamForRead();

@@ -23,8 +23,7 @@ namespace SoundBar.Services
             _enumerator = new MMDeviceEnumerator();
         }
 
-        private readonly HashSet<string> _addedNames = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<int> _seenProcessIdsThisTick = new();
+
 
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
@@ -36,8 +35,8 @@ namespace SoundBar.Services
             {
             var sessions = new List<AudioSessionData>();
 
-            _addedNames.Clear();
-            _seenProcessIdsThisTick.Clear();
+            var _addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var _seenProcessIdsThisTick = new HashSet<int>();
 
             try
             {
