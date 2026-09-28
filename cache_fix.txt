@@ -23,7 +23,8 @@ namespace SoundBar.Services
             _enumerator = new MMDeviceEnumerator();
         }
 
-
+        private readonly HashSet<string> _addedNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<int> _seenProcessIdsThisTick = new();
 
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
@@ -35,8 +36,8 @@ namespace SoundBar.Services
             {
             var sessions = new List<AudioSessionData>();
 
-            var _addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var _seenProcessIdsThisTick = new HashSet<int>();
+            _addedNames.Clear();
+            _seenProcessIdsThisTick.Clear();
 
             try
             {
@@ -58,7 +59,7 @@ namespace SoundBar.Services
                             // Ignore expired sessions
                             if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
 
-                            // Use ProcessID directly â€” no System.Diagnostics.Process allocation
+                            // Use ProcessID directly — no System.Diagnostics.Process allocation
                             int processId = sessionControl.ProcessID;
                             if (processId == 0) continue;
                             
@@ -191,19 +192,22 @@ namespace SoundBar.Services
                     }
                 }
             }
-                            // Cleanup dead processes from cache
-                List<int> cachedIds = _processCache.Keys.ToList();
-                foreach (var id in cachedIds)
-                {
-                    if (!_seenProcessIdsThisTick.Contains(id))
-                    {
-                        _processCache.TryRemove(id, out _);
-                    }
-                }
             }
             catch (Exception)
             {
-                // No audio device connected
+                // No audio device connected — return whatever sessions we've collected so far
+            }
+
+            // Cleanup dead processes from cache
+            List<int> cachedIds;
+            cachedIds = _processCache.Keys.ToList();
+
+            foreach (var id in cachedIds)
+            {
+                if (!_seenProcessIdsThisTick.Contains(id))
+                {
+                    _processCache.TryRemove(id, out _);
+                }
             }
 
             return sessions;
@@ -464,7 +468,7 @@ namespace SoundBar.Services
 
         public void SetDefaultInputDevice(string deviceId)
         {
-            // The SetDefaultEndpoint COM call is device-type agnostic â€” it works for both
+            // The SetDefaultEndpoint COM call is device-type agnostic — it works for both
             // render (output) and capture (input) devices based on the device ID.
             AudioDeviceSwitcher.SetDefaultDevice(deviceId);
         }
@@ -531,7 +535,7 @@ namespace SoundBar.Services
                             using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                             using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                             {
-                                // Match by ProcessID using the cache â€” zero Process object allocations
+                                // Match by ProcessID using the cache — zero Process object allocations
                                 int processId = sessionControl.ProcessID;
                                 if (processId == 0) continue;
 

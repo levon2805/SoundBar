@@ -29,11 +29,7 @@ namespace SoundBar.Views
 
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
-        private DispatcherTimer? _focusOutlineTimer;
-        private ItemsControl? _appsItemsControl;
-        private int _tourStepIndex = -1;
-
-        /// <summary>
+/// <summary>
         /// Sets up the window, wires up the ViewModel, and restores our saved settings.
         /// </summary>
         public MainWindow()
@@ -45,10 +41,6 @@ namespace SoundBar.Views
                 _settingsService = new SettingsService();
                 ViewModel = new MainViewModel(_settingsService);
                 ((FrameworkElement)this.Content).DataContext = ViewModel;
-
-                // We dynamically build the UI here because the local machine's XAML compiler
-                // is throwing MSB4062 and failing to compile new XAML nodes correctly.
-                BuildDynamicUI();
 
                 // Hide the top-bar DND button since we moved it into settings
                 DndToggleButton.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -70,13 +62,7 @@ namespace SoundBar.Views
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
             UpdateIODeviceLayout(); // Initial setup
 
-            // Start focus outline visual updater
-            _focusOutlineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            _focusOutlineTimer.Tick += FocusOutlineTimer_Tick;
-            _focusOutlineTimer.Start();
-
-            this.ExtendsContentIntoTitleBar = true;
-            this.SetTitleBar(null);
+            // Title bar is configured in RestoreWindowPosition()
 
             IntPtr hWnd = WindowNative.GetWindowHandle(this);
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
@@ -142,6 +128,12 @@ namespace SoundBar.Views
             }
         }
 
+        
+        private void RecordVolumeUpHotkey_Click(object sender, RoutedEventArgs e) => RecordHotkey_Click("VolumeUpHotkey", "Edit Volume Up Hotkey");
+        private void RecordVolumeDownHotkey_Click(object sender, RoutedEventArgs e) => RecordHotkey_Click("VolumeDownHotkey", "Edit Volume Down Hotkey");
+        private void RecordMuteHotkey_Click(object sender, RoutedEventArgs e) => RecordHotkey_Click("MuteHotkey", "Edit Mute Hotkey");
+        private void RecordInputMuteHotkey_Click(object sender, RoutedEventArgs e) => RecordHotkey_Click("InputMuteHotkey", "Edit Mute Microphone Hotkey");
+
         private async void RecordHotkey_Click(string propertyName, string title)
         {
             if (ViewModel == null) return;
@@ -189,106 +181,9 @@ namespace SoundBar.Views
             }
         }
 
-        private void FocusOutlineTimer_Tick(object? sender, object e)
+        private void AppIcon_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            if (ViewModel == null) return;
-
-            // Sync Mic Mute icon colour
-            if (MicMuteIcon != null)
-            {
-                if (ViewModel.IsInputMuted)
-                {
-                    MicMuteIcon.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 80, 80)); // Red when muted
-                }
-                else
-                {
-                    MicMuteIcon.ClearValue(TextBlock.ForegroundProperty); // Fall back to theme
-                }
-            }
-
-            // Lazily find the ItemsControl because XAML bindings might not be evaluated immediately in the constructor
-            if (_appsItemsControl == null)
-            {
-                var itemsControls = new System.Collections.Generic.List<ItemsControl>();
-                FindVisualChildren(this.Content, itemsControls);
-                foreach (var ic in itemsControls)
-                {
-                    if (ic.ItemsSource == ViewModel.Apps)
-                    {
-                        _appsItemsControl = ic;
-                        break;
-                    }
-                }
-            }
-
-            if (_appsItemsControl == null) return;
-
-            foreach (var app in ViewModel.Apps)
-            {
-                var container = _appsItemsControl.ContainerFromItem(app) as DependencyObject;
-                if (container != null)
-                {
-                    // Find the main Grid inside the DataTemplate
-                    var grids = new System.Collections.Generic.List<Grid>();
-                    FindVisualChildren(container, grids);
-                    if (grids.Count > 0)
-                    {
-                        var rowGrid = grids[0];
-                        if (app.IsFocused && ViewModel.EnableFocusHighlight)
-                        {
-                            // A clearly visible, translucent blue accent
-                            rowGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 0, 120, 215));
-                            rowGrid.CornerRadius = new CornerRadius(8);
-                        }
-                        else
-                        {
-                            rowGrid.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                        }
-                        
-                        // Handle Mute Visualization
-                        var textBlocks = new System.Collections.Generic.List<TextBlock>();
-                        FindVisualChildren(rowGrid, textBlocks);
-                        foreach (var tb in textBlocks)
-                        {
-                            if (Grid.GetColumn(tb) == 3)
-                            {
-                                if (app.IsMuted)
-                                {
-                                    tb.Text = "\uE74F"; // VolumeMute icon
-                                    tb.FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"];
-                                    tb.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
-                                    tb.FontSize = 16;
-                                }
-                                else
-                                {
-                                    tb.Text = $"{app.VolumePercentage}%";
-                                    tb.ClearValue(TextBlock.FontFamilyProperty);
-                                    tb.ClearValue(TextBlock.ForegroundProperty);
-                                    tb.ClearValue(TextBlock.FontSizeProperty);
-                                }
-                            }
-                        }
-
-                        // Attach Mute/Unmute click handler to App Icon
-                        var images = new System.Collections.Generic.List<Image>();
-                        FindVisualChildren(rowGrid, images);
-                        if (images.Count > 0)
-                        {
-                            var img = images[0];
-                            // Always detach first to ensure we don't double-subscribe or subscribe to the wrong app model if containers are recycled
-                            img.Tapped -= AppIcon_Tapped;
-                            img.Tag = app;
-                            img.Tapped += AppIcon_Tapped;
-                            ToolTipService.SetToolTip(img, "Click to mute/unmute");
-                        }
-                    }
-                }
-            }
-        }
-
-        private void AppIcon_Tapped(object sender, TappedRoutedEventArgs e)
-        {
-            if (sender is Image img && img.Tag is AudioAppModel app)
+            if (sender is FrameworkElement elem && elem.DataContext is AudioAppModel app)
             {
                 app.IsMuted = !app.IsMuted;
                 e.Handled = true;
@@ -312,10 +207,8 @@ namespace SoundBar.Views
         {
             LoadWindowSettings();
             
-            TitleBarGrid.PointerPressed += TitleBarGrid_PointerPressed;
-            TitleBarGrid.PointerMoved += TitleBarGrid_PointerMoved;
-            TitleBarGrid.PointerReleased += TitleBarGrid_PointerReleased;
-            TitleBarGrid.PointerCanceled += TitleBarGrid_PointerCanceled;
+            this.ExtendsContentIntoTitleBar = true;
+            this.SetTitleBar(TitleBarGrid);
 
             this.Closed += MainWindow_Closed;
 
@@ -331,11 +224,9 @@ namespace SoundBar.Views
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            if (_focusOutlineTimer != null)
-            {
-                _focusOutlineTimer.Tick -= FocusOutlineTimer_Tick;
-                _focusOutlineTimer.Stop();
-            }
+            SaveWindowSettings();
+
+            SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
 
             if (ViewModel != null)
             {
@@ -434,56 +325,7 @@ namespace SoundBar.Views
             }
         }
 
-        // Drag state variables
-        private bool _isDragging = false;
-        private NativeMethods.POINT _dragStartCursorPos;
-        private PointInt32 _dragStartWindowPos;
-
-        // Triggered when clicking the custom title bar area
-        private void TitleBarGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            var properties = e.GetCurrentPoint((UIElement)sender).Properties;
-            if (properties.IsLeftButtonPressed)
-            {
-                e.Handled = true;
-                _isDragging = true;
-                NativeMethods.GetCursorPos(out _dragStartCursorPos);
-                _dragStartWindowPos = _appWindow.Position;
-                ((UIElement)sender).CapturePointer(e.Pointer);
-            }
-        }
-
-        // Triggered when dragging the title bar
-        private void TitleBarGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (_isDragging)
-            {
-                NativeMethods.GetCursorPos(out NativeMethods.POINT currentCursorPos);
-                int dx = currentCursorPos.X - _dragStartCursorPos.X;
-                int dy = currentCursorPos.Y - _dragStartCursorPos.Y;
-                _appWindow.Move(new PointInt32(_dragStartWindowPos.X + dx, _dragStartWindowPos.Y + dy));
-            }
-        }
-
-        // Triggered when releasing the drag
-        private void TitleBarGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (_isDragging)
-            {
-                _isDragging = false;
-                ((UIElement)sender).ReleasePointerCapture(e.Pointer);
-            }
-        }
-
-        // Triggered if the drag is canceled by the system
-        private void TitleBarGrid_PointerCanceled(object sender, PointerRoutedEventArgs e)
-        {
-            if (_isDragging)
-            {
-                _isDragging = false;
-                ((UIElement)sender).ReleasePointerCapture(e.Pointer);
-            }
-        }
+        
 
         private void RefreshApps_Click(object sender, RoutedEventArgs e)
         {
@@ -557,261 +399,6 @@ namespace SoundBar.Views
             ViewModel.OpenSystemSounds();
         }
 
-        private Border? _tourOverlay;
-        private Border? _tourHighlight;
-        private FrameworkElement? _currentHighlightedElement;
-
-        private void StartGuidedTour()
-        {
-            // Close settings and show the main view so the user can see the actual UI
-            SettingsContentGrid.Visibility = Visibility.Collapsed;
-            MainContentGrid.Visibility = Visibility.Visible;
-            SettingsButton.Visibility = Visibility.Visible;
-
-            // Force Mixer view so the tour elements are visible
-            ViewModel.IsMusicPlayerMode = false;
-
-            _tourStepIndex = -1;
-            AdvanceTour();
-        }
-
-        private void AdvanceTour()
-        {
-            // Remove previous highlight
-            RemoveHighlight();
-
-            _tourStepIndex++;
-
-            var steps = BuildTourSteps();
-
-            // Skip steps whose target element is collapsed
-            while (_tourStepIndex < steps.Count &&
-                   steps[_tourStepIndex].Target is FrameworkElement fe &&
-                   fe.Visibility == Visibility.Collapsed)
-            {
-                _tourStepIndex++;
-            }
-
-            if (_tourStepIndex >= steps.Count)
-            {
-                EndTour();
-                return;
-            }
-
-            var step = steps[_tourStepIndex];
-            var isLast = _tourStepIndex >= steps.Count - 1;
-
-            // Apply highlight to the target element
-            ApplyHighlight(step.Target);
-
-            // Build or update the overlay card
-            ShowTourCard(step.Title, step.Body, _tourStepIndex + 1, steps.Count, isLast);
-        }
-
-        private void ApplyHighlight(FrameworkElement? target)
-        {
-            if (target == null) return;
-            _currentHighlightedElement = target;
-
-            // Create a highlight border overlay positioned on top of the target element
-            try
-            {
-                var rootGrid = (Grid)TitleBarGrid.Parent;
-                var transform = target.TransformToVisual(rootGrid);
-                var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-
-                _tourHighlight = new Border
-                {
-                    BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
-                    BorderThickness = new Thickness(2),
-                    CornerRadius = new CornerRadius(4),
-                    Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(30, 30, 144, 255)),
-                    Width = target.ActualWidth + 4,
-                    Height = target.ActualHeight + 4,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(position.X - 2, position.Y - 2, 0, 0),
-                    IsHitTestVisible = false
-                };
-
-                Grid.SetRow(_tourHighlight, 0);
-                Grid.SetRowSpan(_tourHighlight, 2);
-                Canvas.SetZIndex(_tourHighlight, 99);
-                rootGrid.Children.Add(_tourHighlight);
-            }
-            catch
-            {
-                // If transform fails, just skip the highlight
-            }
-        }
-
-        private void RemoveHighlight()
-        {
-            if (_tourHighlight != null)
-            {
-                var rootGrid = (Grid)TitleBarGrid.Parent;
-                rootGrid.Children.Remove(_tourHighlight);
-                _tourHighlight = null;
-            }
-            _currentHighlightedElement = null;
-        }
-
-        private void ShowTourCard(string title, string body, int stepNum, int totalSteps, bool isLast)
-        {
-            // Remove existing overlay if any
-            if (_tourOverlay != null)
-            {
-                var rootGrid = (Grid)TitleBarGrid.Parent;
-                rootGrid.Children.Remove(_tourOverlay);
-                _tourOverlay = null;
-            }
-
-            // Determine card position based on where the highlighted element is
-            bool showAtTop = true;
-            if (_currentHighlightedElement != null)
-            {
-                try
-                {
-                    var rootGrid = (Grid)TitleBarGrid.Parent;
-                    var transform = _currentHighlightedElement.TransformToVisual(rootGrid);
-                    var pos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                    double windowMid = rootGrid.ActualHeight / 2.0;
-                    // If the element is in the top half, show card at bottom, and vice versa
-                    showAtTop = pos.Y > windowMid;
-                }
-                catch { }
-            }
-
-            // Build the card content
-            var card = new StackPanel { Spacing = 4 };
-
-            card.Children.Add(new TextBlock
-            {
-                Text = $"Step {stepNum}/{totalSteps}",
-                FontSize = 11,
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-            });
-
-            card.Children.Add(new TextBlock
-            {
-                Text = title,
-                FontSize = 14,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorPrimaryBrush"]
-            });
-
-            card.Children.Add(new TextBlock
-            {
-                Text = body,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-            });
-
-            // Buttons
-            var btnStack = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 8,
-                Margin = new Thickness(0, 6, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
-
-            var skipBtn = new Button 
-            { 
-                Content = "Skip", 
-                FontSize = 12, 
-                Padding = new Thickness(10, 4, 10, 4),
-                MinHeight = 0
-            };
-            skipBtn.Click += (s, e) => EndTour();
-
-            var nextBtn = new Button
-            {
-                Content = isLast ? "Finish" : "Next",
-                FontSize = 12,
-                Padding = new Thickness(10, 4, 10, 4),
-                MinHeight = 0,
-                Style = (Style)Application.Current.Resources["AccentButtonStyle"]
-            };
-            nextBtn.Click += (s, e) => AdvanceTour();
-
-            btnStack.Children.Add(skipBtn);
-            btnStack.Children.Add(nextBtn);
-            card.Children.Add(btnStack);
-
-            // Wrap in a styled border - compact, opaque, dynamically positioned
-            _tourOverlay = new Border
-            {
-                Background = (SolidColorBrush)Application.Current.Resources["LayerFillColorDefaultBrush"],
-                BorderBrush = (SolidColorBrush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(14, 10, 14, 10),
-                VerticalAlignment = showAtTop ? VerticalAlignment.Top : VerticalAlignment.Bottom,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = showAtTop ? new Thickness(0, 50, 12, 0) : new Thickness(0, 0, 12, 12),
-                MaxWidth = 240,
-                Child = card
-            };
-
-            // Add to root grid, spanning both rows, with high Z-index
-            Grid.SetRow(_tourOverlay, 0);
-            Grid.SetRowSpan(_tourOverlay, 2);
-            Canvas.SetZIndex(_tourOverlay, 100);
-
-            var rootGrid2 = (Grid)TitleBarGrid.Parent;
-            rootGrid2.Children.Add(_tourOverlay);
-        }
-
-        private void EndTour()
-        {
-            RemoveHighlight();
-
-            if (_tourOverlay != null)
-            {
-                var rootGrid = (Grid)TitleBarGrid.Parent;
-                rootGrid.Children.Remove(_tourOverlay);
-                _tourOverlay = null;
-            }
-
-            ViewModel.HasCompletedTour = true;
-        }
-
-        private System.Collections.Generic.List<(FrameworkElement? Target, string Title, string Body)> BuildTourSteps()
-        {
-            return new System.Collections.Generic.List<(FrameworkElement? Target, string Title, string Body)>
-            {
-                (DeviceComboBox, "Switch Audio Devices",
-                 "Use the highlighted dropdown to switch between your output devices."),
-
-                (MicMuteButton, "Microphone Controls",
-                 "Tap the highlighted button to mute or unmute your mic. It turns red when muted."),
-
-                (InputDeviceComboBox, "Input Device Switcher",
-                 "Switch between your microphones and other input devices using this dropdown."),
-
-                (ActiveAppsHeaderPanel, "Per-App Volume",
-                 "Each app has its own slider. Click the icon to mute, or click the name to rename it."),
-
-                (MediaControlsPanel, "Media Controls",
-                 "Skip tracks, play/pause, and control playback from any view."),
-
-                (MusicPlayerToggleButton, "Music Player Mode",
-                 "Tap to switch to a full music player with album art and a scrubbable timeline."),
-
-                (PinButton, "Always on Top",
-                 "Pin the window so SoundBar stays above your other apps."),
-
-                (CompanionButton, "Mobile Companion",
-                 "Control your PC audio from your phone! Start the server and scan the QR code."),
-
-                (SettingsButton, "Explore Settings",
-                 "Hotkeys, themes, custom backgrounds, layout options, and system sounds are all in here!")
-            };
-        }
-
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             SaveWindowSettings();
@@ -843,9 +430,14 @@ namespace SoundBar.Views
             ViewModel.ToggleInputMute();
         }
 
+        private void CompanionPowerOn_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.EnableCompanionServer = true;
+        }
+
         private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.StopCompanionServer();
+            ViewModel.EnableCompanionServer = false;
         }
 
         private void SetTopmost(bool topmost)
@@ -915,337 +507,5 @@ namespace SoundBar.Views
         {
             ViewModel.OpenReleaseNotes();
         }
-
-        private void BuildDynamicUI()
-        {
-            try
-            {
-                // Also find the ItemsControl that holds our Audio Apps
-                var itemsControls = new System.Collections.Generic.List<ItemsControl>();
-                FindVisualChildren(this.Content, itemsControls);
-                foreach (var ic in itemsControls)
-                {
-                    if (ic.ItemsSource == ViewModel.Apps)
-                    {
-                        _appsItemsControl = ic;
-                        break;
-                    }
-                }
-
-                var settingsPanel = DynamicSettingsStackPanel;
-                if (settingsPanel == null) return;
-
-                // About & Updates Expander (Top)
-                var aboutExpander = new Expander
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Header = new TextBlock { Text = "About & Updates", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
-                };
-                
-                var aboutStack = new StackPanel { Spacing = 15 };
-                aboutStack.Children.Add(new TextBlock { Text = "Check out the latest features and changes in this version.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
-                var releaseNotesBtn = new Button { Content = "View Release Notes" };
-                releaseNotesBtn.Click += VersionHyperlink_Click;
-                aboutStack.Children.Add(releaseNotesBtn);
-                aboutExpander.Content = aboutStack;
-                
-                // Global Hotkeys Expander
-                var keybindsExpander = new Expander
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Header = new TextBlock { Text = "Global Hotkeys", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
-                };
-                
-                var keybindsStack = new StackPanel { Spacing = 15 };
-                keybindsStack.Children.Add(new TextBlock { Text = "Control the volume of the app you are currently using without leaving it.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
-                
-                // Helper for hotkey buttons
-                void AddHotkeyButton(StackPanel parent, string title, string propertyName)
-                {
-                    var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
-                    stack.Children.Add(new TextBlock { Text = title, Margin = new Thickness(0, 0, 0, 5) });
-                    
-                    var btn = new Button { HorizontalAlignment = HorizontalAlignment.Stretch };
-                    btn.SetBinding(Button.ContentProperty, new Microsoft.UI.Xaml.Data.Binding 
-                    { 
-                        Path = new PropertyPath(propertyName), 
-                        Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay 
-                    });
-                    
-                    btn.Click += (s, e) => RecordHotkey_Click(propertyName, "Edit " + title);
-                    
-                    stack.Children.Add(btn);
-                    parent.Children.Add(stack);
-                }
-                
-                AddHotkeyButton(keybindsStack, "Volume Up Hotkey (Active App)", "VolumeUpHotkey");
-                AddHotkeyButton(keybindsStack, "Volume Down Hotkey (Active App)", "VolumeDownHotkey");
-                AddHotkeyButton(keybindsStack, "Mute Hotkey (Active App)", "MuteHotkey");
-                AddHotkeyButton(keybindsStack, "Mute Microphone Hotkey", "InputMuteHotkey");
-                
-                keybindsExpander.Content = keybindsStack;
-                
-                // Do Not Disturb Expander
-                var dndExpander = new Expander
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Header = new TextBlock { Text = "Do Not Disturb Mode", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
-                };
-                
-                var dndStack = new StackPanel { Spacing = 15 };
-                dndStack.Children.Add(new TextBlock { Text = "Mutes all system sounds and notifications when enabled.", FontSize = 12, TextWrapping = TextWrapping.Wrap });
-                var dndToggle = new ToggleSwitch { OnContent = "Enabled", OffContent = "Disabled" };
-                dndToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("IsDoNotDisturbEnabled"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                
-                // Keep the icon colour logic synced if they toggle from settings menu
-                dndToggle.Toggled += DndToggleButton_Changed;
-                
-                dndStack.Children.Add(dndToggle);
-                dndExpander.Content = dndStack;
-                
-                // Collect existing Expanders
-                var expanders = new System.Collections.Generic.Dictionary<string, Expander>();
-                foreach (var child in settingsPanel.Children)
-                {
-                    if (child is Expander exp && exp.Header is TextBlock header)
-                    {
-                        expanders[header.Text] = exp;
-                    }
-                }
-                
-                // Clear the panel to rebuild it in order
-                settingsPanel.Children.Clear();
-                
-                // Helper to add group headers
-                void AddCategoryHeader(string title, bool isFirst = false)
-                {
-                    settingsPanel.Children.Add(new TextBlock 
-                    { 
-                        Text = title, 
-                        FontSize = 16, 
-                        FontWeight = Microsoft.UI.Text.FontWeights.Bold, 
-                        Margin = new Thickness(0, isFirst ? 0 : 20, 0, 5) 
-                    });
-                }
-
-                // Helper to add expander if it exists
-                void AddExpander(string key, Expander? explicitExpander = null)
-                {
-                    if (explicitExpander != null)
-                        settingsPanel.Children.Add(explicitExpander);
-                    else if (expanders.TryGetValue(key, out var exp))
-                        settingsPanel.Children.Add(exp);
-                }
-
-                // --- Build New Ordered UI ---
-
-                // Feature Tour button at top of settings (with hide button)
-                var tourRow = new Grid { Margin = new Thickness(0, 0, 0, 5) };
-                tourRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                tourRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                tourRow.Visibility = ViewModel.ShowFeatureTour ? Visibility.Visible : Visibility.Collapsed;
-
-                var tourBtn = new Button 
-                { 
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Padding = new Thickness(12, 10, 12, 10),
-                    Background = (SolidColorBrush)Application.Current.Resources["ControlFillColorDefaultBrush"],
-                    BorderThickness = new Thickness(1),
-                    BorderBrush = (SolidColorBrush)Application.Current.Resources["ControlStrokeColorDefaultBrush"]
-                };
-                var tourBtnContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-                tourBtnContent.Children.Add(new TextBlock 
-                { 
-                    Text = "\uE7BE", 
-                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"], 
-                    FontSize = 16, 
-                    VerticalAlignment = VerticalAlignment.Center 
-                });
-                tourBtnContent.Children.Add(new TextBlock 
-                { 
-                    Text = "Take a Feature Tour", 
-                    FontSize = 14, 
-                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                    VerticalAlignment = VerticalAlignment.Center 
-                });
-                tourBtn.Content = tourBtnContent;
-                tourBtn.Click += (s, e) => StartGuidedTour();
-                Grid.SetColumn(tourBtn, 0);
-                tourRow.Children.Add(tourBtn);
-
-                var hideTourBtn = new Button
-                {
-                    Content = "\uE711",
-                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"],
-                    Width = 36, Height = 36,
-                    Padding = new Thickness(0), MinWidth = 0, MinHeight = 0,
-                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                    Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorTertiaryBrush"],
-                    BorderThickness = new Thickness(0),
-                    FontSize = 12,
-                    Margin = new Thickness(4, 0, 0, 0),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                ToolTipService.SetToolTip(hideTourBtn, "Hide this button");
-                hideTourBtn.Click += (s, e) =>
-                {
-                    ViewModel.ShowFeatureTour = false;
-                    tourRow.Visibility = Visibility.Collapsed;
-                };
-                Grid.SetColumn(hideTourBtn, 1);
-                tourRow.Children.Add(hideTourBtn);
-
-                settingsPanel.Children.Add(tourRow);
-
-                AddCategoryHeader("Personalisation", true);
-                AddExpander("Appearance");
-
-                // Dynamically inject the Active App Highlight toggle into the Appearance expander
-                // (Done in C# to bypass the MSB4062 XAML compiler error on the host machine)
-                if (expanders.TryGetValue("Appearance", out var appearanceExp) && appearanceExp.Content is StackPanel appearanceStack)
-                {
-                    // Check if it already has it to prevent duplicates on hot reloads
-                    bool hasHighlightSetting = false;
-                    foreach (var child in appearanceStack.Children)
-                    {
-                        if (child is ToggleSwitch ts && ts.Header?.ToString() == "Active App Highlight")
-                            hasHighlightSetting = true;
-                    }
-
-                    if (!hasHighlightSetting)
-                    {
-                        appearanceStack.Children.Add(new TextBlock 
-                        { 
-                            Text = "Highlights the active application so you know which volume you are controlling via hotkeys.", 
-                            FontSize = 12, 
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin = new Thickness(0, 20, 0, 10) 
-                        });
-                        
-                        var highlightToggle = new ToggleSwitch { Header = "Active App Highlight" };
-                        highlightToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding 
-                        { 
-                            Path = new PropertyPath("EnableFocusHighlight"), 
-                            Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay 
-                        });
-                        appearanceStack.Children.Add(highlightToggle);
-                    }
-
-                }
-
-                // --- Layout Editor ---
-                var layoutExpander = new Expander
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Header = new TextBlock { Text = "Layout Settings", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
-                };
-                var layoutStack = new StackPanel { Spacing = 10 };
-                layoutStack.Children.Add(new TextBlock 
-                { 
-                    Text = "Toggle which sections are visible on the main page. Hidden sections are still functional via hotkeys.", 
-                    FontSize = 12, 
-                    TextWrapping = TextWrapping.Wrap 
-                });
-
-                // Output Device toggle
-                var showOutputToggle = new ToggleSwitch { Header = "Output Device Picker", OnContent = "Visible", OffContent = "Hidden" };
-                showOutputToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowOutputDevice"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                layoutStack.Children.Add(showOutputToggle);
-
-                // Input Device toggle
-                var showInputToggle = new ToggleSwitch { Header = "Input Device (Microphone)", OnContent = "Visible", OffContent = "Hidden" };
-                showInputToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowInputDevice"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                layoutStack.Children.Add(showInputToggle);
-
-                // Master Volume toggle
-                var showMasterToggle = new ToggleSwitch { Header = "Master Volume Slider", OnContent = "Visible", OffContent = "Hidden" };
-                showMasterToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowMasterVolume"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                layoutStack.Children.Add(showMasterToggle);
-
-                // Active Apps toggle
-                var showAppsToggle = new ToggleSwitch { Header = "Active Apps List", OnContent = "Visible", OffContent = "Hidden" };
-                showAppsToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowActiveApps"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                layoutStack.Children.Add(showAppsToggle);
-
-                // Media Controls toggle
-                var showMediaToggle = new ToggleSwitch { Header = "Media Controls", OnContent = "Visible", OffContent = "Hidden" };
-                showMediaToggle.SetBinding(ToggleSwitch.IsOnProperty, new Microsoft.UI.Xaml.Data.Binding { Path = new PropertyPath("ShowMediaControls"), Mode = Microsoft.UI.Xaml.Data.BindingMode.TwoWay });
-                layoutStack.Children.Add(showMediaToggle);
-
-                // Feature Tour button toggle
-                var showTourToggle = new ToggleSwitch { Header = "Feature Tour Button", OnContent = "Visible", OffContent = "Hidden" };
-                showTourToggle.IsOn = ViewModel.ShowFeatureTour;
-                showTourToggle.Toggled += (s, e) =>
-                {
-                    ViewModel.ShowFeatureTour = showTourToggle.IsOn;
-                    tourRow.Visibility = showTourToggle.IsOn ? Visibility.Visible : Visibility.Collapsed;
-                };
-                layoutStack.Children.Add(showTourToggle);
-
-                layoutExpander.Content = layoutStack;
-                settingsPanel.Children.Add(layoutExpander);
-
-                AddExpander("Custom Background");
-
-                AddCategoryHeader("Audio & Focus");
-                AddExpander("Global Hotkeys", keybindsExpander);
-                AddExpander("Do Not Disturb Mode", dndExpander);
-
-                // System Sounds Expander
-                var systemSoundsExpander = new Expander
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Header = new TextBlock { Text = "System Sounds", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }
-                };
-                var systemSoundsStack = new StackPanel { Spacing = 15 };
-                systemSoundsStack.Children.Add(new TextBlock 
-                { 
-                    Text = "Opens the Windows Sound settings where you can manage sound schemes, change notification sounds, and configure programme event audio.", 
-                    FontSize = 12, 
-                    TextWrapping = TextWrapping.Wrap 
-                });
-                var openSoundsBtn = new Button { Content = "Open System Sounds" };
-                openSoundsBtn.Click += OpenSystemSounds_Click;
-                systemSoundsStack.Children.Add(openSoundsBtn);
-                systemSoundsExpander.Content = systemSoundsStack;
-                settingsPanel.Children.Add(systemSoundsExpander);
-
-                AddExpander("Hearing Protection");
-
-                AddCategoryHeader("App Management");
-                AddExpander("Hidden Apps");
-                AddExpander("Background Apps");
-
-                AddCategoryHeader("General");
-                AddExpander("System Integration");
-                AddExpander("Advanced Configuration");
-                AddExpander("About & Updates", aboutExpander);
-
-                // Companion button moved to XAML
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to build dynamic UI: {ex.Message}");
-            }
-        }
-
-        private void FindVisualChildren<T>(DependencyObject parent, System.Collections.Generic.List<T> results) where T : DependencyObject
-        {
-            for (int i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
-                if (child is T t)
-                {
-                    results.Add(t);
-                }
-                FindVisualChildren(child, results);
-            }
-        }
-
     }
 }

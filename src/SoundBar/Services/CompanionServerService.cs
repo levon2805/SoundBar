@@ -32,15 +32,14 @@ namespace SoundBar.Services
         private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
         private readonly ConcurrentDictionary<string, (int Attempts, DateTime LockoutEnd)> _failedAttempts = new();
-        private readonly Random _random = new();
 
         private readonly IAudioMixerService _audioService;
         private readonly MediaInfoService _mediaInfoService;
-        private readonly Func<ObservableCollection<AudioAppModel>> _getApps;
-        private readonly Func<ObservableCollection<AudioDeviceModel>> _getDevices;
+        private readonly Func<IEnumerable<AudioAppModel>> _getApps;
+        private readonly Func<IEnumerable<AudioDeviceModel>> _getDevices;
         private readonly Func<AudioDeviceModel?> _getSelectedDevice;
         private readonly Action<string> _setSelectedDevice;
-        private readonly Func<ObservableCollection<AudioDeviceModel>> _getInputDevices;
+        private readonly Func<IEnumerable<AudioDeviceModel>> _getInputDevices;
         private readonly Func<AudioDeviceModel?> _getSelectedInputDevice;
         private readonly Action<string> _setSelectedInputDevice;
 
@@ -89,11 +88,11 @@ namespace SoundBar.Services
         public CompanionServerService(
             IAudioMixerService audioService,
             MediaInfoService mediaInfoService,
-            Func<ObservableCollection<AudioAppModel>> getApps,
-            Func<ObservableCollection<AudioDeviceModel>> getDevices,
+            Func<IEnumerable<AudioAppModel>> getApps,
+            Func<IEnumerable<AudioDeviceModel>> getDevices,
             Func<AudioDeviceModel?> getSelectedDevice,
             Action<string> setSelectedDevice,
-            Func<ObservableCollection<AudioDeviceModel>> getInputDevices,
+            Func<IEnumerable<AudioDeviceModel>> getInputDevices,
             Func<AudioDeviceModel?> getSelectedInputDevice,
             Action<string> setSelectedInputDevice,
             int port = 6767)
@@ -124,7 +123,7 @@ namespace SoundBar.Services
             try
             {
                 // Generate a fresh four-digit pairing code
-                PairingCode = _random.Next(1000, 10000).ToString();
+                PairingCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000, 10000).ToString();
 
                 _cts = new CancellationTokenSource();
                 _httpListener = new HttpListener();
@@ -246,9 +245,8 @@ namespace SoundBar.Services
 
             _cts?.Cancel();
 
-            // Wait for background loops to exit so we don't race with dictionary iteration
-            try { _broadcastTask?.Wait(TimeSpan.FromSeconds(3)); } catch { }
-            try { _acceptTask?.Wait(TimeSpan.FromSeconds(1)); } catch { }
+            // We do not Wait() on tasks here because Stop() may be called from the UI thread (Window.Closed)
+            // Wait() causes a deadlock since the background tasks might try to marshal an event to the UI thread.
             _broadcastTask = null;
             _acceptTask = null;
 
@@ -398,7 +396,8 @@ namespace SoundBar.Services
 
                 // Security: prevent directory traversal
                 string fullPath = Path.GetFullPath(filePath);
-                if (!fullPath.StartsWith(Path.GetFullPath(basePath)))
+                string fullBase = Path.GetFullPath(basePath) + Path.DirectorySeparatorChar;
+                if (!fullPath.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase) && fullPath != Path.GetFullPath(basePath))
                 {
                     context.Response.StatusCode = 403;
                     context.Response.Close();
@@ -508,8 +507,15 @@ namespace SoundBar.Services
             string origin = httpContext.Request.Headers["Origin"] ?? "";
             if (!string.IsNullOrEmpty(origin))
             {
-                if (!origin.StartsWith("http://localhost") && !origin.StartsWith("http://127.0.0.1") && 
-                    !origin.StartsWith("http://192.168.") && !origin.StartsWith("http://10."))
+                bool isLocal = false;
+                if (Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+                {
+                    var hostIp = IPAddress.TryParse(originUri.Host, out var addr) ? addr : null;
+                    isLocal = originUri.Host == "localhost" || originUri.Host == "127.0.0.1" ||
+                                   (hostIp != null && IsPrivateIp(hostIp));
+                }
+
+                if (!isLocal)
                 {
                     httpContext.Response.StatusCode = 403; // Forbidden
                     httpContext.Response.Close();
@@ -936,12 +942,6 @@ namespace SoundBar.Services
 
         private void OnMediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {
-            if (_currentTitle == e.Title && _currentArtist == e.Artist)
-            {
-                // Song hasn't changed, skip heavy base64 encoding
-                return;
-            }
-
             _currentTitle = e.Title;
             _currentArtist = e.Artist;
 
@@ -985,9 +985,16 @@ namespace SoundBar.Services
 
         private static async Task SendTextAsync(WebSocket ws, string text, CancellationToken ct)
         {
-            if (ws.State != WebSocketState.Open) return;
-            byte[] bytes = Encoding.UTF8.GetBytes(text);
-            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+            try
+            {
+                if (ws.State != WebSocketState.Open) return;
+                byte[] bytes = Encoding.UTF8.GetBytes(text);
+                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+            }
+            catch (Exception)
+            {
+                // Silently ignore drop/cancel
+            }
         }
 
         private static string GetMimeType(string filePath)
@@ -1006,6 +1013,18 @@ namespace SoundBar.Services
                 ".webmanifest" => "application/manifest+json",
                 _ => "application/octet-stream"
             };
+        }
+
+        private static bool IsPrivateIp(IPAddress ip)
+        {
+            if (ip.AddressFamily == AddressFamily.InterNetwork)
+            {
+                byte[] bytes = ip.GetAddressBytes();
+                return bytes[0] == 10 ||
+                       (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                       (bytes[0] == 192 && bytes[1] == 168);
+            }
+            return false;
         }
 
         public void Dispose()

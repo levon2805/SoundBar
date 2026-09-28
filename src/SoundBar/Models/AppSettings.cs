@@ -48,16 +48,6 @@ namespace SoundBar.Models
         public System.Collections.Generic.List<string> AllowedBackgroundApps { get; set; } = new System.Collections.Generic.List<string>();
 
         /// <summary>
-        /// Whether the user has completed the guided feature tour.
-        /// </summary>
-        public bool HasCompletedTour { get; set; } = false;
-
-        /// <summary>
-        /// Whether to show the Feature Tour button in settings.
-        /// </summary>
-        public bool ShowFeatureTour { get; set; } = true;
-
-        /// <summary>
         /// Any custom nicknames the user has given to their apps (e.g. renaming 'chrome' to 'Browser').
         /// </summary>
         public System.Collections.Generic.Dictionary<string, string> AppAliases { get; set; } = new System.Collections.Generic.Dictionary<string, string>();

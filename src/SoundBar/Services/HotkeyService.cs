@@ -67,21 +67,28 @@ namespace SoundBar.Services
         {
             if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
-                int vkCode = Marshal.ReadInt32(lParam);
-                VirtualKey key = (VirtualKey)vkCode;
-
-                // Don't raise events for modifier keys themselves to avoid noise
-                if (key != VirtualKey.Control && key != VirtualKey.LeftControl && key != VirtualKey.RightControl &&
-                    key != VirtualKey.Menu && key != VirtualKey.LeftMenu && key != VirtualKey.RightMenu &&
-                    key != VirtualKey.Shift && key != VirtualKey.LeftShift && key != VirtualKey.RightShift)
+                try
                 {
-                    var args = new HotkeyEventArgs(key, GetModifiers());
-                    KeyPressed?.Invoke(this, args);
+                    int vkCode = Marshal.ReadInt32(lParam);
+                    VirtualKey key = (VirtualKey)vkCode;
 
-                    if (args.Handled)
+                    // Don't raise events for modifier keys themselves to avoid noise
+                    if (key != VirtualKey.Control && key != VirtualKey.LeftControl && key != VirtualKey.RightControl &&
+                        key != VirtualKey.Menu && key != VirtualKey.LeftMenu && key != VirtualKey.RightMenu &&
+                        key != VirtualKey.Shift && key != VirtualKey.LeftShift && key != VirtualKey.RightShift)
                     {
-                        return (IntPtr)1; // Suppress the key
+                        var args = new HotkeyEventArgs(key, GetModifiers());
+                        KeyPressed?.Invoke(this, args);
+
+                        if (args.Handled)
+                        {
+                            return (IntPtr)1; // Suppress the key
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Hotkey hook error: {ex.Message}");
                 }
             }
 

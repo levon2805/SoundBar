@@ -23,6 +23,7 @@ namespace SoundBar.Services
     {
         private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
         private GlobalSystemMediaTransportControlsSession? _currentSession;
+        private readonly object _sessionLock = new object();
 
         public event EventHandler<MediaInfoEventArgs>? MediaInfoChanged;
         public event EventHandler<TimelineInfoEventArgs>? TimelineInfoChanged;
