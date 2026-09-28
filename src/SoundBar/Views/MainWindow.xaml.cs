@@ -693,9 +693,14 @@ namespace SoundBar.Views
             ViewModel.ToggleInputMute();
         }
 
+        private void CompanionPowerOn_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.EnableCompanionServer = true;
+        }
+
         private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.StopCompanionServer();
+            ViewModel.EnableCompanionServer = false;
         }
 
         private void SetTopmost(bool topmost)

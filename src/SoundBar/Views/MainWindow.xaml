@@ -72,20 +72,7 @@
                            FontSize="20"
                            FontWeight="Bold"/>
 
-                <Button x:Name="UpdateButton"
-                        Grid.Column="1"
-                        Content="&#xE896;" 
-                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                        Width="32" Height="32"
-                        Padding="0" MinWidth="0" MinHeight="0"
-                        Background="Transparent"
-                        Foreground="#4CAF50"
-                        BorderThickness="0"
-                        FontSize="16"
-                        Margin="0,0,4,0"
-                        Click="UpdateBanner_Click"
-                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}"/>
+
 
                 <Button x:Name="SettingsButton"
                         Grid.Column="2"
@@ -451,17 +438,17 @@
                                        HorizontalAlignment="Center"/>
                             
                             <!-- Huge Power Button -->
-                            <ToggleButton IsChecked="{x:Bind ViewModel.EnableCompanionServer, Mode=TwoWay}"
-                                          Width="120" Height="120" CornerRadius="60"
-                                          Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                          BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                          BorderThickness="2"
-                                          HorizontalAlignment="Center">
+                            <Button Width="120" Height="120" CornerRadius="60"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="2"
+                                    HorizontalAlignment="Center"
+                                    Click="CompanionPowerOn_Click">
                                 <TextBlock Text="&#xE7E8;" 
                                            FontFamily="{ThemeResource SymbolThemeFontFamily}" 
                                            FontSize="50" 
                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                            </ToggleButton>
+                            </Button>
                             
                             <TextBlock Text="Click to power on" 
                                        FontSize="14" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
@@ -860,14 +847,28 @@
                 </ScrollViewer>
             </Grid>
 
-            <!-- App Version (Global) -->
-            <TextBlock Grid.Row="1"
-                       Text="{x:Bind ViewModel.AppVersionText, Mode=OneWay}" 
-                       Foreground="{ThemeResource TextFillColorDisabledBrush}" 
-                       FontSize="10" 
-                       HorizontalAlignment="Right" 
-                       VerticalAlignment="Bottom"
-                       Margin="0,0,10,5"/>
+            <!-- Footer -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
+                <Button x:Name="UpdateButton"
+                        Content="&#xE896;  Update Available" 
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        Padding="8,4"
+                        Background="#1A4CAF50"
+                        Foreground="#4CAF50"
+                        BorderBrush="#4CAF50"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        FontSize="10"
+                        Click="UpdateBanner_Click"
+                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}"/>
+                
+                <!-- App Version (Global) -->
+                <TextBlock Text="{x:Bind ViewModel.AppVersionText, Mode=OneWay}" 
+                           Foreground="{ThemeResource TextFillColorDisabledBrush}" 
+                           FontSize="10" 
+                           VerticalAlignment="Center"/>
+            </StackPanel>
             </Grid>
         </Grid>
     </Border>
