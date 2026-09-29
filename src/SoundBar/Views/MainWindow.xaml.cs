@@ -82,8 +82,25 @@ namespace SoundBar.Views
                 presenter.SetBorderAndTitleBar(true, false);
             }
 
+            this.Activated += MainWindow_Activated;
             RestoreWindowPosition();
         }
+
+        private bool _hasAppliedInitialPin = false;
+
+        private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+        {
+            if (!_hasAppliedInitialPin)
+            {
+                _hasAppliedInitialPin = true;
+                if (_settingsService.Settings.IsPinned)
+                {
+                    SetTopmost(true);
+                    UpdatePinButtonVisual(true);
+                }
+            }
+        }
+
 
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
