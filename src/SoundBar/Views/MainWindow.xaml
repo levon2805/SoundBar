@@ -64,7 +64,8 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0"
+                <TextBlock x:Name="AppTitleText"
+                           Grid.Column="0"
                            Text="SoundBar" 
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
                            VerticalAlignment="Center" 
@@ -74,6 +75,28 @@
 
 
 
+                <Button x:Name="UpdateButton"
+                        Grid.Column="0"
+                        HorizontalAlignment="Left"
+                        Margin="0"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Padding="8,4"
+                        Background="#1A4CAF50"
+                        Foreground="#4CAF50"
+                        BorderBrush="#4CAF50"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Click="UpdateBanner_Click"
+                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE896;" FontSize="10" VerticalAlignment="Center"/>
+                        <TextBlock Text="Update Available" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                
+                
                 <Button x:Name="SettingsButton"
                         Grid.Column="2"
                         Content="&#xE713;" 
@@ -848,20 +871,6 @@
 
             <!-- Footer -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
-                <Button x:Name="UpdateButton"
-                        Content="&#xE896;  Update Available" 
-                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                        Padding="8,4"
-                        Background="#1A4CAF50"
-                        Foreground="#4CAF50"
-                        BorderBrush="#4CAF50"
-                        BorderThickness="1"
-                        CornerRadius="4"
-                        FontSize="10"
-                        Click="UpdateBanner_Click"
-                        Visibility="{x:Bind ViewModel.UpdateBannerVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}"/>
-                
                 <!-- App Version (Global) -->
                 <TextBlock Text="{x:Bind ViewModel.AppVersionText, Mode=OneWay}" 
                            Foreground="{ThemeResource TextFillColorDisabledBrush}" 
