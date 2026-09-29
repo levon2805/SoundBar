@@ -83,6 +83,10 @@ namespace SoundBar.Views
             }
 
             this.Activated += MainWindow_Activated;
+                        if (AppTitleText != null)
+            {
+                AppTitleText.Visibility = ViewModel.UpdateBannerVisibility == Microsoft.UI.Xaml.Visibility.Visible ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+            }
             RestoreWindowPosition();
         }
 
@@ -108,6 +112,13 @@ namespace SoundBar.Views
                 e.PropertyName == nameof(MainViewModel.ShowInputDevice))
             {
                 UpdateIODeviceLayout();
+            }
+            if (e.PropertyName == nameof(MainViewModel.UpdateBannerVisibility))
+            {
+                if (AppTitleText != null)
+                {
+                    AppTitleText.Visibility = ViewModel.UpdateBannerVisibility == Microsoft.UI.Xaml.Visibility.Visible ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+                }
             }
         }
 
@@ -403,6 +414,18 @@ namespace SoundBar.Views
 
         private void UpdateBanner_Click(object sender, RoutedEventArgs e)
         {
+            var stack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 15, Padding = new Microsoft.UI.Xaml.Thickness(0, 10, 0, 0) };
+            stack.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Downloading and installing the latest version. SoundBar will restart automatically in a few moments...", TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap });
+            stack.Children.Add(new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true });
+
+            var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+            {
+                Title = "Updating SoundBar...",
+                Content = stack,
+                XamlRoot = this.Content.XamlRoot
+            };
+            
+            _ = dialog.ShowAsync();
             ViewModel.ApplyUpdate();
         }
 

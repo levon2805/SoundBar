@@ -906,6 +906,9 @@ namespace SoundBar.ViewModels
         private async void CheckForUpdatesAsync()
         {
             bool hasUpdate = await _updateService.CheckForUpdatesAsync();
+#if DEBUG
+            hasUpdate = true;
+#endif
             if (hasUpdate)
             {
                 RunOnUIThread(() =>
