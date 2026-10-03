@@ -58,30 +58,33 @@ namespace SoundBar.Services
 
         private void UpdateSession()
         {
-            if (_currentSession != null)
+            lock (_sessionLock)
             {
-                _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
-                _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
-                _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
-            }
-
-            if (_sessionManager != null)
-            {
-                _currentSession = _sessionManager.GetCurrentSession();
-                
                 if (_currentSession != null)
                 {
-                    _currentSession.MediaPropertiesChanged += CurrentSession_MediaPropertiesChanged;
-                    _currentSession.TimelinePropertiesChanged += CurrentSession_TimelinePropertiesChanged;
-                    _currentSession.PlaybackInfoChanged += CurrentSession_PlaybackInfoChanged;
-                    UpdateMediaProperties();
-                    UpdateTimelineProperties();
+                    _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
+                    _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
+                    _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
                 }
-                else
+
+                if (_sessionManager != null)
                 {
-                    // No session active
-                    MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs());
-                    TimelineInfoChanged?.Invoke(this, new TimelineInfoEventArgs());
+                    _currentSession = _sessionManager.GetCurrentSession();
+                    
+                    if (_currentSession != null)
+                    {
+                        _currentSession.MediaPropertiesChanged += CurrentSession_MediaPropertiesChanged;
+                        _currentSession.TimelinePropertiesChanged += CurrentSession_TimelinePropertiesChanged;
+                        _currentSession.PlaybackInfoChanged += CurrentSession_PlaybackInfoChanged;
+                        UpdateMediaProperties();
+                        UpdateTimelineProperties();
+                    }
+                    else
+                    {
+                        // No session active
+                        MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs());
+                        TimelineInfoChanged?.Invoke(this, new TimelineInfoEventArgs());
+                    }
                 }
             }
         }
@@ -161,18 +164,21 @@ namespace SoundBar.Services
 
         public void Dispose()
         {
-            if (_currentSession != null)
+            lock (_sessionLock)
             {
-                _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
-                _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
-                _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
-                _currentSession = null;
-            }
+                if (_currentSession != null)
+                {
+                    _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
+                    _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
+                    _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
+                    _currentSession = null;
+                }
 
-            if (_sessionManager != null)
-            {
-                _sessionManager.CurrentSessionChanged -= SessionManager_CurrentSessionChanged;
-                _sessionManager = null;
+                if (_sessionManager != null)
+                {
+                    _sessionManager.CurrentSessionChanged -= SessionManager_CurrentSessionChanged;
+                    _sessionManager = null;
+                }
             }
         }
     }

@@ -520,7 +520,7 @@ namespace SoundBar.ViewModels
                 }
             }
         }
-        public Visibility OutputDeviceVisibility => ShowOutputDevice ? Visibility.Visible : Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility OutputDeviceVisibility => ShowOutputDevice ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         public bool ShowInputDevice
         {
@@ -536,7 +536,7 @@ namespace SoundBar.ViewModels
                 }
             }
         }
-        public Visibility InputDeviceVisibility => ShowInputDevice ? Visibility.Visible : Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility InputDeviceVisibility => ShowInputDevice ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         public bool ShowMasterVolume
         {
@@ -552,7 +552,7 @@ namespace SoundBar.ViewModels
                 }
             }
         }
-        public Visibility MasterVolumeVisibility => ShowMasterVolume ? Visibility.Visible : Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility MasterVolumeVisibility => ShowMasterVolume ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         public bool ShowActiveApps
         {
@@ -568,7 +568,7 @@ namespace SoundBar.ViewModels
                 }
             }
         }
-        public Visibility ActiveAppsVisibility => ShowActiveApps ? Visibility.Visible : Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility ActiveAppsVisibility => ShowActiveApps ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         // Run At Startup Property
         private bool _runAtStartup;
@@ -758,10 +758,10 @@ namespace SoundBar.ViewModels
             StartPolling();
 
             // Load Custom Background Image
-            LoadBackgroundImageAsync();
+            _ = LoadBackgroundImageAsync();
 
             // Check for updates
-            CheckForUpdatesAsync();
+            _ = CheckForUpdatesAsync();
         }
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
@@ -816,6 +816,17 @@ namespace SoundBar.ViewModels
             if (modifiers.HasFlag(HotkeyModifiers.Shift)) modStr += "Shift+";
 
             return modStr + key.ToString();
+        }
+
+        public void SetHotkey(string propertyName, string hotkeyString)
+        {
+            switch (propertyName)
+            {
+                case "VolumeUpHotkey": VolumeUpHotkey = hotkeyString; break;
+                case "VolumeDownHotkey": VolumeDownHotkey = hotkeyString; break;
+                case "MuteHotkey": MuteHotkey = hotkeyString; break;
+                case "InputMuteHotkey": InputMuteHotkey = hotkeyString; break;
+            }
         }
 
         public string VolumeUpHotkey
@@ -903,7 +914,7 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private async void CheckForUpdatesAsync()
+        private async Task CheckForUpdatesAsync()
         {
             bool hasUpdate = await _updateService.CheckForUpdatesAsync();
 #if DEBUG
@@ -919,15 +930,25 @@ namespace SoundBar.ViewModels
             }
         }
 
-        public async void ApplyUpdate()
+        public async Task ApplyUpdate()
         {
             if (IsUpdating) return;
             
             IsUpdating = true;
-            await _updateService.DownloadAndApplyUpdateAsync();
-            IsUpdating = false;
+            try
+            {
+                await _updateService.DownloadAndApplyUpdateAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update failed: {ex.Message}");
+            }
+            finally
+            {
+                IsUpdating = false;
+            }
         }
-        public async void LoadBackgroundImageAsync()
+        public async Task LoadBackgroundImageAsync()
         {
             try
             {
@@ -964,6 +985,7 @@ namespace SoundBar.ViewModels
         public void ForceRefreshAudioSessions()
         {
             _audioService.ClearCache();
+            AudioAppModel.ClearIconCache();
         }
 
         public void OpenBackgroundFolder()
@@ -990,7 +1012,7 @@ namespace SoundBar.ViewModels
 
         public void ReloadBackground()
         {
-            LoadBackgroundImageAsync();
+            _ = LoadBackgroundImageAsync();
         }
 
 
@@ -1039,10 +1061,32 @@ namespace SoundBar.ViewModels
                         }
                         catch { }
 
+                        // Pre-calculate dead processes to avoid blocking the UI thread
+                        var deadProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var currentAppsSnapshot = AppsSnapshot.ToList();
+                        foreach(var app in currentAppsSnapshot)
+                        {
+                            if (!sessions.Any(x => string.Equals(x.RawProcessName, app.RawProcessName, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                bool isProcessDead = true;
+                                try
+                                {
+                                    using var p = System.Diagnostics.Process.GetProcessById(app.ProcessId);
+                                    if (!p.HasExited && string.Equals(p.ProcessName, app.RawProcessName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isProcessDead = false;
+                                    }
+                                }
+                                catch { isProcessDead = true; }
+                                
+                                if (isProcessDead) deadProcesses.Add(app.RawProcessName ?? "");
+                            }
+                        }
+
                         // Update UI thread safely
                         RunOnUIThread(() =>
                         {
-                            UpdateCollection(sessions);
+                            UpdateCollection(sessions, deadProcesses);
 
                             // Only update Master Volume if user hasn't touched it for 2 seconds
                             if ((DateTime.Now - _lastMasterVolumeChange).TotalSeconds > 2)
@@ -1175,7 +1219,7 @@ namespace SoundBar.ViewModels
             _settingsService.SaveSettings();
         }
 
-        private void UpdateCollection(List<AudioSessionData> latestSessions)
+        private void UpdateCollection(List<AudioSessionData> latestSessions, HashSet<string> deadProcesses)
         {
             // Remove apps that are no longer running
             // Loop backwards so we can remove items safely
@@ -1186,37 +1230,7 @@ namespace SoundBar.ViewModels
                 // If existing app is not in the new list (match by RawProcessName since DisplayName can change and Name is now an alias)
                 if (!latestSessions.Any(x => string.Equals(x.RawProcessName, existingApp.RawProcessName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    bool isProcessDead = true;
-                        // FAST PATH: Check if the specific process ID we started with is still running
-                        try
-                        {
-                            using var p = System.Diagnostics.Process.GetProcessById(existingApp.ProcessId);
-                            // If we can get it, it hasn't exited, AND the process name matches (prevents Windows PID recycling bug)
-                            if (!p.HasExited && string.Equals(p.ProcessName, existingApp.RawProcessName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                isProcessDead = false;
-                            }
-                        }
-                        catch (ArgumentException)
-                        {
-                            // Process is definitely dead
-                            isProcessDead = true;
-                        }
-                        catch (System.ComponentModel.Win32Exception)
-                        {
-                            // We don't have access to check HasExited, but the process exists
-                            isProcessDead = false;
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            // Process exited during the check
-                            isProcessDead = true;
-                        }
-                        catch
-                        {
-                            // Any other error, assume dead
-                            isProcessDead = true;
-                        }
+                    bool isProcessDead = deadProcesses.Contains(existingApp.RawProcessName ?? "");
 
                     if (isProcessDead)
                     {
@@ -1825,3 +1839,5 @@ namespace SoundBar.ViewModels
         }
     }
 }
+
+

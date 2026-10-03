@@ -89,5 +89,25 @@ namespace SoundBar.Helpers
             throw new NotImplementedException();
         }
     }
+
+    public class BoolToVisibilityConverter : IValueConverter
+    {
+        public bool Invert { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool b)
+            {
+                if (Invert) b = !b;
+                return b ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+            }
+            return Microsoft.UI.Xaml.Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
 

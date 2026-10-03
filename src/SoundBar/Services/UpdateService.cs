@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.0.1";
+        public const string CurrentVersion = "v4.0.2";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -187,7 +187,11 @@ namespace SoundBar.Services
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
-            string EscapeForBatch(string path) => "\"" + path.Replace("\"", "\"\"") + "\"";
+            string EscapeForBatch(string path) 
+            {
+                string p = path.EndsWith("\\") ? path + "\\" : path;
+                return "\"" + p.Replace("\"", "\"\"") + "\"";
+            }
             string EscapeForPowerShell(string path) => path.Replace("'", "''");
 
             string batContent = $$"""

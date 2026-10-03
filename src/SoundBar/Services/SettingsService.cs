@@ -74,7 +74,11 @@ namespace SoundBar.Services
                     string json = File.ReadAllText(_filePath);
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
-                catch (JsonException) { return new AppSettings(); }
+                catch (JsonException) 
+                { 
+                    try { File.Copy(_filePath, _filePath + ".corrupt", true); } catch { }
+                    return new AppSettings(); 
+                }
                 catch (IOException) { return Settings ?? new AppSettings(); }
             }
         }

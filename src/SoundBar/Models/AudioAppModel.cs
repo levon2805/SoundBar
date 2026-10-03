@@ -109,12 +109,8 @@ namespace SoundBar.Models
                     OnPropertyChanged(nameof(VolumePercentage));
                     OnPropertyChanged(nameof(MuteDisplayText));
 
-                    // Cancel any pending volume changes so we don't spam the OS while sliding.
-                    if (_volumeDebounce != null)
-                    {
-                        _volumeDebounce.Cancel();
-                        _volumeDebounce.Dispose();
-                    }
+                    var oldCts = _volumeDebounce;
+                    oldCts?.Cancel();
                     
                     _volumeDebounce = new System.Threading.CancellationTokenSource();
                     var token = _volumeDebounce.Token;
@@ -135,6 +131,10 @@ namespace SoundBar.Models
                                 }
                             }
                             catch (TaskCanceledException) { }
+                            finally
+                            {
+                                oldCts?.Dispose();
+                            }
                         });
                     }
                 }
@@ -284,6 +284,11 @@ namespace SoundBar.Models
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _iconCache = new();
         private static readonly string _iconDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarIcons");
+
+        public static void ClearIconCache()
+        {
+            _iconCache.Clear();
+        }
 
         /// <summary>
         /// Attempts to extract a lovely icon from the application's executable.
