@@ -204,7 +204,7 @@ namespace SoundBar.Views
             {
                 if (ViewModel.RecordedHotkeyString != "Listening..." && !string.IsNullOrWhiteSpace(ViewModel.RecordedHotkeyString))
                 {
-                    typeof(MainViewModel).GetProperty(propertyName)?.SetValue(ViewModel, ViewModel.RecordedHotkeyString);
+                    ViewModel.SetHotkey(propertyName, ViewModel.RecordedHotkeyString);
                 }
             }
         }
@@ -426,7 +426,7 @@ namespace SoundBar.Views
             };
             
             _ = dialog.ShowAsync();
-            ViewModel.ApplyUpdate();
+            _ = ViewModel.ApplyUpdate();
         }
 
         private void DismissLoudnessWarning_Click(object sender, RoutedEventArgs e)
