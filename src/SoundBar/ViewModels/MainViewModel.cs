@@ -259,6 +259,29 @@ namespace SoundBar.ViewModels
             }
         }
 
+        /// <summary>
+        /// How see-through the window is (30–100%). Bound to the slider in Appearance settings.
+        /// </summary>
+        public double WindowOpacity
+        {
+            get => _settingsService.Settings.WindowOpacity;
+            set
+            {
+                int clamped = (int)Math.Round(Math.Clamp(value, AppSettings.MinWindowOpacity, 100));
+                if (_settingsService.Settings.WindowOpacity != clamped)
+                {
+                    _settingsService.Settings.WindowOpacity = clamped;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(WindowOpacityText));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+
+        public string WindowOpacityText => $"{_settingsService.Settings.WindowOpacity}%";
+
+        public void ResetWindowOpacity() => WindowOpacity = 100;
+
         // Companion Server Properties
         public bool IsCompanionServerRunning => _companionServer?.IsRunning ?? false;
 
@@ -269,37 +292,110 @@ namespace SoundBar.ViewModels
         public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
         public string CompanionClientText => CompanionConnectedClients > 0 ? $"{CompanionConnectedClients} client(s) connected" : "Waiting for connection...";
 
-        public Uri? CompanionQrUrl
+        // We make the QR code ourselves, so no online service ever sees the user's local address.
+        // It's cached too, so we only rebuild it when the URL actually changes.
+        private string? _qrCodeUrl;
+        private Microsoft.UI.Xaml.Media.ImageSource? _qrCodeImage;
+
+        public Microsoft.UI.Xaml.Media.ImageSource? CompanionQrImage
         {
             get
             {
-                if (!IsCompanionServerRunning || string.IsNullOrEmpty(CompanionServerUrl)) return null;
-                return new Uri($"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={Uri.EscapeDataString(CompanionServerUrl)}&bgcolor=1a1a1a&color=ffffff&margin=10");
+                if (!IsCompanionServerRunning) return null;
+
+                string url = CompanionServerUrl;
+                if (url == _qrCodeUrl && _qrCodeImage != null) return _qrCodeImage;
+
+                try
+                {
+                    byte[] png = QrCodeHelper.GeneratePng(url);
+                    var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                    using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                    using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+                    {
+                        writer.WriteBytes(png);
+                        writer.StoreAsync().AsTask().GetAwaiter().GetResult();
+                        writer.FlushAsync().AsTask().GetAwaiter().GetResult();
+                        writer.DetachStream();
+                    }
+                    stream.Seek(0);
+                    bitmap.SetSource(stream);
+
+                    _qrCodeUrl = url;
+                    _qrCodeImage = bitmap;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to generate QR code: {ex.Message}");
+                    _qrCodeImage = null;
+                }
+
+                return _qrCodeImage;
             }
         }
+
+        private string? _companionErrorMessage;
+        /// <summary>
+        /// A friendly message shown on the companion screen when the server couldn't start.
+        /// </summary>
+        public string? CompanionErrorMessage
+        {
+            get => _companionErrorMessage;
+            private set
+            {
+                if (_companionErrorMessage != value)
+                {
+                    _companionErrorMessage = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CompanionErrorVisibility));
+                }
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility CompanionErrorVisibility => string.IsNullOrEmpty(CompanionErrorMessage) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 
         public bool EnableCompanionServer
         {
             get => _settingsService.Settings.EnableCompanionServer;
             set
             {
-                if (_settingsService.Settings.EnableCompanionServer != value)
+                bool changed = _settingsService.Settings.EnableCompanionServer != value;
+                if (changed)
                 {
                     _settingsService.Settings.EnableCompanionServer = value;
                     OnPropertyChanged();
                     _settingsService.SaveSettings();
-
-                    if (value)
-                        StartCompanionServer();
-                    else
-                        StopCompanionServer(userExplicit: true);
                 }
+
+                // Always act on the click, even if the saved setting hasn't changed. The setting can say
+                // "on" while the server's actually off (say it failed to start last time), and the power
+                // button still needs to work then.
+                if (value)
+                    StartCompanionServer();
+                else
+                    StopCompanionServer(userExplicit: true);
             }
+        }
+
+        private void RaiseCompanionStateChanged()
+        {
+            OnPropertyChanged(nameof(IsCompanionServerRunning));
+            OnPropertyChanged(nameof(CompanionServerUrl));
+            OnPropertyChanged(nameof(CompanionPairingCode));
+            OnPropertyChanged(nameof(CompanionConnectedClients));
+            OnPropertyChanged(nameof(CompanionClientText));
+            OnPropertyChanged(nameof(CompanionQrImage));
+            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
+            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
         }
 
         public void StartCompanionServer()
         {
             if (_companionServer != null && _companionServer.IsRunning) return;
+
+            // Clean up any half-started server from a previous failed attempt
+            _companionServer?.Dispose();
+            CompanionErrorMessage = null;
 
             _companionServer = new CompanionServerService(
                 _audioService,
@@ -334,29 +430,18 @@ namespace SoundBar.ViewModels
                 _settingsService.Settings.CompanionServerPort
             );
 
-            _companionServer.StateChanged += () =>
-            {
-                RunOnUIThread(() =>
-                {
-                    OnPropertyChanged(nameof(IsCompanionServerRunning));
-                    OnPropertyChanged(nameof(CompanionServerUrl));
-                    OnPropertyChanged(nameof(CompanionPairingCode));
-                    OnPropertyChanged(nameof(CompanionConnectedClients));
-                    OnPropertyChanged(nameof(CompanionClientText));
-                    OnPropertyChanged(nameof(CompanionQrUrl));
-                    OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
-                    OnPropertyChanged(nameof(CompanionActiveUiVisibility));
-                });
-            };
+            _companionServer.StateChanged += () => RunOnUIThread(RaiseCompanionStateChanged);
 
             _companionServer.Start();
-            OnPropertyChanged(nameof(IsCompanionServerRunning));
-            OnPropertyChanged(nameof(CompanionServerUrl));
-            OnPropertyChanged(nameof(CompanionPairingCode));
-            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
-            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
-            OnPropertyChanged(nameof(CompanionClientText));
-            OnPropertyChanged(nameof(CompanionQrUrl));
+
+            if (!_companionServer.IsRunning)
+            {
+                CompanionErrorMessage = _companionServer.LastError ?? "Couldn't start the server. Please try again.";
+                _companionServer.Dispose();
+                _companionServer = null;
+            }
+
+            RaiseCompanionStateChanged();
         }
 
         public void StopCompanionServer()
@@ -372,9 +457,9 @@ namespace SoundBar.ViewModels
                 _companionServer = null;
             }
 
-            // Only reset the saved preference if the user explicitly turned it off,
-            // NOT if the server crashed or port was unavailable. This preserves their
-            // preference so the server auto-starts again on next launch.
+            // Only forget the saved setting if the user switched it off themselves,
+            // not if the server crashed or the port was taken.
+            // The server never starts by itself when the app opens - that's always the user's call.
             if (userExplicit && _settingsService.Settings.EnableCompanionServer)
             {
                 _settingsService.Settings.EnableCompanionServer = false;
@@ -382,12 +467,9 @@ namespace SoundBar.ViewModels
                 OnPropertyChanged(nameof(EnableCompanionServer));
             }
 
-            OnPropertyChanged(nameof(IsCompanionServerRunning));
-            OnPropertyChanged(nameof(CompanionConnectedClients));
-            OnPropertyChanged(nameof(CompanionPowerButtonVisibility));
-            OnPropertyChanged(nameof(CompanionActiveUiVisibility));
-            OnPropertyChanged(nameof(CompanionClientText));
-            OnPropertyChanged(nameof(CompanionQrUrl));
+            if (userExplicit) CompanionErrorMessage = null;
+
+            RaiseCompanionStateChanged();
         }
 
         // Timestamp for Master Volume
@@ -930,18 +1012,34 @@ namespace SoundBar.ViewModels
             }
         }
 
-        public async Task ApplyUpdate()
+        /// <summary>
+        /// Downloads and installs the update. If it works, the app closes and restarts itself.
+        /// </summary>
+        /// <returns>Null on success, otherwise a friendly message explaining what went wrong.</returns>
+        public async Task<string?> ApplyUpdate()
         {
-            if (IsUpdating) return;
-            
+            if (IsUpdating) return null;
+
             IsUpdating = true;
             try
             {
                 await _updateService.DownloadAndApplyUpdateAsync();
+                return null;
+            }
+            catch (UpdateFailedException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update failed: {ex.Message}");
+                return ex.Message;
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update download failed: {ex.Message}");
+                return "Couldn't download the update. Check your internet connection and try again.";
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Update failed: {ex.Message}");
+                return "Something went wrong while installing the update. Your current version is untouched.";
             }
             finally
             {

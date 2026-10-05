@@ -9,7 +9,7 @@ namespace SoundBar
     public partial class App : Application
     {
         /// <summary>
-        /// Initializes the singleton application object.
+        /// Sets up the one and only app object.
         /// </summary>
         public App()
         {

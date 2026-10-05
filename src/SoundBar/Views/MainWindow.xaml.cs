@@ -29,6 +29,13 @@ namespace SoundBar.Views
 
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
+        private IntPtr _hWnd;
+
+        /// <summary>
+        /// What the user wants the pin to be. We track this ourselves rather than asking Windows,
+        /// because Windows can briefly disagree during startup.
+        /// </summary>
+        private bool _isPinned;
 /// <summary>
         /// Sets up the window, wires up the ViewModel, and restores our saved settings.
         /// </summary>
@@ -65,6 +72,7 @@ namespace SoundBar.Views
             // Title bar is configured in RestoreWindowPosition()
 
             IntPtr hWnd = WindowNative.GetWindowHandle(this);
+            _hWnd = hWnd;
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
             _appWindow = AppWindow.GetFromWindowId(wndId);
             
@@ -88,6 +96,7 @@ namespace SoundBar.Views
                 AppTitleText.Visibility = ViewModel.UpdateBannerVisibility == Microsoft.UI.Xaml.Visibility.Visible ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
             }
             RestoreWindowPosition();
+            ApplyWindowOpacity(ViewModel.WindowOpacity);
         }
 
         private bool _hasAppliedInitialPin = false;
@@ -97,10 +106,15 @@ namespace SoundBar.Views
             if (!_hasAppliedInitialPin)
             {
                 _hasAppliedInitialPin = true;
-                if (_settingsService.Settings.IsPinned)
+                if (_isPinned)
                 {
+                    // Apply now, and again once the window has finished showing. Windows can ignore
+                    // a topmost request made too early, so the second call makes sure it sticks.
                     SetTopmost(true);
-                    UpdatePinButtonVisual(true);
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    {
+                        if (_isPinned) SetTopmost(true);
+                    });
                 }
             }
         }
@@ -112,6 +126,10 @@ namespace SoundBar.Views
                 e.PropertyName == nameof(MainViewModel.ShowInputDevice))
             {
                 UpdateIODeviceLayout();
+            }
+            if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
+            {
+                ApplyWindowOpacity(ViewModel.WindowOpacity);
             }
             if (e.PropertyName == nameof(MainViewModel.UpdateBannerVisibility))
             {
@@ -264,8 +282,14 @@ namespace SoundBar.Views
             }
         }
 
+        // Makes a desktop shortcut the first time SoundBar runs. If the user deletes it, we respect that.
         private void CreateDesktopShortcut()
         {
+            if (_settingsService.Settings.HasCreatedDesktopShortcut) return;
+
+            _settingsService.Settings.HasCreatedDesktopShortcut = true;
+            _settingsService.SaveSettings();
+
             try
             {
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -276,14 +300,17 @@ namespace SoundBar.Views
                     string currentExePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
                     string currentAppDir = System.IO.Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
 
+                    // Single quotes in paths (e.g. C:\Users\O'Brien) must be doubled for PowerShell
+                    static string Ps(string value) => value.Replace("'", "''");
+
                     var processInfo = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = "powershell.exe",
-                        Arguments = $"-NoProfile -Command \"$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('{lnkPath}'); $s.TargetPath = '{currentExePath}'; $s.WorkingDirectory = '{currentAppDir}'; $s.Save()\"",
+                        Arguments = $"-NoProfile -Command \"$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('{Ps(lnkPath)}'); $s.TargetPath = '{Ps(currentExePath)}'; $s.WorkingDirectory = '{Ps(currentAppDir)}'; $s.Save()\"",
                         CreateNoWindow = true,
                         UseShellExecute = false
                     };
-                    System.Diagnostics.Process.Start(processInfo);
+                    using var shortcutProcess = System.Diagnostics.Process.Start(processInfo);
                 }
             }
             catch
@@ -295,35 +322,47 @@ namespace SoundBar.Views
         // Loads saved settings like window position and pinned state
         private void LoadWindowSettings()
         {
-            var settings = _settingsService.Load();
+            var settings = _settingsService.Settings;
+            var defaults = new AppSettings();
 
-            _appWindow.MoveAndResize(new RectInt32(
-                (int)settings.WindowLeft, 
-                (int)settings.WindowTop, 
-                settings.WindowWidth, 
-                settings.WindowHeight));
-            
-            if (settings.IsPinned)
-            {
-                SetTopmost(true);
-            }
+            // Fall back to defaults if the saved spot is the "minimised" parking position or nonsense
+            bool validPosition = !WindowPlacementHelper.IsMinimisedPosition(settings.WindowLeft, settings.WindowTop);
+            bool validSize = settings.WindowWidth > 0 && settings.WindowHeight > 0;
 
-            UpdatePinButtonVisual(settings.IsPinned);
+            var saved = new RectInt32(
+                (int)(validPosition ? settings.WindowLeft : defaults.WindowLeft),
+                (int)(validPosition ? settings.WindowTop : defaults.WindowTop),
+                validSize ? settings.WindowWidth : defaults.WindowWidth,
+                validSize ? settings.WindowHeight : defaults.WindowHeight);
+
+            // Make sure it lands fully on a monitor that's actually connected right now
+            var workArea = DisplayArea.GetFromRect(saved, DisplayAreaFallback.Nearest).WorkArea;
+            _appWindow.MoveAndResize(WindowPlacementHelper.ClampToWorkArea(saved, workArea));
+
+            // The pin itself is applied once the window is shown (see MainWindow_Activated)
+            _isPinned = settings.IsPinned;
+            UpdatePinButtonVisual(_isPinned);
         }
 
         // Saves current window state before closing
         private void SaveWindowSettings()
         {
-            var position = _appWindow.Position;
-            var size = _appWindow.Size;
-            var isPinned = IsTopmost();
+            // While minimised, Windows reports a bogus off-screen position, so keep the last good one
+            bool isMinimised = _appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
 
-            // Update the existing settings object so we don't erase HiddenApps/BackgroundApps
-            _settingsService.Settings.WindowTop = position.Y;
-            _settingsService.Settings.WindowLeft = position.X;
-            _settingsService.Settings.WindowWidth = size.Width;
-            _settingsService.Settings.WindowHeight = size.Height;
-            _settingsService.Settings.IsPinned = isPinned;
+            if (!isMinimised)
+            {
+                var position = _appWindow.Position;
+                var size = _appWindow.Size;
+
+                // Update the existing settings object so we don't erase HiddenApps/BackgroundApps
+                _settingsService.Settings.WindowTop = position.Y;
+                _settingsService.Settings.WindowLeft = position.X;
+                _settingsService.Settings.WindowWidth = size.Width;
+                _settingsService.Settings.WindowHeight = size.Height;
+            }
+
+            _settingsService.Settings.IsPinned = _isPinned;
 
             _settingsService.SaveSettings();
         }
@@ -412,7 +451,7 @@ namespace SoundBar.Views
             ViewModel.ReloadBackground();
         }
 
-        private void UpdateBanner_Click(object sender, RoutedEventArgs e)
+        private async void UpdateBanner_Click(object sender, RoutedEventArgs e)
         {
             var stack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 15, Padding = new Microsoft.UI.Xaml.Thickness(0, 10, 0, 0) };
             stack.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Downloading and installing the latest version. SoundBar will restart automatically in a few moments...", TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap });
@@ -426,7 +465,22 @@ namespace SoundBar.Views
             };
             
             _ = dialog.ShowAsync();
-            _ = ViewModel.ApplyUpdate();
+
+            // On success the app closes and restarts, so we only get past this if something went wrong
+            string? error = await ViewModel.ApplyUpdate();
+            dialog.Hide();
+
+            if (error != null)
+            {
+                var errorDialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                {
+                    Title = "Update didn't work",
+                    Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = error, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap },
+                    CloseButtonText = "OK",
+                    XamlRoot = this.Content.XamlRoot
+                };
+                await errorDialog.ShowAsync();
+            }
         }
 
         private void DismissLoudnessWarning_Click(object sender, RoutedEventArgs e)
@@ -455,14 +509,60 @@ namespace SoundBar.Views
 
         private void PinButton_Click(object sender, RoutedEventArgs e)
         {
-            bool isPinned = !IsTopmost();
-            SetTopmost(isPinned);
-            UpdatePinButtonVisual(isPinned);
+            _isPinned = !_isPinned;
+            SetTopmost(_isPinned);
+            UpdatePinButtonVisual(_isPinned);
         }
 
         private void CompanionButton_Click(object sender, RoutedEventArgs e)
         {
+            // The companion screen lives in the main view, so leave Settings first or nothing would appear
+            if (SettingsContentGrid.Visibility == Visibility.Visible)
+            {
+                CloseSettingsButton_Click(sender, e);
+                ViewModel.IsCompanionViewMode = true;
+                return;
+            }
+
             ViewModel.IsCompanionViewMode = !ViewModel.IsCompanionViewMode;
+        }
+
+        private void CloseCompanionButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.IsCompanionViewMode = false;
+        }
+
+        private void ResetOpacity_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.ResetWindowOpacity();
+        }
+
+        /// <summary>
+        /// Makes the whole window see-through. At 100% we switch transparency off entirely,
+        /// so people who never touch the slider get exactly the same window as before.
+        /// </summary>
+        private void ApplyWindowOpacity(double percent)
+        {
+            if (_hWnd == IntPtr.Zero) return;
+
+            long exStyle = NativeMethods.GetWindowLongPtr(_hWnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+
+            if (percent >= 100)
+            {
+                if ((exStyle & NativeMethods.WS_EX_LAYERED) != 0)
+                {
+                    NativeMethods.SetWindowLongPtr(_hWnd, NativeMethods.GWL_EXSTYLE, new IntPtr(exStyle & ~(long)NativeMethods.WS_EX_LAYERED));
+                }
+                return;
+            }
+
+            if ((exStyle & NativeMethods.WS_EX_LAYERED) == 0)
+            {
+                NativeMethods.SetWindowLongPtr(_hWnd, NativeMethods.GWL_EXSTYLE, new IntPtr(exStyle | NativeMethods.WS_EX_LAYERED));
+            }
+
+            byte alpha = (byte)Math.Round(Math.Clamp(percent, AppSettings.MinWindowOpacity, 100) / 100.0 * 255);
+            NativeMethods.SetLayeredWindowAttributes(_hWnd, 0, alpha, NativeMethods.LWA_ALPHA);
         }
 
         private void MicMuteButton_Click(object sender, RoutedEventArgs e)
@@ -482,19 +582,21 @@ namespace SoundBar.Views
 
         private void SetTopmost(bool topmost)
         {
+            // Keep WinUI's own flag in sync...
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.IsAlwaysOnTop = topmost;
             }
-        }
 
-        private bool IsTopmost()
-        {
-            if (_appWindow.Presenter is OverlappedPresenter presenter)
+            // ...but also tell Windows directly. If WinUI's flag already says "true" it treats
+            // setting it again as a no-op, which is what left the pin looking on but not working.
+            if (_hWnd != IntPtr.Zero)
             {
-                return presenter.IsAlwaysOnTop;
+                NativeMethods.SetWindowPos(_hWnd,
+                    topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST,
+                    0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
             }
-            return false;
         }
 
         private void MediaPrevious_Click(object sender, RoutedEventArgs e)

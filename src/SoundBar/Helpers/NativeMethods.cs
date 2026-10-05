@@ -51,5 +51,43 @@ namespace SoundBar.Helpers
         /// </summary>
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
+
+        // --- Always on Top ---
+
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        public const uint SWP_NOSIZE = 0x0001;
+        public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOACTIVATE = 0x0010;
+
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_TOPMOST = 0x00000008;
+        public const int WS_EX_LAYERED = 0x00080000;
+
+        /// <summary>
+        /// Shuffles a window up or down the pile of open windows. We use it to pin SoundBar on top by
+        /// talking to Windows directly, because WinUI's IsAlwaysOnTop can get quietly ignored while
+        /// the app's still starting up.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+        public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+        public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        // --- Window Opacity ---
+
+        public const uint LWA_ALPHA = 0x00000002;
+
+        /// <summary>
+        /// Sets how see-through a layered window is. Alpha goes from 0 (completely invisible) to 255 (totally solid).
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
     }
 }

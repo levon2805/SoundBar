@@ -29,6 +29,7 @@ A sleek, customisable, and powerful audio mixer overlay for Windows, built nativ
 ### Personalisation & UI
 * **Light & Dark Themes:** Fully supports Windows 11 native light, dark, and system themes, letting you customise the look to your exact preference.
 * **Custom Backgrounds:** Drop any `.jpg` or `.png` into your backgrounds folder to deeply personalise the UI with an edge-to-edge frosted wallpaper.
+* **Window Opacity:** Make SoundBar see-through with a simple slider in Appearance settings, so you can still see what's behind it.
 * **Smart Dimming:** Background dimming elegantly shifts to ensure text remains perfectly readable whether you use Light or Dark mode.
 * **App Nicknaming:** Give your apps custom, friendly names just by clicking on them.
 

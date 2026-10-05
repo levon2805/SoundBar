@@ -448,17 +448,40 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Mobile Companion" 
-                               FontSize="20" FontWeight="Bold" 
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                               HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <!-- Back to the mixer -->
+                        <Button Content="&#xE72B;"
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Background="Transparent"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                BorderThickness="0"
+                                Padding="5"
+                                FontSize="18"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Click="CloseCompanionButton_Click"
+                                ToolTipService.ToolTip="Back"/>
+
+                        <TextBlock Text="Mobile Companion"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
 
                     <!-- OFF STATE: Power Button -->
                     <Grid Grid.Row="1" Visibility="{x:Bind ViewModel.CompanionPowerButtonVisibility, Mode=OneWay}">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
-                            <TextBlock Text="Server Offline" 
-                                       FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                            <TextBlock Text="Server Offline"
+                                       FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        HorizontalAlignment="Center"/>
+
+                            <!-- Shown when the server couldn't start -->
+                            <InfoBar IsOpen="True"
+                                     IsClosable="False"
+                                     Severity="Warning"
+                                     MaxWidth="320"
+                                     Message="{x:Bind ViewModel.CompanionErrorMessage, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.CompanionErrorVisibility, Mode=OneWay}"/>
                             
                             <!-- Huge Power Button -->
                             <Button Width="120" Height="120" CornerRadius="60"
@@ -488,12 +511,11 @@
                                            FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                            HorizontalAlignment="Center"/>
 
-                                <!-- Dynamic QR using custom converter -->
-                                <Image Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center">
-                                    <Image.Source>
-                                        <BitmapImage UriSource="{x:Bind ViewModel.CompanionQrUrl, Mode=OneWay}" />
-                                    </Image.Source>
-                                </Image>
+                                <!-- QR code generated locally on this PC -->
+                                <Border CornerRadius="8" HorizontalAlignment="Center" Background="White">
+                                    <Image Width="120" Height="120" Stretch="Uniform"
+                                           Source="{x:Bind ViewModel.CompanionQrImage, Mode=OneWay}"/>
+                                </Border>
 
                                 <TextBlock Text="{x:Bind ViewModel.CompanionPairingCode, Mode=OneWay}" 
                                            FontSize="32" FontWeight="Bold" 
@@ -645,8 +667,38 @@
                                           Background="{ThemeResource ControlFillColorDefaultBrush}"
                                           BorderThickness="1"
                                           BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                           Margin="0,0,0,15"/>
+
+                                <!-- Window Opacity -->
+                                <TextBlock Text="Make SoundBar see-through so you can still see what's behind it." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <Grid Margin="0,0,0,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Slider Grid.Column="0"
+                                            Header="Window Opacity"
+                                            Minimum="30" Maximum="100" StepFrequency="1"
+                                            IsThumbToolTipEnabled="False"
+                                            Value="{x:Bind ViewModel.WindowOpacity, Mode=TwoWay}"
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind ViewModel.WindowOpacityText, Mode=OneWay}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               MinWidth="40" TextAlignment="Right"
+                                               VerticalAlignment="Bottom" Margin="10,0,0,8"/>
+                                    <Button Grid.Column="2"
+                                            Content="&#xE72C;"
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            VerticalAlignment="Bottom" Margin="5,0,0,2"
+                                            Click="ResetOpacity_Click"
+                                            ToolTipService.ToolTip="Reset to 100%"/>
+                                </Grid>
 
                                 <TextBlock Text="Highlights the active application so you know which volume you are controlling via hotkeys." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <ToggleSwitch Header="Active App Highlight" 
@@ -871,11 +923,15 @@
 
             <!-- Footer -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
-                <!-- App Version (Global) -->
-                <TextBlock Text="{x:Bind ViewModel.AppVersionText, Mode=OneWay}" 
-                           Foreground="{ThemeResource TextFillColorDisabledBrush}" 
-                           FontSize="10" 
-                           VerticalAlignment="Center"/>
+                <!-- App Version (Global) - click to open this version's release notes -->
+                <HyperlinkButton Content="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
+                                 Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                                 FontSize="10"
+                                 Padding="4,2"
+                                 MinHeight="0" MinWidth="0"
+                                 VerticalAlignment="Center"
+                                 Click="VersionHyperlink_Click"
+                                 ToolTipService.ToolTip="View release notes for this version"/>
             </StackPanel>
             </Grid>
         </Grid>
