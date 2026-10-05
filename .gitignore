@@ -254,3 +254,17 @@ paket-files/
 # Rider
 .idea/
 *.sln.iml
+
+# Secrets / signing keys - never commit these
+private.key
+*.key
+*.pem
+*.pfx
+*.snk
+*.p12
+.env
+.env.*
+secrets.*
+
+# Scratch files
+build.log

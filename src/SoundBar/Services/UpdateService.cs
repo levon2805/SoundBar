@@ -21,12 +21,12 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.0.2";
+        public const string CurrentVersion = "v4.0.3";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
         /// </summary>
-        public const string PublicKeyBase64 = "PFJTQUtleVZhbHVlPjxNb2R1bHVzPnh6bTBBMENEb0xMdC96aDVSazhhb0R0Yk5zdUs0QWNQOEdaTUpSMHRadUhrKzN2M2pUZUhQYVRlbTQ3OFlrZk5nVzRBeTVDa05PNHhjSGVMM0tCSGk5dDlKbjIrdXEza2VaV2NsZFdPWCtESXJqbWUrbk1YSDZURDZzMDZ3VGpBM0RWWTYxOHRXNmQvdnNJTWc5emlEUUxKSFl5RGNPbXhkODVwRkJveTkyNE1YRFdvbFhpZUx6YmN6M2p0K1IweDcySzdmOGsrVHRoNzlpRzJOeVVHZGQ2Rng1Y2lzRzlUaGd3emhIczc2eVh2VGV5UHhEaElWVCt0eXZGSlBUaTEzaDhBRXhWdkhaVVJnVVU4RWxsZ2ZTWTRNNCs0NUNDYkRxc2dPVmR4RGNvTkNOa1YrOU80d2d0WnZJNkI3bzFnUzdtekdJN1JpWklvWkxIbnVtYnBlUT09PC9Nb2R1bHVzPjxFeHBvbmVudD5BUUFCPC9FeHBvbmVudD48L1JTQUtleVZhbHVlPg==";
+        public const string PublicKeyBase64 = "PFJTQUtleVZhbHVlPjxNb2R1bHVzPnlyK1lVWk5VVllQQ0dHb21KQ0xJaWx0M1Q0T25oUU50YlZKSHViMTR2RWNBMk5IU2JRUUdadDVaWFBCOW1LaEMxNVRRYXcyOHRDMG9PWkdva1k5ZkJoUHdMU3VxUFQ0dGRTNDBOVlRPYUlsVGNzdjhka3NNYUsyb3FMV1oraDBSaVd1bXV0VE1zUnpOVFFtK0RyNTlFeCtvSlVMSmplQ0Z2dnRndG5BdGZ6N01vUmplRDRqK3VDNXlYcGVuVUJjQWF6NFhyTGFyMUlxNWMxamZFVWgxTlVjTVU3ODZqV0U3Z0RXYlRJQ3IzY2VneFJKbi9DMnFJc0FCQjlkQWVEaHNsRENTUzJNYXJFckdodGFRNENBbC9Qdm1VT2Z6YUhxQWtkSmo5QS90Y0M5RGpBeWdBUGtiY1pMdGxFMkNxajRSWUNsK1dQZXRLQnZKM08wVFQrMXdlUT09PC9Nb2R1bHVzPjxFeHBvbmVudD5BUUFCPC9FeHBvbmVudD48L1JTQUtleVZhbHVlPg==";
 
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static HttpClient _httpClient;
