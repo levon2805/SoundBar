@@ -292,8 +292,8 @@ namespace SoundBar.ViewModels
         public int CompanionConnectedClients => _companionServer?.ConnectedClientCount ?? 0;
         public string CompanionClientText => CompanionConnectedClients > 0 ? $"{CompanionConnectedClients} client(s) connected" : "Waiting for connection...";
 
-        // The QR code is generated locally (no third-party service sees the user's LAN address).
-        // We cache it so it's only rebuilt when the URL actually changes.
+        // We make the QR code ourselves, so no online service ever sees the user's local address.
+        // It's cached too, so we only rebuild it when the URL actually changes.
         private string? _qrCodeUrl;
         private Microsoft.UI.Xaml.Media.ImageSource? _qrCodeImage;
 
@@ -367,9 +367,9 @@ namespace SoundBar.ViewModels
                     _settingsService.SaveSettings();
                 }
 
-                // Act on the request even if the saved preference didn't change. The setting can be
-                // "on" while the server is actually off (e.g. it failed to start last time), and the
-                // power button must still work in that case.
+                // Always act on the click, even if the saved setting hasn't changed. The setting can say
+                // "on" while the server's actually off (say it failed to start last time), and the power
+                // button still needs to work then.
                 if (value)
                     StartCompanionServer();
                 else
@@ -457,9 +457,9 @@ namespace SoundBar.ViewModels
                 _companionServer = null;
             }
 
-            // Only reset the saved preference if the user explicitly turned it off,
-            // NOT if the server crashed or port was unavailable.
-            // Note: the server never starts by itself at launch; it's always the user's choice.
+            // Only forget the saved setting if the user switched it off themselves,
+            // not if the server crashed or the port was taken.
+            // The server never starts by itself when the app opens - that's always the user's call.
             if (userExplicit && _settingsService.Settings.EnableCompanionServer)
             {
                 _settingsService.Settings.EnableCompanionServer = false;

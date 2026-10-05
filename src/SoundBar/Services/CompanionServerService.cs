@@ -132,11 +132,11 @@ namespace SoundBar.Services
             }
             catch (HttpListenerException ex) when (ex.ErrorCode == 5)
             {
-                // Access denied — we need admin elevation to reserve the URL (one-off per port)
+                // Windows said no. We need admin rights to reserve the URL, but it's a one-off for each port
                 try
                 {
-                    // "D:(A;;GX;;;WD)" grants Everyone (WD) access by SID, so it works on non-English Windows
-                    // where the account isn't literally called "Everyone".
+                    // "D:(A;;GX;;;WD)" is a slightly cryptic way of saying "Everyone". Using the ID rather than
+                    // the name means it still works on non-English Windows, where it isn't called "Everyone".
                     var aclProcess = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = "netsh",
@@ -153,7 +153,7 @@ namespace SoundBar.Services
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
-                    // Thrown when the user clicks "No" on the UAC prompt
+                    // This is what we get if the user clicks "No" on the admin prompt
                     FailStart("Windows needs your permission to start the server. Try again and choose Yes on the admin prompt.");
                 }
                 catch (Exception innerEx)
@@ -174,7 +174,8 @@ namespace SoundBar.Services
         }
 
         /// <summary>
-        /// Opens the HTTP listener and kicks off the background loops. Throws if the listener can't start.
+        /// Opens the HTTP listener and kicks off the background loops. Throws if the listener won't start,
+        /// so the caller can sort it out.
         /// </summary>
         private void StartListener()
         {
@@ -184,18 +185,18 @@ namespace SoundBar.Services
             _httpListener.Start();
             IsRunning = true;
 
-            // Ensure the firewall rule exists so external devices (phones) can connect
+            // Make sure the firewall will actually let phones through
             _ = Task.Run(() => EnsureFirewallRule(Port));
 
-            // Force initial load of media state
+            // Grab the current media info so phones see what's playing straight away
             _mediaInfoService.Refresh();
 
             var token = _cts!.Token;
 
-            // Start accepting connections on a background thread
+            // Start listening for connections in the background
             _acceptTask = Task.Run(() => AcceptConnectionsAsync(token));
 
-            // Broadcast state to all paired clients every 500ms via an async loop
+            // Send the latest state to every paired phone every half a second
             _broadcastTask = Task.Run(() => BroadcastLoopAsync(token));
 
             StateChanged?.Invoke();
@@ -224,8 +225,8 @@ namespace SoundBar.Services
 
         /// <summary>
         /// Ensures a Windows Firewall inbound rule exists for the companion server port.
-        /// The rule only allows devices on the local subnet, and only on Private/Domain networks,
-        /// so the server is never exposed on public Wi-Fi.
+        /// The rule only lets in devices on the same local network, and only when that network is set
+        /// to Private (or a work domain), so the server is never left open on public Wi-Fi.
         /// Runs an elevated netsh command if the rule doesn't exist yet.
         /// </summary>
         public static void EnsureFirewallRule(int port)
@@ -234,7 +235,7 @@ namespace SoundBar.Services
 
             try
             {
-                // Check if rule already exists (netsh exits with 0 only when a matching rule is found)
+                // See if the rule's already there (netsh only exits with 0 if it finds a match)
                 var checkPsi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "netsh",
@@ -253,8 +254,8 @@ namespace SoundBar.Services
                     return;
                 }
 
-                // Rule doesn't exist — add it with elevation. We also remove the old pre-4.1 rule
-                // ("SoundBar Companion"), which allowed connections on every network type.
+                // No rule yet, so add one (this needs admin rights). While we're at it, clear out the old
+                // pre-4.1 rule ("SoundBar Companion"), which let connections in on every type of network.
                 string command =
                     "netsh advfirewall firewall delete rule name=\"SoundBar Companion\" >nul 2>&1 & " +
                     $"netsh advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol=TCP localport={port} profile=private,domain remoteip=localsubnet";
@@ -628,7 +629,7 @@ namespace SoundBar.Services
 
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
-                        // Enforce 4KB max payload size limit by terminating if EndOfMessage is false
+                        // Anything bigger than 4KB gets the boot (EndOfMessage is false if it didn't fit in the buffer)
                         if (!result.EndOfMessage)
                         {
                             await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "Payload exceeds 4KB limit", ct);
@@ -952,8 +953,8 @@ namespace SoundBar.Services
         private readonly ConcurrentDictionary<string, byte[]?> _iconCache = new();
 
         /// <summary>
-        /// Checks whether a requested icon path belongs to an app currently in the mixer.
-        /// Network (UNC) paths are always refused, as touching them can leak the user's Windows credentials.
+        /// Checks the requested icon actually belongs to an app in the mixer. Network (UNC) paths are
+        /// always a no, because even just peeking at one can leak the user's Windows login details.
         /// </summary>
         internal bool IsKnownAppIconPath(string iconPath)
         {

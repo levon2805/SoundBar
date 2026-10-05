@@ -9,8 +9,8 @@ namespace SoundBar.Helpers
     public static class WindowPlacementHelper
     {
         /// <summary>
-        /// Windows reports a minimised window as sitting around (-32000, -32000).
-        /// Anything that far out is never a real position.
+        /// When a window's minimised, Windows sneakily parks it at around (-32000, -32000).
+        /// Nothing that far out is ever a real position.
         /// </summary>
         private const int MinimisedPositionThreshold = -30000;
 

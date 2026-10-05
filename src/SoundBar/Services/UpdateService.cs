@@ -265,8 +265,8 @@ del "%~f0"
     }
 
     /// <summary>
-    /// Thrown when an update can't be downloaded, verified or installed.
-    /// The message is written to be shown straight to the user.
+    /// Thrown when an update can't be downloaded, checked or installed.
+    /// The message is friendly enough to show straight to the user.
     /// </summary>
     public class UpdateFailedException : Exception
     {

@@ -3,8 +3,8 @@ using QRCoder;
 namespace SoundBar.Helpers
 {
     /// <summary>
-    /// Generates QR codes entirely on this PC, so the companion URL (which contains the
-    /// user's local IP address) is never sent to an online QR service.
+    /// Makes QR codes right here on the PC, so the companion URL (which has the user's
+    /// local IP address in it) never gets sent off to an online QR service.
     /// </summary>
     public static class QrCodeHelper
     {

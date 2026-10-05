@@ -540,7 +540,7 @@
     }
 
     // --- Mobile Background Fix ---
-    // Browsers often silently sever WebSockets when the phone screen turns off or the app is minimized.
+    // Browsers often silently sever WebSockets when the phone screen turns off or the app is minimised.
     // This listener forces an immediate hard-reconnect the millisecond the app comes back to the foreground.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {

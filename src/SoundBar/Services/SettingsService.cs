@@ -74,7 +74,7 @@ namespace SoundBar.Services
                     string json = File.ReadAllText(_filePath);
                     var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
 
-                    // Guard against hand-edited values that would make the window invisible
+                    // Someone might have hand-edited the config, so make sure the window can't end up invisible
                     settings.WindowOpacity = Math.Clamp(settings.WindowOpacity, AppSettings.MinWindowOpacity, 100);
 
                     return settings;

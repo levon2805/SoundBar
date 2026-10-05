@@ -65,8 +65,9 @@ namespace SoundBar.Helpers
         public const int WS_EX_LAYERED = 0x00080000;
 
         /// <summary>
-        /// Changes a window's z-order. We use it to pin/unpin the window directly with Windows,
-        /// because WinUI's IsAlwaysOnTop can be silently ignored early in startup.
+        /// Shuffles a window up or down the pile of open windows. We use it to pin SoundBar on top by
+        /// talking to Windows directly, because WinUI's IsAlwaysOnTop can get quietly ignored while
+        /// the app's still starting up.
         /// </summary>
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -83,7 +84,7 @@ namespace SoundBar.Helpers
         public const uint LWA_ALPHA = 0x00000002;
 
         /// <summary>
-        /// Sets the transparency of a layered window. Alpha runs from 0 (invisible) to 255 (solid).
+        /// Sets how see-through a layered window is. Alpha goes from 0 (completely invisible) to 255 (totally solid).
         /// </summary>
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
