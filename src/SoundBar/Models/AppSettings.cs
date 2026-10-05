@@ -58,6 +58,21 @@ namespace SoundBar.Models
         public AppTheme Theme { get; set; } = AppTheme.System;
 
         /// <summary>
+        /// The lowest window opacity allowed, so the window can never become invisible.
+        /// </summary>
+        public const int MinWindowOpacity = 30;
+
+        /// <summary>
+        /// How see-through the whole window is, as a percentage (30–100). 100 is fully solid.
+        /// </summary>
+        public int WindowOpacity { get; set; } = 100;
+
+        /// <summary>
+        /// Whether we've already made a desktop shortcut once. If the user deletes it, we leave it deleted.
+        /// </summary>
+        public bool HasCreatedDesktopShortcut { get; set; } = false;
+
+        /// <summary>
         /// Whether to show a visual highlight outline around the currently focused application.
         /// </summary>
         public bool EnableFocusHighlight { get; set; } = true;

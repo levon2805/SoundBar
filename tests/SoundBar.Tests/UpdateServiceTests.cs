@@ -132,5 +132,35 @@ namespace SoundBar.Tests
             // Assert
             Assert.False(result);
         }
+
+        // --- New v4.1.0 Tests ---
+
+        [Fact]
+        public async Task DownloadAndApplyUpdateAsync_WhenNoUpdateIsReady_ThrowsFriendlyError()
+        {
+            var service = new UpdateService();
+
+            var ex = await Assert.ThrowsAsync<UpdateFailedException>(() => service.DownloadAndApplyUpdateAsync());
+            Assert.False(string.IsNullOrWhiteSpace(ex.Message));
+        }
+
+        [Fact]
+        public async Task DownloadAndApplyUpdateAsync_WhenSignatureIsBad_ThrowsInsteadOfInstalling()
+        {
+            // Arrange — a newer release whose "zip" and "sig" are both junk
+            string json = @"{
+                ""tag_name"": ""v9.9.9"",
+                ""assets"": [
+                    { ""name"": ""SoundBar-v9.9.9.zip"", ""browser_download_url"": ""https://github.com/test/download.zip"" },
+                    { ""name"": ""SoundBar-v9.9.9.sig"", ""browser_download_url"": ""https://github.com/test/download.sig"" }
+                ]
+            }";
+            UpdateService.SetTestMessageHandler(CreateMockMessageHandler(json, HttpStatusCode.OK));
+            var service = new UpdateService();
+            Assert.True(await service.CheckForUpdatesAsync());
+
+            // Act & Assert — verification must fail loudly, never silently
+            await Assert.ThrowsAsync<UpdateFailedException>(() => service.DownloadAndApplyUpdateAsync());
+        }
     }
 }

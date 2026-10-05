@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.0.3";
+        public const string CurrentVersion = "v4.1.0";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -108,9 +108,11 @@ namespace SoundBar.Services
         /// <summary>
         /// Downloads the update, verifies its signature, extracts it, and triggers the clever batch script to overwrite the running app.
         /// </summary>
+        /// <exception cref="UpdateFailedException">Thrown with a user-friendly message if anything goes wrong.</exception>
         public async Task DownloadAndApplyUpdateAsync()
         {
-            if (string.IsNullOrEmpty(DownloadUrl) || string.IsNullOrEmpty(SignatureUrl)) return;
+            if (string.IsNullOrEmpty(DownloadUrl) || string.IsNullOrEmpty(SignatureUrl))
+                throw new UpdateFailedException("There's no update ready to install. Please try again later.");
 
             string tempUpdateDir = Path.Combine(Path.GetTempPath(), "SoundBarUpdate");
             string zipPath = Path.Combine(tempUpdateDir, "update.zip");
@@ -168,19 +170,21 @@ namespace SoundBar.Services
                 System.Diagnostics.Debug.WriteLine($"Update verification failed: {ex.Message}");
                 // Something smells fishy. Let's abort and clean up.
                 try { Directory.Delete(tempUpdateDir, true); } catch { }
-                return;
+                throw new UpdateFailedException("The downloaded update couldn't be verified, so it wasn't installed. Your current version is untouched.", ex);
             }
 
             // Everything is legit, so let's extract it
             ZipFile.ExtractToDirectory(zipPath, extractPath);
 
             // We need to find the actual exe because sometimes zip files have root folders and sometimes they don't.
-            string sourceDir = extractPath;
+            // If there's no exe at all, the package is broken. Bail out rather than mirroring junk over the app.
             var exeFiles = Directory.GetFiles(extractPath, "SoundBar.exe", SearchOption.AllDirectories);
-            if (exeFiles.Any())
+            if (!exeFiles.Any())
             {
-                sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
+                try { Directory.Delete(tempUpdateDir, true); } catch { }
+                throw new UpdateFailedException("The update package looks incomplete, so it wasn't installed. Your current version is untouched.");
             }
+            string sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
 
             // We write a sneaky batch script to the temp folder. This will run independently, wait for us to close, and copy the files over.
             string currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
@@ -192,7 +196,6 @@ namespace SoundBar.Services
                 string p = path.EndsWith("\\") ? path + "\\" : path;
                 return "\"" + p.Replace("\"", "\"\"") + "\"";
             }
-            string EscapeForPowerShell(string path) => path.Replace("'", "''");
 
             string batContent = $$"""
 @echo off
@@ -215,12 +218,6 @@ if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
 
 :: Clean up the temp directory
 rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
-
-:: Create a desktop shortcut if it doesn't exist
-set "LNK_PATH=%USERPROFILE%\Desktop\SoundBar.lnk"
-if not exist "%LNK_PATH%" (
-    powershell -Command "$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('%LNK_PATH%'); $s.TargetPath = '{{EscapeForPowerShell(currentExePath)}}'; $s.WorkingDirectory = '{{EscapeForPowerShell(currentAppDir)}}'; $s.Save()"
-)
 
 :: Restart the application
 start "" {{EscapeForBatch(currentExePath)}}
@@ -265,5 +262,14 @@ del "%~f0"
             [JsonPropertyName("browser_download_url")]
             public string? BrowserDownloadUrl { get; set; }
         }
+    }
+
+    /// <summary>
+    /// Thrown when an update can't be downloaded, verified or installed.
+    /// The message is written to be shown straight to the user.
+    /// </summary>
+    public class UpdateFailedException : Exception
+    {
+        public UpdateFailedException(string message, Exception? inner = null) : base(message, inner) { }
     }
 }

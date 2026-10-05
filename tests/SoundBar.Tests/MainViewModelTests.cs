@@ -66,5 +66,80 @@ namespace SoundBar.Tests
 
             viewModel.Dispose();
         }
+
+        // --- New v4.1.0 Tests ---
+
+        private static (MainViewModel ViewModel, SettingsService Settings, string Path) CreateViewModel()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"test_vm_{System.Guid.NewGuid()}.json");
+            var settings = new SettingsService(path);
+
+            var mockAudioService = new Mock<IAudioMixerService>();
+            mockAudioService.Setup(s => s.GetAudioDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetActiveAudioSessions()).Returns(new List<AudioSessionData>());
+
+            return (new MainViewModel(settings, mockAudioService.Object), settings, path);
+        }
+
+        [Theory]
+        [InlineData(65, 65)]
+        [InlineData(10, 30)]   // Can't go below 30%, or the window could vanish
+        [InlineData(150, 100)]
+        [InlineData(72.6, 73)] // Slider values are rounded to whole percentages
+        public void WindowOpacity_IsClampedAndSaved(double requested, int expected)
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.WindowOpacity = requested;
+
+                Assert.Equal(expected, viewModel.WindowOpacity);
+                Assert.Equal($"{expected}%", viewModel.WindowOpacityText);
+                Assert.Equal(expected, new SettingsService(path).Settings.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ResetWindowOpacity_GoesBackToFullySolid()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.WindowOpacity = 50;
+                viewModel.ResetWindowOpacity();
+
+                Assert.Equal(100, viewModel.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void CloseCompanionView_ReturnsToMixer()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.IsCompanionViewMode = true;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.MixerViewVisibility);
+
+                viewModel.IsCompanionViewMode = false;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MixerViewVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
     }
 }

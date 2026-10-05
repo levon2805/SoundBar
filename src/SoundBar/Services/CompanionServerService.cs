@@ -120,42 +120,27 @@ namespace SoundBar.Services
         {
             if (IsRunning) return;
 
+            LastError = null;
+
+            // Generate a fresh four-digit pairing code
+            PairingCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000, 10000).ToString();
+            _cts = new CancellationTokenSource();
+
             try
             {
-                // Generate a fresh four-digit pairing code
-                PairingCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000, 10000).ToString();
-
-                _cts = new CancellationTokenSource();
-                _httpListener = new HttpListener();
-                _httpListener.Prefixes.Add($"http://+:{Port}/");
-
-                _httpListener.Start();
-                IsRunning = true;
-
-                // Ensure the firewall rule exists so external devices (phones) can connect
-                _ = Task.Run(() => EnsureFirewallRule(Port));
-
-                // Force initial load of media state
-                _mediaInfoService.Refresh();
-
-                // Start accepting connections on a background thread
-                _acceptTask = Task.Run(() => AcceptConnectionsAsync(_cts.Token));
-
-                // Broadcast state to all paired clients every 500ms via an async loop
-                _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts.Token));
-
-                StateChanged?.Invoke();
+                StartListener();
             }
             catch (HttpListenerException ex) when (ex.ErrorCode == 5)
             {
-                // Access denied — we need to request admin elevation to add the URL ACL + firewall rule
+                // Access denied — we need admin elevation to reserve the URL (one-off per port)
                 try
                 {
-                    // Step 1: Add the URL ACL reservation
+                    // "D:(A;;GX;;;WD)" grants Everyone (WD) access by SID, so it works on non-English Windows
+                    // where the account isn't literally called "Everyone".
                     var aclProcess = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = "netsh",
-                        Arguments = $"http add urlacl url=http://+:{Port}/ user=Everyone",
+                        Arguments = $"http add urlacl url=http://+:{Port}/ sddl=D:(A;;GX;;;WD)",
                         Verb = "runas",
                         UseShellExecute = true,
                         WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
@@ -163,70 +148,126 @@ namespace SoundBar.Services
                     var proc1 = System.Diagnostics.Process.Start(aclProcess);
                     proc1?.WaitForExit();
 
-                    // Step 2: Add the firewall rule (separate elevated process to guarantee execution)
-                    EnsureFirewallRule(Port);
-
                     // Try starting again after granting permission
-                    _httpListener = new HttpListener();
-                    _httpListener.Prefixes.Add($"http://+:{Port}/");
-                    _httpListener.Start();
-                    IsRunning = true;
-
-                    _acceptTask = Task.Run(() => AcceptConnectionsAsync(_cts!.Token));
-                    _broadcastTask = Task.Run(() => BroadcastLoopAsync(_cts!.Token));
-
-                    StateChanged?.Invoke();
+                    StartListener();
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // Thrown when the user clicks "No" on the UAC prompt
+                    FailStart("Windows needs your permission to start the server. Try again and choose Yes on the admin prompt.");
                 }
                 catch (Exception innerEx)
                 {
                     System.Diagnostics.Debug.WriteLine($"Companion server failed to start after UAC prompt: {innerEx.Message}");
-                    IsRunning = false;
+                    FailStart("Couldn't start the server, even after asking Windows for permission.");
                 }
+            }
+            catch (HttpListenerException ex) when (ex.ErrorCode == 32 || ex.ErrorCode == 183)
+            {
+                FailStart($"Port {Port} is already being used by another app. You can change CompanionServerPort in the config file.");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Companion server failed to start: {ex.Message}");
-                IsRunning = false;
+                FailStart("Couldn't start the server. Please try again.");
             }
         }
 
         /// <summary>
+        /// Opens the HTTP listener and kicks off the background loops. Throws if the listener can't start.
+        /// </summary>
+        private void StartListener()
+        {
+            _httpListener?.Close();
+            _httpListener = new HttpListener();
+            _httpListener.Prefixes.Add($"http://+:{Port}/");
+            _httpListener.Start();
+            IsRunning = true;
+
+            // Ensure the firewall rule exists so external devices (phones) can connect
+            _ = Task.Run(() => EnsureFirewallRule(Port));
+
+            // Force initial load of media state
+            _mediaInfoService.Refresh();
+
+            var token = _cts!.Token;
+
+            // Start accepting connections on a background thread
+            _acceptTask = Task.Run(() => AcceptConnectionsAsync(token));
+
+            // Broadcast state to all paired clients every 500ms via an async loop
+            _broadcastTask = Task.Run(() => BroadcastLoopAsync(token));
+
+            StateChanged?.Invoke();
+        }
+
+        private void FailStart(string message)
+        {
+            LastError = message;
+            IsRunning = false;
+            try { _httpListener?.Close(); } catch { }
+            _httpListener = null;
+            _cts?.Dispose();
+            _cts = null;
+        }
+
+        /// <summary>
+        /// A friendly explanation of why the server last failed to start, or null if it started fine.
+        /// </summary>
+        public string? LastError { get; private set; }
+
+        /// <summary>
+        /// The name of the firewall rule for a given port. The port is part of the name so that
+        /// changing CompanionServerPort creates a fresh rule rather than reusing a stale one.
+        /// </summary>
+        internal static string GetFirewallRuleName(int port) => $"SoundBar Companion ({port})";
+
+        /// <summary>
         /// Ensures a Windows Firewall inbound rule exists for the companion server port.
+        /// The rule only allows devices on the local subnet, and only on Private/Domain networks,
+        /// so the server is never exposed on public Wi-Fi.
         /// Runs an elevated netsh command if the rule doesn't exist yet.
         /// </summary>
         public static void EnsureFirewallRule(int port)
         {
+            string ruleName = GetFirewallRuleName(port);
+
             try
             {
-                // Check if rule already exists
+                // Check if rule already exists (netsh exits with 0 only when a matching rule is found)
                 var checkPsi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "netsh",
-                    Arguments = "advfirewall firewall show rule name=\"SoundBar Companion\"",
+                    Arguments = $"advfirewall firewall show rule name=\"{ruleName}\"",
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                var checkProc = System.Diagnostics.Process.Start(checkPsi);
+                using var checkProc = System.Diagnostics.Process.Start(checkPsi);
                 string output = checkProc?.StandardOutput.ReadToEnd() ?? "";
                 checkProc?.WaitForExit(5000);
 
-                if (output.Contains("SoundBar Companion"))
+                if (checkProc != null && checkProc.HasExited && checkProc.ExitCode == 0 && output.Contains(ruleName))
                 {
                     System.Diagnostics.Debug.WriteLine("Firewall rule already exists.");
                     return;
                 }
 
-                // Rule doesn't exist — add it with elevation
+                // Rule doesn't exist — add it with elevation. We also remove the old pre-4.1 rule
+                // ("SoundBar Companion"), which allowed connections on every network type.
+                string command =
+                    "netsh advfirewall firewall delete rule name=\"SoundBar Companion\" >nul 2>&1 & " +
+                    $"netsh advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol=TCP localport={port} profile=private,domain remoteip=localsubnet";
+
                 var addPsi = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "netsh",
-                    Arguments = $"advfirewall firewall add rule name=\"SoundBar Companion\" dir=in action=allow protocol=TCP localport={port}",
+                    FileName = "cmd.exe",
+                    Arguments = $"/s /c \"{command}\"",
                     Verb = "runas",
                     UseShellExecute = true,
                     WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                 };
-                var addProc = System.Diagnostics.Process.Start(addPsi);
+                using var addProc = System.Diagnostics.Process.Start(addPsi);
                 addProc?.WaitForExit();
                 System.Diagnostics.Debug.WriteLine("Firewall rule added successfully.");
             }
@@ -358,7 +399,8 @@ namespace SoundBar.Services
                         }
                         else
                         {
-                            HandleHttpRequest(context);
+                            // Serve on the thread pool so one slow client can't hold up everyone else
+                            _ = Task.Run(() => HandleHttpRequest(context));
                         }
                     }
                     catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
@@ -424,7 +466,13 @@ namespace SoundBar.Services
                 if (path == "/api/icon")
                 {
                     string? iconPath = context.Request.QueryString["path"];
-                    if (!string.IsNullOrEmpty(iconPath) && _iconCache.TryGetValue(iconPath, out var iconBytes) && iconBytes != null)
+                    if (!string.IsNullOrEmpty(iconPath) && !IsKnownAppIconPath(iconPath))
+                    {
+                        // Only hand out icons for apps that are actually in the mixer.
+                        // Anything else (random files, network paths) is refused.
+                        context.Response.StatusCode = 404;
+                    }
+                    else if (!string.IsNullOrEmpty(iconPath) && _iconCache.TryGetValue(iconPath, out var iconBytes) && iconBytes != null)
                     {
                         context.Response.ContentType = "image/png";
                         context.Response.ContentLength64 = iconBytes.Length;
@@ -709,15 +757,6 @@ namespace SoundBar.Services
                         }
                         break;
 
-                    case "setInputVolume":
-                        if (command.Value.HasValue)
-                        {
-                            float level = (float)(command.Value.Value / 100.0);
-                            // We don't have SetInputVolume in IAudioMixerService yet.
-                            // But we have SetInputMute.
-                        }
-                        break;
-
                     case "setInputMute":
                         if (command.BoolValue.HasValue)
                         {
@@ -911,6 +950,24 @@ namespace SoundBar.Services
 
         // Icon cache to avoid re-encoding icons every broadcast
         private readonly ConcurrentDictionary<string, byte[]?> _iconCache = new();
+
+        /// <summary>
+        /// Checks whether a requested icon path belongs to an app currently in the mixer.
+        /// Network (UNC) paths are always refused, as touching them can leak the user's Windows credentials.
+        /// </summary>
+        internal bool IsKnownAppIconPath(string iconPath)
+        {
+            if (iconPath.StartsWith(@"\\") || iconPath.StartsWith("//")) return false;
+
+            try
+            {
+                return _getApps().Any(a => string.Equals(a.IconPath, iconPath, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private byte[]? GetAppIconBytes(string? iconPath)
         {

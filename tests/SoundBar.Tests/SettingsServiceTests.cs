@@ -199,5 +199,55 @@ namespace SoundBar.Tests
             Assert.True(service.Settings.ShowActiveApps);
             Assert.Equal("Control+Alt+I", service.Settings.InputMuteHotkey);
         }
+
+        // --- New v4.1.0 Tests ---
+
+        [Fact]
+        public void Load_DefaultSettings_WindowIsFullyOpaqueAndShortcutNotYetMade()
+        {
+            var service = new SettingsService(_testFilePath);
+
+            Assert.Equal(100, service.Settings.WindowOpacity);
+            Assert.False(service.Settings.HasCreatedDesktopShortcut);
+        }
+
+        [Fact]
+        public void SaveAndLoad_WindowOpacityAndShortcutFlag_PersistCorrectly()
+        {
+            var service1 = new SettingsService(_testFilePath);
+            service1.Settings.WindowOpacity = 65;
+            service1.Settings.HasCreatedDesktopShortcut = true;
+
+            service1.SaveSettings();
+            var service2 = new SettingsService(_testFilePath);
+
+            Assert.Equal(65, service2.Settings.WindowOpacity);
+            Assert.True(service2.Settings.HasCreatedDesktopShortcut);
+        }
+
+        [Theory]
+        [InlineData(0, 30)]
+        [InlineData(-50, 30)]
+        [InlineData(29, 30)]
+        [InlineData(250, 100)]
+        public void Load_HandEditedOpacityOutOfRange_IsClampedSoWindowStaysVisible(int savedValue, int expected)
+        {
+            File.WriteAllText(_testFilePath, $"{{ \"WindowOpacity\": {savedValue} }}");
+
+            var service = new SettingsService(_testFilePath);
+
+            Assert.Equal(expected, service.Settings.WindowOpacity);
+        }
+
+        [Fact]
+        public void Save_WhenItSucceeds_HasNoSaveError()
+        {
+            var service = new SettingsService(_testFilePath);
+
+            service.SaveSettings();
+
+            Assert.Null(service.LastSaveError);
+            Assert.True(File.Exists(_testFilePath));
+        }
     }
 }

@@ -72,7 +72,12 @@ namespace SoundBar.Services
                 try
                 {
                     string json = File.ReadAllText(_filePath);
-                    return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+
+                    // Guard against hand-edited values that would make the window invisible
+                    settings.WindowOpacity = Math.Clamp(settings.WindowOpacity, AppSettings.MinWindowOpacity, 100);
+
+                    return settings;
                 }
                 catch (JsonException) 
                 { 
@@ -90,16 +95,39 @@ namespace SoundBar.Services
         {
             lock (_fileLock)
             {
-                try
+                // Settings lists can be changed on another thread while we're serialising them,
+                // which throws "Collection was modified". That's a momentary clash, so retry a few times.
+                const int maxAttempts = 3;
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
                 {
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    string json = JsonSerializer.Serialize(settings, options);
-                    string tempPath = _filePath + ".tmp";
-                    File.WriteAllText(tempPath, json);
-                    File.Move(tempPath, _filePath, overwrite: true);
+                    try
+                    {
+                        string json = JsonSerializer.Serialize(settings, _jsonOptions);
+                        string tempPath = _filePath + ".tmp";
+                        File.WriteAllText(tempPath, json);
+                        File.Move(tempPath, _filePath, overwrite: true);
+                        LastSaveError = null;
+                        return;
+                    }
+                    catch (Exception ex) when (attempt < maxAttempts && (ex is InvalidOperationException || ex is IOException))
+                    {
+                        System.Threading.Thread.Sleep(20);
+                    }
+                    catch (Exception ex)
+                    {
+                        LastSaveError = ex.Message;
+                        System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
+                        return;
+                    }
                 }
-                catch { }
             }
         }
+
+        private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+
+        /// <summary>
+        /// The reason the last save failed, or null if it saved fine. Handy for diagnosing lost settings.
+        /// </summary>
+        public string? LastSaveError { get; private set; }
     }
 }
