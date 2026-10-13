@@ -22,20 +22,14 @@
                 <SolidColorBrush x:Key="FocusTrueBrush" Color="#280078D7"/>
                 <SolidColorBrush x:Key="FocusFalseBrush" Color="Transparent"/>
                 <SolidColorBrush x:Key="MuteTrueBrush" Color="Red"/>
-                <FontFamily x:Key="SegoeFont">Segoe UI</FontFamily>
 
-                <helpers:BoolToBrushConverter x:Key="FocusedToBrushConverter" 
-                                             TrueBrush="{StaticResource FocusTrueBrush}" 
+                <helpers:BoolToBrushConverter x:Key="FocusedToBrushConverter"
+                                             TrueBrush="{StaticResource FocusTrueBrush}"
                                              FalseBrush="{StaticResource FocusFalseBrush}"/>
-                <helpers:BoolToBrushConverter x:Key="MutedToForegroundConverter" 
-                                             TrueBrush="{StaticResource MuteTrueBrush}" 
-                                             FalseBrush="{ThemeResource TextFillColorSecondaryBrush}"/>
-                <helpers:BoolToFontFamilyConverter x:Key="MutedToFontFamilyConverter"
-                                                  TrueFont="{ThemeResource SymbolThemeFontFamily}"
-                                                  FalseFont="{StaticResource SegoeFont}"/>
-                <helpers:BoolToDoubleConverter x:Key="MutedToFontSizeConverter"
-                                              TrueValue="16"
-                                              FalseValue="14"/>
+                <!-- Muted/unmuted are separate elements so the unmuted one can use ThemeResource directly.
+                     A ThemeResource passed through a converter gets stuck on the startup theme. -->
+                <helpers:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+                <helpers:BoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" Invert="True"/>
             </ResourceDictionary>
         </Border.Resources>
 
@@ -83,8 +77,8 @@
                         VerticalAlignment="Center"
                         Padding="8,4"
                         Background="#1A4CAF50"
-                        Foreground="#4CAF50"
-                        BorderBrush="#4CAF50"
+                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
                         BorderThickness="1"
                         CornerRadius="4"
                         Click="UpdateBanner_Click"
@@ -245,11 +239,20 @@
                                 Click="MicMuteButton_Click"
                                 Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}"
                                 ToolTipService.ToolTip="Mute/Unmute Microphone">
-                            <TextBlock x:Name="MicMuteIcon"
-                                       Text="{x:Bind ViewModel.InputMuteIcon, Mode=OneWay}"
-                                       Foreground="{Binding IsInputMuted, Mode=OneWay, Converter={StaticResource MutedToForegroundConverter}}"
-                                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                       FontSize="14"/>
+                            <Grid>
+                                <!-- Live mic -->
+                                <TextBlock Text="&#xE720;"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                           FontSize="14"
+                                           Visibility="{Binding IsInputMuted, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                <!-- Muted mic -->
+                                <TextBlock Text="&#xF12E;"
+                                           Foreground="{StaticResource MuteTrueBrush}"
+                                           FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                           FontSize="14"
+                                           Visibility="{Binding IsInputMuted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </Grid>
                         </Button>
 
                         <!-- Input Device Picker -->
@@ -342,8 +345,8 @@
                                         <ColumnDefinition Width="40"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <Button Grid.Column="0" 
-                                            Content="&#xE74D;" 
+                                    <Button Grid.Column="0"
+                                            Content="&#xED1A;"
                                             FontFamily="{ThemeResource SymbolThemeFontFamily}" 
                                             Background="Transparent" 
                                             Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
@@ -375,13 +378,25 @@
                                             Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                             Margin="10,0"/>
 
-                                    <TextBlock Grid.Column="3" 
-                                               Text="{Binding MuteDisplayText}"
-                                               FontFamily="{Binding IsMuted, Converter={StaticResource MutedToFontFamilyConverter}}"
-                                               Foreground="{Binding IsMuted, Converter={StaticResource MutedToForegroundConverter}}"
-                                               FontSize="{Binding IsMuted, Converter={StaticResource MutedToFontSizeConverter}}"
+                                    <!-- Volume % -->
+                                    <TextBlock Grid.Column="3"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               FontSize="14"
                                                VerticalAlignment="Center"
-                                               HorizontalAlignment="Right" />
+                                               HorizontalAlignment="Right"
+                                               Visibility="{Binding IsMuted, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                        <Run Text="{Binding VolumePercentage}" /><Run Text="%" />
+                                    </TextBlock>
+
+                                    <!-- Muted icon -->
+                                    <TextBlock Grid.Column="3"
+                                               Text="&#xE74F;"
+                                               FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                               Foreground="{StaticResource MuteTrueBrush}"
+                                               FontSize="16"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Right"
+                                               Visibility="{Binding IsMuted, Converter={StaticResource BoolToVisibilityConverter}}" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

@@ -221,12 +221,17 @@ namespace SoundBar.Services
         /// The name of the firewall rule for a given port. The port is part of the name so that
         /// changing CompanionServerPort creates a fresh rule rather than reusing a stale one.
         /// </summary>
-        internal static string GetFirewallRuleName(int port) => $"SoundBar Companion ({port})";
+        internal static string GetFirewallRuleName(int port) => $"SoundBar Companion - All Networks ({port})";
+
+        /// <summary>
+        /// The 4.1.0 rule name. That rule only allowed Private networks, so it gets swapped for the new one.
+        /// </summary>
+        internal static string GetLegacyFirewallRuleName(int port) => $"SoundBar Companion ({port})";
 
         /// <summary>
         /// Ensures a Windows Firewall inbound rule exists for the companion server port.
-        /// The rule only lets in devices on the same local network, and only when that network is set
-        /// to Private (or a work domain), so the server is never left open on public Wi-Fi.
+        /// The rule only lets in devices on the same local network, but works on any network type.
+        /// On Public networks the app warns the user before the server is turned on instead.
         /// Runs an elevated netsh command if the rule doesn't exist yet.
         /// </summary>
         public static void EnsureFirewallRule(int port)
@@ -255,10 +260,12 @@ namespace SoundBar.Services
                 }
 
                 // No rule yet, so add one (this needs admin rights). While we're at it, clear out the old
-                // pre-4.1 rule ("SoundBar Companion"), which let connections in on every type of network.
+                // pre-4.1 rule ("SoundBar Companion"), which let in any address, and the 4.1.0 rule,
+                // which blocked Public networks entirely.
                 string command =
                     "netsh advfirewall firewall delete rule name=\"SoundBar Companion\" >nul 2>&1 & " +
-                    $"netsh advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol=TCP localport={port} profile=private,domain remoteip=localsubnet";
+                    $"netsh advfirewall firewall delete rule name=\"{GetLegacyFirewallRuleName(port)}\" >nul 2>&1 & " +
+                    $"netsh advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol=TCP localport={port} profile=any remoteip=localsubnet";
 
                 var addPsi = new System.Diagnostics.ProcessStartInfo
                 {

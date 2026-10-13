@@ -107,7 +107,6 @@ namespace SoundBar.Models
 
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(VolumePercentage));
-                    OnPropertyChanged(nameof(MuteDisplayText));
 
                     var oldCts = _volumeDebounce;
                     oldCts?.Cancel();
@@ -153,7 +152,6 @@ namespace SoundBar.Models
                 _volume = volume;
                 OnPropertyChanged(nameof(Volume));
                 OnPropertyChanged(nameof(VolumePercentage));
-                    OnPropertyChanged(nameof(MuteDisplayText));
             }
         }
 
@@ -167,7 +165,6 @@ namespace SoundBar.Models
             {
                 _isMuted = isMuted;
                 OnPropertyChanged(nameof(IsMuted));
-                OnPropertyChanged(nameof(MuteDisplayText));
             }
         }
 
@@ -183,11 +180,6 @@ namespace SoundBar.Models
                 _audioService.SetVolume(osName, _volume);
             }
         }
-
-        /// <summary>
-        /// Provides either the volume percentage text or the mute icon glyph.
-        /// </summary>
-        public string MuteDisplayText => IsMuted ? "\uE74F" : $"{VolumePercentage}%";
 
         /// <summary>
         /// A friendly percentage representation of the volume, perfect for UI bindings.
@@ -261,7 +253,6 @@ namespace SoundBar.Models
                     LastModified = DateTime.Now;
 
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(MuteDisplayText));
 
                     // Actually tell Windows to shut it up (or let it sing).
                     string osName = RawProcessName ?? DisplayName ?? "";

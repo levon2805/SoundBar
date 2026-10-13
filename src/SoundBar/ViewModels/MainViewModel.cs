@@ -533,16 +533,9 @@ namespace SoundBar.ViewModels
                 {
                     _isInputMuted = value;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(InputMuteIcon));
                 }
             }
         }
-
-        /// <summary>
-        /// Returns the appropriate mic glyph: muted mic (red) or live mic.
-        /// The colour is handled in XAML binding.
-        /// </summary>
-        public string InputMuteIcon => IsInputMuted ? "\uF12E" : "\uE720"; // F12E is MicOff (slash), E720 is live Mic
 
         public void ToggleInputMute()
         {
