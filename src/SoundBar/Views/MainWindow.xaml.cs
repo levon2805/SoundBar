@@ -570,9 +570,53 @@ namespace SoundBar.Views
             ViewModel.ToggleInputMute();
         }
 
-        private void CompanionPowerOn_Click(object sender, RoutedEventArgs e)
+        private bool _isCheckingNetwork;
+
+        private async void CompanionPowerOn_Click(object sender, RoutedEventArgs e)
         {
-            ViewModel.EnableCompanionServer = true;
+            // Stops a double-click opening two warnings, which WinUI doesn't allow
+            if (_isCheckingNetwork) return;
+            _isCheckingNetwork = true;
+
+            try
+            {
+                if (await Task.Run(NetworkHelper.IsOnPublicNetwork) && !await ConfirmPublicNetworkAsync())
+                    return;
+
+                ViewModel.EnableCompanionServer = true;
+            }
+            finally
+            {
+                _isCheckingNetwork = false;
+            }
+        }
+
+        /// <summary>
+        /// Warns that anyone else on a Public network (café, hotel, airport Wi-Fi) could reach the server.
+        /// Returns true if the user still wants to turn it on.
+        /// </summary>
+        private async Task<bool> ConfirmPublicNetworkAsync()
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "You're on a public network",
+                Content = new TextBlock
+                {
+                    Text = "Windows has this network set to Public, like you'd use for café, hotel or airport Wi-Fi.\n\n" +
+                           "This might not be a secure connection. Anyone else on this network could reach the companion server, " +
+                           "and the connection to your phone isn't encrypted, so someone nearby could try to guess the pairing code or see what's sent.\n\n" +
+                           "Only turn it on if you trust this network. If it's your home network, you can set it to Private in " +
+                           "Windows Settings > Network & internet.",
+                    TextWrapping = TextWrapping.Wrap
+                },
+                PrimaryButtonText = "Turn On Anyway",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
         }
 
         private void CompanionPowerOff_Click(object sender, RoutedEventArgs e)

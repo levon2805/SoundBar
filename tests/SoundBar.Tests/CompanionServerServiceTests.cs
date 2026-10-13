@@ -76,8 +76,19 @@ namespace SoundBar.Tests
         public void GetFirewallRuleName_IncludesThePort()
         {
             // So that changing the port creates a new rule instead of reusing a stale one
-            Assert.Equal("SoundBar Companion (6767)", CompanionServerService.GetFirewallRuleName(6767));
+            Assert.Equal("SoundBar Companion - All Networks (6767)", CompanionServerService.GetFirewallRuleName(6767));
             Assert.NotEqual(CompanionServerService.GetFirewallRuleName(6767), CompanionServerService.GetFirewallRuleName(8080));
+        }
+
+        // --- New v4.1.1 Tests ---
+
+        [Fact]
+        public void GetFirewallRuleName_DiffersFromThe410Rule()
+        {
+            // 4.1.0 users already have a Private-only rule. If the names matched, we'd find that rule,
+            // think we were done, and Public networks would stay blocked.
+            Assert.Equal("SoundBar Companion (6767)", CompanionServerService.GetLegacyFirewallRuleName(6767));
+            Assert.NotEqual(CompanionServerService.GetLegacyFirewallRuleName(6767), CompanionServerService.GetFirewallRuleName(6767));
         }
     }
 }
