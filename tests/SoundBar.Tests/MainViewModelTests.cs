@@ -45,7 +45,7 @@ namespace SoundBar.Tests
                 mockAudioService.Object);
 
             // Give the polling loop a moment to pick up the initial devices
-            await Task.Delay(500); 
+            await WaitUntilAsync(() => viewModel.SelectedAudioDevice != null && viewModel.SelectedInputDevice != null);
 
             // Assert initial state: devices are selected
             Assert.NotNull(viewModel.SelectedAudioDevice);
@@ -58,13 +58,26 @@ namespace SoundBar.Tests
             mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
 
             // Wait for the next poll cycle to pick up the empty lists
-            await Task.Delay(500);
+            await WaitUntilAsync(() => viewModel.SelectedAudioDevice == null && viewModel.SelectedInputDevice == null);
 
             // Assert final state: selections are cleared to show placeholder text
             Assert.Null(viewModel.SelectedAudioDevice);
             Assert.Null(viewModel.SelectedInputDevice);
 
             viewModel.Dispose();
+        }
+
+        /// <summary>
+        /// The poll runs by itself once a second on another thread, so wait for it to deliver rather than
+        /// guessing a delay. A fixed wait could land halfway through a poll and catch it half done.
+        /// </summary>
+        private static async Task WaitUntilAsync(System.Func<bool> condition, int timeoutMs = 3000)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            while (!condition() && stopwatch.ElapsedMilliseconds < timeoutMs)
+            {
+                await Task.Delay(25);
+            }
         }
 
         // --- New v4.1.0 Tests ---
@@ -115,6 +128,47 @@ namespace SoundBar.Tests
                 viewModel.ResetWindowOpacity();
 
                 Assert.Equal(100, viewModel.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        // --- New v4.1.2 Tests ---
+
+        [Fact]
+        public void PinAndCompanionButtons_AreVisibleByDefault()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.PinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.CompanionButtonVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void HidingPinAndCompanionButtons_IsSavedAndCollapsesThem()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.ShowPinButton = false;
+                viewModel.ShowCompanionButton = false;
+
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.PinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.CompanionButtonVisibility);
+
+                var reloaded = new SettingsService(path).Settings;
+                Assert.False(reloaded.ShowPinButton);
+                Assert.False(reloaded.ShowCompanionButton);
             }
             finally
             {

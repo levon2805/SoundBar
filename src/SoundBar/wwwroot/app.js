@@ -174,10 +174,10 @@
         const muteIcon = masterMuteBtn.querySelector('.mute-icon');
         if (state.masterMuted) {
             masterMuteBtn.classList.add('muted');
-            muteIcon.innerHTML = Icons.volumeMuted;
+            setIcon(muteIcon, Icons.volumeMuted);
         } else {
             masterMuteBtn.classList.remove('muted');
-            muteIcon.innerHTML = state.masterVolume > 50 ? Icons.volumeHigh : state.masterVolume > 0 ? Icons.volumeLow : Icons.volumeMuted;
+            setIcon(muteIcon, state.masterVolume > 50 ? Icons.volumeHigh : state.masterVolume > 0 ? Icons.volumeLow : Icons.volumeMuted);
         }
 
         // Now Playing
@@ -207,7 +207,7 @@
             }
 
             // Play/Pause icon
-            playPauseBtn.innerHTML = state.nowPlaying.isPlaying ? Icons.pause : Icons.play;
+            setIcon(playPauseBtn, state.nowPlaying.isPlaying ? Icons.pause : Icons.play);
         } else {
             nowPlayingCard.classList.add('hidden');
         }
@@ -224,17 +224,20 @@
             const muteIcon = inputMuteBtn.querySelector('.mute-icon');
             if (state.inputMuted) {
                 inputMuteBtn.classList.add('muted');
-                muteIcon.innerHTML = Icons.micMuted;
+                setIcon(muteIcon, Icons.micMuted);
             } else {
                 inputMuteBtn.classList.remove('muted');
-                muteIcon.innerHTML = Icons.mic;
+                setIcon(muteIcon, Icons.mic);
             }
         }
     }
 
     function updateAppsList(apps) {
         if (apps.length === 0) {
-            appsList.innerHTML = '<div class="empty-state">No active audio applications</div>';
+            // Only rebuild if it isn't already showing, rather than on every update
+            if (appsList.children.length !== 1 || !appsList.querySelector('.empty-state')) {
+                appsList.innerHTML = '<div class="empty-state">No active audio applications</div>';
+            }
             return;
         }
 
@@ -284,7 +287,7 @@
             const muteBtn = row.querySelector('.app-mute-btn');
             if (muteBtn) {
                 muteBtn.classList.toggle('muted', app.isMuted);
-                muteBtn.innerHTML = app.isMuted ? Icons.volumeMuted : Icons.volumeHigh;
+                setIcon(muteBtn, app.isMuted ? Icons.volumeMuted : Icons.volumeHigh);
             }
 
             // Update icon
@@ -304,15 +307,16 @@
         row.dataset.processName = app.rawProcessName;
 
         const hasIcon = app.iconUrl && app.iconUrl.length > 0;
+        const safeName = escapeHtml(app.name);
 
         row.innerHTML = `
             ${hasIcon 
-                ? `<img src="${app.iconUrl}" class="app-icon" alt="">` 
-                : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${app.name}">`
+                ? `<img src="${escapeHtml(app.iconUrl)}" class="app-icon" alt="">` 
+                : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${safeName}">`
             }
             <div class="app-info">
                 <div class="app-name-row">
-                    <div class="app-name">${app.name}</div>
+                    <div class="app-name">${safeName}</div>
                     <span class="volume-value">${app.volume}%</span>
                 </div>
                 <div class="app-slider-row">
@@ -367,6 +371,21 @@
     }
 
     // --- Helper Functions ---
+
+    // App names can be anything (including nicknames typed on the PC), so never drop them into HTML raw
+    function escapeHtml(text) {
+        return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Swaps an icon only when it actually changes, instead of re-parsing the SVG on every update
+    const currentIcons = new WeakMap();
+    function setIcon(el, html) {
+        if (currentIcons.get(el) !== html) {
+            el.innerHTML = html;
+            currentIcons.set(el, html);
+        }
+    }
+
     function updateSliderFill(slider) {
         const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
         slider.style.setProperty('--fill', pct + '%');
@@ -374,13 +393,17 @@
 
     function formatTime(seconds) {
         if (!seconds || seconds < 0) return '0:00';
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+        // Long videos and podcasts get hours, e.g. 1:05:00 rather than 65:00
+        return hours > 0 ? `${hours}:${mins.toString().padStart(2, '0')}:${secs}` : `${mins}:${secs}`;
     }
 
     function isSliderActive(slider) {
-        if (slider.matches(':active') || document.activeElement === slider) return true;
+        // Not checking focus here: a slider keeps focus after you let go, which froze it and stopped
+        // it ever following changes made on the PC. The interaction window below covers dragging.
+        if (slider.matches(':active')) return true;
         // Prevent snapping back by ignoring server updates for 1500ms after ANY user interaction
         return (Date.now() - window.lastGlobalInteraction) < 1500;
     }

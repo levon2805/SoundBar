@@ -117,6 +117,7 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="PinButton_Click"
+                        Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Always on Top"/>
 
                 <Button x:Name="CompanionButton"
@@ -131,6 +132,7 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="CompanionButton_Click"
+                        Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Mobile Companion"/>
 
                 <ToggleButton x:Name="DndToggleButton"
@@ -734,7 +736,9 @@
                                 <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                </StackPanel>
+                                <ToggleSwitch Header="Pin to Top Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Mobile Companion Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                            </StackPanel>
                         </Expander>
 
                         <!-- Custom Background -->

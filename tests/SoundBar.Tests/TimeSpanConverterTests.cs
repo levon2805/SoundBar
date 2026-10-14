@@ -46,6 +46,25 @@ namespace SoundBar.Tests
             Assert.Equal("1:00:00", result);
         }
 
+        // --- New v4.1.2 Tests ---
+
+        [Theory]
+        [InlineData(double.NaN, "0:00")]
+        [InlineData(double.PositiveInfinity, "0:00")]
+        [InlineData(-5.0, "0:00")]
+        public void Format_NonsenseValues_ShowZero(double seconds, string expected)
+        {
+            Assert.Equal(expected, TimeSpanConverter.Format(seconds));
+        }
+
+        [Fact]
+        public void Format_NeverEndingLiveStream_DoesNotOverflow()
+        {
+            // Some live streams report TimeSpan.MaxValue as their length, which used to overflow and throw
+            var result = TimeSpanConverter.Format(TimeSpan.MaxValue.TotalSeconds);
+            Assert.Equal("1000:00:00", result);
+        }
+
         [Fact]
         public void Convert_NonDouble_ReturnsValueUnchanged()
         {

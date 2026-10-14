@@ -89,5 +89,46 @@ namespace SoundBar.Helpers
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
+
+        // --- Window Icon ---
+
+        public const int WM_SETICON = 0x0080;
+        public const int ICON_SMALL = 0;
+        public const int ICON_BIG = 1;
+        public const uint IMAGE_ICON = 1;
+        public const uint LR_LOADFROMFILE = 0x0010;
+        public const int SM_CXICON = 11;
+        public const int SM_CYICON = 12;
+        public const int SM_CXSMICON = 49;
+        public const int SM_CYSMICON = 50;
+
+        /// <summary>
+        /// The resource ID .NET gives the &lt;ApplicationIcon&gt; when it bakes it into the exe.
+        /// </summary>
+        public const int AppIconResourceId = 32512;
+
+        [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode)]
+        public static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+        /// <summary>
+        /// Loads an icon from a resource inside a module (pass the resource ID as the name).
+        /// </summary>
+        [DllImport("user32.dll", EntryPoint = "LoadImageW", SetLastError = true)]
+        public static extern IntPtr LoadImage(IntPtr hInst, IntPtr name, uint type, int cx, int cy, uint fuLoad);
+
+        /// <summary>
+        /// Loads an icon from a file on disk (use with LR_LOADFROMFILE).
+        /// </summary>
+        [DllImport("user32.dll", EntryPoint = "LoadImageW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr LoadImage(IntPtr hInst, string name, uint type, int cx, int cy, uint fuLoad);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern int GetSystemMetricsForDpi(int nIndex, uint dpi);
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
     }
 }

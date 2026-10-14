@@ -179,6 +179,7 @@ namespace SoundBar.ViewModels
 
                     if (!_isUpdatingDndFromSystem)
                     {
+                        _lastDndChange = DateTime.UtcNow;
                         _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
                         
                         // Save setting
@@ -189,6 +190,7 @@ namespace SoundBar.ViewModels
             }
         }
         private bool _isUpdatingDndFromSystem = false;
+        private DateTime _lastDndChange = DateTime.MinValue;
 
         // Loudness Warning Properties
         private bool _isLoudnessWarningEnabled;
@@ -645,6 +647,38 @@ namespace SoundBar.ViewModels
         }
         public Microsoft.UI.Xaml.Visibility ActiveAppsVisibility => ShowActiveApps ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+        public bool ShowPinButton
+        {
+            get => _settingsService.Settings.ShowPinButton;
+            set
+            {
+                if (_settingsService.Settings.ShowPinButton != value)
+                {
+                    _settingsService.Settings.ShowPinButton = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(PinButtonVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Microsoft.UI.Xaml.Visibility PinButtonVisibility => ShowPinButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        public bool ShowCompanionButton
+        {
+            get => _settingsService.Settings.ShowCompanionButton;
+            set
+            {
+                if (_settingsService.Settings.ShowCompanionButton != value)
+                {
+                    _settingsService.Settings.ShowCompanionButton = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CompanionButtonVisibility));
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Microsoft.UI.Xaml.Visibility CompanionButtonVisibility => ShowCompanionButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
         // Run At Startup Property
         private bool _runAtStartup;
         public bool RunAtStartup
@@ -722,7 +756,7 @@ namespace SoundBar.ViewModels
                     _masterVolume = value;
 
                     // Update timestamp on user interaction
-                    _lastMasterVolumeChange = DateTime.Now;
+                    _lastMasterVolumeChange = DateTime.UtcNow;
 
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MasterVolumePercentage));
@@ -812,6 +846,9 @@ namespace SoundBar.ViewModels
             }
             catch { }
 
+            // Tidy up artwork left over from a previous session
+            DeleteLeftoverThumbnails();
+
             _mediaInfoService.MediaInfoChanged += MediaInfoService_MediaInfoChanged;
             _mediaInfoService.TimelineInfoChanged += MediaInfoService_TimelineInfoChanged;
             _ = _mediaInfoService.InitializeAsync();
@@ -841,46 +878,51 @@ namespace SoundBar.ViewModels
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
         {
-            RunOnUIThread(() =>
+            // The keyboard hook calls us on the UI thread, once for every key pressed anywhere in Windows.
+            // Handling it right here (rather than queueing it for later) is what lets e.Handled actually
+            // stop the hotkey reaching the app you're in, and keeps ordinary typing cheap.
+            if (_dispatcherQueue == null || _dispatcherQueue.HasThreadAccess)
+                HandleHotkey(e);
+            else
+                RunOnUIThread(() => HandleHotkey(e));
+        }
+
+        private void HandleHotkey(HotkeyEventArgs e)
+        {
+            string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
+
+            if (IsRecordingHotkey)
             {
-                string pressedString = ParseHotkeyToString(e.Key, e.Modifiers);
+                // Deliberately not marked as handled, so Escape still closes the recording dialog
+                RecordedHotkeyString = pressedString;
+                return;
+            }
 
-                if (IsRecordingHotkey)
-                {
-                    RecordedHotkeyString = pressedString;
-                    e.Handled = true;
-                    return;
-                }
+            if (pressedString == InputMuteHotkey)
+            {
+                ToggleInputMute();
+                e.Handled = true;
+                return;
+            }
 
-                if (pressedString == InputMuteHotkey)
-                {
-                    ToggleInputMute();
-                    e.Handled = true;
-                    return;
-                }
+            bool isVolumeUp = pressedString == VolumeUpHotkey;
+            bool isVolumeDown = pressedString == VolumeDownHotkey;
+            bool isMute = pressedString == MuteHotkey;
+            if (!isVolumeUp && !isVolumeDown && !isMute) return; // Almost every keystroke stops here
 
-                var activeApps = Apps.Where(a => a.IsFocused).ToList();
-                if (!activeApps.Any()) return;
+            foreach (var activeApp in Apps)
+            {
+                if (!activeApp.IsFocused) continue;
 
-                foreach (var activeApp in activeApps)
-                {
-                    if (pressedString == VolumeUpHotkey)
-                    {
-                        activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
-                        e.Handled = true;
-                    }
-                    else if (pressedString == VolumeDownHotkey)
-                    {
-                        activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
-                        e.Handled = true;
-                    }
-                    else if (pressedString == MuteHotkey)
-                    {
-                        activeApp.IsMuted = !activeApp.IsMuted;
-                        e.Handled = true;
-                    }
-                }
-            });
+                if (isVolumeUp)
+                    activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
+                else if (isVolumeDown)
+                    activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
+                else
+                    activeApp.IsMuted = !activeApp.IsMuted;
+
+                e.Handled = true;
+            }
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -1110,6 +1152,10 @@ namespace SoundBar.ViewModels
 
         private System.Threading.CancellationTokenSource? _pollingCts;
 
+        // Only touched by the polling loop, which runs one tick at a time
+        private uint _lastForegroundPid;
+        private string _lastForegroundName = "";
+
         public void StartPolling()
         {
             _pollingCts = new System.Threading.CancellationTokenSource();
@@ -1139,18 +1185,24 @@ namespace SoundBar.ViewModels
                         // Get Do Not Disturb status
                         bool systemDnd = _audioService.GetSystemSoundsMute();
 
-                        // Resolve foreground process name on the background thread (avoids UI-thread Process allocations)
+                        // Resolve foreground process name on the background thread (avoids UI-thread Process allocations).
+                        // The focused app rarely changes between ticks, so only look the name up when the PID does.
                         uint activePid = Helpers.WindowHelper.GetForegroundProcessId();
-                        string activeProcessName = "";
-                        try
+                        if (activePid != _lastForegroundPid)
                         {
-                            if (activePid > 0)
+                            _lastForegroundPid = activePid;
+                            _lastForegroundName = "";
+                            try
                             {
-                                using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
-                                activeProcessName = proc.ProcessName;
+                                if (activePid > 0)
+                                {
+                                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                                    _lastForegroundName = proc.ProcessName;
+                                }
                             }
+                            catch { }
                         }
-                        catch { }
+                        string activeProcessName = _lastForegroundName;
 
                         // Pre-calculate dead processes to avoid blocking the UI thread
                         var deadProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1177,10 +1229,13 @@ namespace SoundBar.ViewModels
                         // Update UI thread safely
                         RunOnUIThread(() =>
                         {
+                            // The window may have closed while this tick was queued
+                            if (token.IsCancellationRequested) return;
+
                             UpdateCollection(sessions, deadProcesses);
 
                             // Only update Master Volume if user hasn't touched it for 2 seconds
-                            if ((DateTime.Now - _lastMasterVolumeChange).TotalSeconds > 2)
+                            if ((DateTime.UtcNow - _lastMasterVolumeChange).TotalSeconds > 2)
                             {
                                 // Sync Master Volume (Update backing field to avoid triggering setter loop)
                                 if (_masterVolume != systemVol)
@@ -1198,13 +1253,13 @@ namespace SoundBar.ViewModels
                                 {
                                     if (_highVolumeStartTime == null)
                                     {
-                                        _highVolumeStartTime = DateTime.Now;
+                                        _highVolumeStartTime = DateTime.UtcNow;
                                         _isLoudnessWarningDismissed = false;
                                     }
                                     else if (!_isLoudnessWarningDismissed && !_showLoudnessWarning)
                                     {
                                         // 1 hour (3600 seconds)
-                                        if ((DateTime.Now - _highVolumeStartTime.Value).TotalSeconds >= 3600)
+                                        if ((DateTime.UtcNow - _highVolumeStartTime.Value).TotalSeconds >= 3600)
                                         {
                                             ShowLoudnessWarning = true;
                                         }
@@ -1218,12 +1273,17 @@ namespace SoundBar.ViewModels
                                 }
                             }
 
-                            // Sync Do Not Disturb status from system
-                            if (_isDoNotDisturbEnabled != systemDnd)
+                            // Sync Do Not Disturb status from system (unless the user just flipped it and
+                            // Windows hasn't caught up yet, which would make the toggle bounce back)
+                            if (_isDoNotDisturbEnabled != systemDnd && (DateTime.UtcNow - _lastDndChange).TotalSeconds > 2)
                             {
                                 _isUpdatingDndFromSystem = true;
                                 IsDoNotDisturbEnabled = systemDnd;
                                 _isUpdatingDndFromSystem = false;
+
+                                // Remember what Windows says, otherwise the next launch would put the old value back
+                                _settingsService.Settings.IsDoNotDisturbEnabled = systemDnd;
+                                _settingsService.SaveSettings();
                             }
 
                             // Sync Audio Devices
@@ -1421,7 +1481,7 @@ namespace SoundBar.ViewModels
                         // Push our cached UI volume down to the new audio session
                         existingApp.PushVolumeToOS();
                     }
-                    else if ((DateTime.Now - existingApp.LastModified).TotalSeconds > 2)
+                    else if ((DateTime.UtcNow - existingApp.LastModified).TotalSeconds > 2)
                     {
                         // Sync the volume from the OS (only if user hasn't recently moved the slider)
                         // Use SyncFromOS methods to avoid writing back to the OS
@@ -1623,7 +1683,7 @@ namespace SoundBar.ViewModels
                 {
                     _currentSongPositionSeconds = value;
                     OnPropertyChanged();
-                    CurrentSongPositionText = TimeSpan.FromSeconds(value).ToString(@"m\:ss");
+                    CurrentSongPositionText = Helpers.TimeSpanConverter.Format(value); // Shows hours for long videos, rather than 1:05:00 as "5:00"
                 }
             }
         }
@@ -1638,7 +1698,7 @@ namespace SoundBar.ViewModels
                 {
                     _currentSongDurationSeconds = value;
                     OnPropertyChanged();
-                    CurrentSongDurationText = TimeSpan.FromSeconds(value).ToString(@"m\:ss");
+                    CurrentSongDurationText = Helpers.TimeSpanConverter.Format(value);
                 }
             }
         }
@@ -1716,41 +1776,109 @@ namespace SoundBar.ViewModels
             _ = _mediaInfoService.SeekAsync(seekPosition);
         }
 
+        private const string ThumbnailFilePrefix = "SoundBar_Thumbnail_";
+
+        // Bumped on every media change, so a slow artwork load can't overwrite a newer song's art
+        private int _thumbnailVersion;
+        private byte[]? _currentThumbnailBytes;
+
         private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {
-            RunOnUIThread(async () =>
+            RunOnUIThread(() => _ = UpdateNowPlayingAsync(e));
+        }
+
+        private async Task UpdateNowPlayingAsync(MediaInfoEventArgs e)
+        {
+            int version = ++_thumbnailVersion;
+
+            CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
+            CurrentSongArtist = e.Artist;
+
+            if (e.Thumbnail == null)
             {
-                string newTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
+                SetThumbnail(null, null);
+                return;
+            }
 
-                CurrentSongTitle = newTitle;
-                CurrentSongArtist = e.Artist;
+            byte[] bytes;
+            try
+            {
+                using var stream = await e.Thumbnail.OpenReadAsync();
+                using var classicStream = stream.AsStreamForRead();
+                using var ms = new System.IO.MemoryStream();
+                await classicStream.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
+            catch
+            {
+                if (version == _thumbnailVersion) SetThumbnail(null, null);
+                return;
+            }
 
-                if (e.Thumbnail != null)
+            if (version != _thumbnailVersion || _isDisposed) return;
+
+            // Players often announce the same track several times (title first, artwork after).
+            // Same picture as before means there's nothing to rewrite or reload.
+            if (_currentThumbnailBytes != null && CurrentSongThumbnail != null && bytes.AsSpan().SequenceEqual(_currentThumbnailBytes))
+                return;
+
+            string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{ThumbnailFilePrefix}{Guid.NewGuid():N}.png");
+            try
+            {
+                await System.IO.File.WriteAllBytesAsync(tempPath, bytes);
+            }
+            catch
+            {
+                TryDeleteFile(tempPath);
+                if (version == _thumbnailVersion) SetThumbnail(null, null);
+                return;
+            }
+
+            // A newer song turned up while we were writing, so this picture is already out of date
+            if (version != _thumbnailVersion || _isDisposed)
+            {
+                TryDeleteFile(tempPath);
+                return;
+            }
+
+            SetThumbnail(tempPath, bytes);
+        }
+
+        /// <summary>
+        /// Swaps in the new artwork file and deletes the one it replaces, so temp files don't pile up.
+        /// </summary>
+        private void SetThumbnail(string? path, byte[]? bytes)
+        {
+            string? oldPath = CurrentSongThumbnail;
+            _currentThumbnailBytes = bytes;
+            CurrentSongThumbnail = path;
+
+            if (oldPath != null && oldPath != path) TryDeleteFile(oldPath);
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try { System.IO.File.Delete(path); } catch { }
+        }
+
+        /// <summary>
+        /// Clears out artwork files left behind if SoundBar was closed unexpectedly last time.
+        /// </summary>
+        private static void DeleteLeftoverThumbnails()
+        {
+            // Temp can be huge, so do it in the background. Anything written after we start is this
+            // session's own artwork and gets left alone.
+            DateTime startedAt = DateTime.UtcNow;
+            _ = Task.Run(() =>
+            {
+                try
                 {
-                    try
+                    foreach (var file in System.IO.Directory.EnumerateFiles(System.IO.Path.GetTempPath(), $"{ThumbnailFilePrefix}*.png"))
                     {
-                        string? oldThumb = CurrentSongThumbnail;
-                        string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"SoundBar_Thumbnail_{Guid.NewGuid():N}.png");
-                        using var stream = await e.Thumbnail.OpenReadAsync();
-                        using var classicStream = stream.AsStreamForRead();
-                        using var fs = System.IO.File.Open(tempPath, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
-                        await classicStream.CopyToAsync(fs);
-                        CurrentSongThumbnail = tempPath;
-                        
-                        if (oldThumb != null && System.IO.File.Exists(oldThumb))
-                        {
-                            try { System.IO.File.Delete(oldThumb); } catch { }
-                        }
-                    }
-                    catch
-                    {
-                        CurrentSongThumbnail = null;
+                        if (System.IO.File.GetLastWriteTimeUtc(file) < startedAt) TryDeleteFile(file);
                     }
                 }
-                else
-                {
-                    CurrentSongThumbnail = null;
-                }
+                catch { }
             });
         }
 
@@ -1881,9 +2009,15 @@ namespace SoundBar.ViewModels
             }
         }
 
+        private bool _isDisposed;
+
         public void Dispose()
         {
+            if (_isDisposed) return;
+            _isDisposed = true;
+
             _companionServer?.Dispose();
+            _companionServer = null;
 
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();
@@ -1927,6 +2061,9 @@ namespace SoundBar.ViewModels
             {
                 updateDisposable.Dispose();
             }
+
+            // Don't leave the current album art lying around in Temp
+            if (CurrentSongThumbnail != null) TryDeleteFile(CurrentSongThumbnail);
         }
     }
 }

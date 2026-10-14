@@ -79,9 +79,11 @@ namespace SoundBar.Views
             this.Title = "SoundBar";
             _appWindow.Title = "SoundBar";
 
-            // We do NOT use _appWindow.SetIcon() here. 
+            // We do NOT use _appWindow.SetIcon() here.
             // WinUI 3 has a bug where setting the icon dynamically forces a UWP "plate" (white square) behind the taskbar icon.
-            // By doing nothing, the OS natively pulls the transparent SoundBar.ico directly from the compiled .exe without any plates!
+            // The taskbar button pulls the transparent SoundBar.ico straight from the .exe, but the hover preview
+            // and Alt+Tab ask the window itself, so we hand it the same icon the old-fashioned Win32 way.
+            ApplyWindowIcon();
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
@@ -97,6 +99,48 @@ namespace SoundBar.Views
             }
             RestoreWindowPosition();
             ApplyWindowOpacity(ViewModel.WindowOpacity);
+        }
+
+        /// <summary>
+        /// Gives the window its small and large icons, sized for the monitor it's on. Without these
+        /// the taskbar hover preview and Alt+Tab show the default blank application icon.
+        /// The icons stay alive as long as the window does, and Windows frees them when we exit.
+        /// </summary>
+        private void ApplyWindowIcon()
+        {
+            try
+            {
+                uint dpi = NativeMethods.GetDpiForWindow(_hWnd);
+                if (dpi == 0) dpi = 96;
+
+                IntPtr small = LoadAppIcon(NativeMethods.SM_CXSMICON, NativeMethods.SM_CYSMICON, dpi);
+                IntPtr big = LoadAppIcon(NativeMethods.SM_CXICON, NativeMethods.SM_CYICON, dpi);
+
+                if (small != IntPtr.Zero)
+                    NativeMethods.SendMessage(_hWnd, NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_SMALL, small);
+                if (big != IntPtr.Zero)
+                    NativeMethods.SendMessage(_hWnd, NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_BIG, big);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't set the window icon: {ex.Message}");
+            }
+        }
+
+        private static IntPtr LoadAppIcon(int widthMetric, int heightMetric, uint dpi)
+        {
+            int cx = NativeMethods.GetSystemMetricsForDpi(widthMetric, dpi);
+            int cy = NativeMethods.GetSystemMetricsForDpi(heightMetric, dpi);
+
+            // The icon baked into SoundBar.exe, picking the best-matching size from the .ico
+            IntPtr icon = NativeMethods.LoadImage(NativeMethods.GetModuleHandle(null), (IntPtr)NativeMethods.AppIconResourceId, NativeMethods.IMAGE_ICON, cx, cy, 0);
+            if (icon != IntPtr.Zero) return icon;
+
+            // Fall back to the copy that ships next to the exe
+            string icoPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
+            return System.IO.File.Exists(icoPath)
+                ? NativeMethods.LoadImage(IntPtr.Zero, icoPath, NativeMethods.IMAGE_ICON, cx, cy, NativeMethods.LR_LOADFROMFILE)
+                : IntPtr.Zero;
         }
 
         private bool _hasAppliedInitialPin = false;
@@ -464,11 +508,15 @@ namespace SoundBar.Views
                 XamlRoot = this.Content.XamlRoot
             };
             
-            _ = dialog.ShowAsync();
+            var progressDialogTask = dialog.ShowAsync();
 
             // On success the app closes and restarts, so we only get past this if something went wrong
             string? error = await ViewModel.ApplyUpdate();
             dialog.Hide();
+
+            // Only one dialog can be open at once, so wait for this one to finish closing before
+            // showing the error, otherwise WinUI throws and takes the app down with it
+            await progressDialogTask;
 
             if (error != null)
             {
@@ -481,6 +529,19 @@ namespace SoundBar.Views
                 };
                 await errorDialog.ShowAsync();
             }
+        }
+
+        /// <summary>
+        /// Brings the window back up when someone launches SoundBar again while it's already running.
+        /// Activate() alone leaves a minimised window sitting in the taskbar.
+        /// </summary>
+        public void BringToFront()
+        {
+            if (_appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+            {
+                presenter.Restore();
+            }
+            Activate();
         }
 
         private void DismissLoudnessWarning_Click(object sender, RoutedEventArgs e)

@@ -22,7 +22,7 @@ namespace SoundBar.Services
     public class MediaInfoService : IDisposable
     {
         private GlobalSystemMediaTransportControlsSessionManager? _sessionManager;
-        private GlobalSystemMediaTransportControlsSession? _currentSession;
+        private volatile GlobalSystemMediaTransportControlsSession? _currentSession;
         private readonly object _sessionLock = new object();
 
         public event EventHandler<MediaInfoEventArgs>? MediaInfoChanged;
@@ -106,12 +106,14 @@ namespace SoundBar.Services
 
         private void UpdateTimelineProperties()
         {
-            if (_currentSession == null) return;
+            // Read it once, since another thread can swap or clear it while we're working
+            var session = _currentSession;
+            if (session == null) return;
 
             try
             {
-                var timeline = _currentSession.GetTimelineProperties();
-                var playback = _currentSession.GetPlaybackInfo();
+                var timeline = session.GetTimelineProperties();
+                var playback = session.GetPlaybackInfo();
                 
                 TimelineInfoChanged?.Invoke(this, new TimelineInfoEventArgs
                 {
@@ -129,11 +131,12 @@ namespace SoundBar.Services
 
         public async Task SeekAsync(TimeSpan position)
         {
-            if (_currentSession != null)
+            var session = _currentSession;
+            if (session != null)
             {
                 try
                 {
-                    await _currentSession.TryChangePlaybackPositionAsync(position.Ticks);
+                    await session.TryChangePlaybackPositionAsync(position.Ticks);
                 }
                 catch { }
             }
@@ -141,11 +144,16 @@ namespace SoundBar.Services
 
         private async void UpdateMediaProperties()
         {
-            if (_currentSession == null) return;
+            var session = _currentSession;
+            if (session == null) return;
 
             try
             {
-                var props = await _currentSession.TryGetMediaPropertiesAsync();
+                var props = await session.TryGetMediaPropertiesAsync();
+
+                // The player may have changed while we were waiting. If so, this is old news.
+                if (!ReferenceEquals(session, _currentSession)) return;
+
                 if (props != null)
                 {
                     MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs

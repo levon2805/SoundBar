@@ -3,7 +3,6 @@ using SoundBar.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -16,14 +15,17 @@ namespace SoundBar.Services
     internal class WindowsAudioMixerService : IAudioMixerService, IDisposable
     {
         private readonly ConcurrentDictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath, DateTime LastChecked)> _processCache = new();
-        private readonly MMDeviceEnumerator _enumerator;
 
-        public WindowsAudioMixerService()
-        {
-            _enumerator = new MMDeviceEnumerator();
-        }
+        // Device names barely ever change, and reading them means opening each device's property store,
+        // so we remember them instead of asking every second. The refresh button clears this.
+        private readonly ConcurrentDictionary<string, string> _deviceNameCache = new();
 
-
+        // The system sounds mute state, noted down while walking the sessions so GetSystemSoundsMute
+        // doesn't have to walk them all over again a moment later. Guarded by _pollLock.
+        private bool _systemSoundsMutedSnapshot;
+        private bool _hasSystemSoundsSnapshot;
+        private long _systemSoundsSnapshotTicks;
+        private const long SystemSoundsSnapshotMaxAgeMs = 1500;
 
         /// <summary>
         /// Rummages through Windows to find every app currently hooked into the audio system.
@@ -37,6 +39,7 @@ namespace SoundBar.Services
 
             var _addedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var _seenProcessIdsThisTick = new HashSet<int>();
+            bool? systemSoundsMuted = null;
 
             try
             {
@@ -51,18 +54,26 @@ namespace SoundBar.Services
                     // Loop through the audio sessions found
                     foreach (var session in sessionEnumerator)
                     {
+                        // One session going away mid-look (its app just closed) shouldn't cost us the rest of the list
+                        try
+                        {
                         // Dispose the raw session COM object to prevent COM handle leaks
                         using (session)
                         using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
                         using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                         {
+                            // Use ProcessID directly — no System.Diagnostics.Process allocation
+                            int processId = sessionControl.ProcessID;
+                            if (processId == 0)
+                            {
+                                // The system sounds session has no process. Note its mute state while we're here.
+                                if (sessionControl.IsSystemSoundSession) systemSoundsMuted = simpleVolume.IsMuted;
+                                continue;
+                            }
+
                             // Ignore expired sessions
                             if (sessionControl.SessionState == AudioSessionState.AudioSessionStateExpired) continue;
 
-                            // Use ProcessID directly — no System.Diagnostics.Process allocation
-                            int processId = sessionControl.ProcessID;
-                            if (processId == 0) continue;
-                            
                             _seenProcessIdsThisTick.Add(processId);
 
                             // FAST PATH: Use cached process info (most ticks hit this)
@@ -75,10 +86,10 @@ namespace SoundBar.Services
                             {
                                 // If it was previously a background app, it might have spawned a window now!
                                 // Re-evaluate every 5 seconds to catch games like Blue Prince that delay their window creation.
-                                if (cachedApp.IsBackground && (DateTime.Now - cachedApp.LastChecked).TotalSeconds > 5)
+                                if (cachedApp.IsBackground && (DateTime.UtcNow - cachedApp.LastChecked).TotalSeconds > 5)
                                 {
                                     bool stillBackground = CheckIfBackgroundProcess(cachedApp.RawProcessName);
-                                    _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.Now);
+                                    _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.UtcNow);
                                     cachedApp.IsBackground = stillBackground; // update local tuple
                                 }
 
@@ -171,7 +182,7 @@ namespace SoundBar.Services
                             // Cache so we never run the slow path for this ProcessId again.
                             // We MUST do this before the _addedNames check so secondary sessions get cached 
                             // and can respond to volume/mute commands!
-                            _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.Now);
+                            _processCache[processId] = (displayName, processName, isBackground, safeIconPath, DateTime.UtcNow);
 
                             // If we already have a slider for this display name, skip adding it to the UI list
                             if (_addedNames.Contains(displayName)) continue;
@@ -189,18 +200,28 @@ namespace SoundBar.Services
 
                             _addedNames.Add(displayName);
                         }
+                        }
+                        catch (Exception)
+                        {
+                            // Skip just this session and carry on with the others
+                        }
                     }
                 }
             }
-                            // Cleanup dead processes from cache
-                List<int> cachedIds = _processCache.Keys.ToList();
-                foreach (var id in cachedIds)
+                // Cleanup dead processes from cache (enumerating the dictionary directly avoids copying its keys every tick)
+                foreach (var entry in _processCache)
                 {
-                    if (!_seenProcessIdsThisTick.Contains(id))
+                    if (!_seenProcessIdsThisTick.Contains(entry.Key))
                     {
-                        _processCache.TryRemove(id, out _);
+                        _processCache.TryRemove(entry.Key, out _);
                     }
                 }
+
+                // Only trust the snapshot if we actually saw the system sounds session. Otherwise
+                // GetSystemSoundsMute does its own full check, exactly as it always has.
+                _hasSystemSoundsSnapshot = systemSoundsMuted.HasValue;
+                _systemSoundsMutedSnapshot = systemSoundsMuted ?? false;
+                _systemSoundsSnapshotTicks = Environment.TickCount64;
             }
             catch (Exception)
             {
@@ -222,10 +243,18 @@ namespace SoundBar.Services
             });
         }
 
-        private bool CheckIfBackgroundProcess(string rawProcessName)
+        private static bool CheckIfBackgroundProcess(string rawProcessName)
         {
             string safeName = rawProcessName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-            var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+            System.Diagnostics.Process[] procs;
+            try
+            {
+                procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+            }
+            catch
+            {
+                return true; // Couldn't look, so leave it as it was
+            }
             bool isBackground = true;
             try
             {
@@ -251,6 +280,19 @@ namespace SoundBar.Services
         public void ClearCache()
         {
             _processCache.Clear();
+            _deviceNameCache.Clear();
+        }
+
+        /// <summary>
+        /// A device's friendly name, from our cache when we've seen it before.
+        /// </summary>
+        private string GetDeviceName(MMDevice device, string deviceId)
+        {
+            if (_deviceNameCache.TryGetValue(deviceId, out var name)) return name;
+
+            name = device.FriendlyName;
+            _deviceNameCache[deviceId] = name;
+            return name;
         }
 
         /// <summary>
@@ -284,11 +326,18 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using var localEnumerator = new MMDeviceEnumerator();
-                using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
-                using (var volume = AudioEndpointVolume.FromDevice(device))
+                try
                 {
-                    volume.MasterVolumeLevelScalar = level;
+                    using var localEnumerator = new MMDeviceEnumerator();
+                    using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using (var volume = AudioEndpointVolume.FromDevice(device))
+                    {
+                        volume.MasterVolumeLevelScalar = level;
+                    }
+                }
+                catch (Exception)
+                {
+                    // No output device right now (unplugged mid-drag, say)
                 }
             });
         }
@@ -311,19 +360,34 @@ namespace SoundBar.Services
         {
             Task.Run(() =>
             {
-                using var localEnumerator = new MMDeviceEnumerator();
-                using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
-                using (var volume = AudioEndpointVolume.FromDevice(device))
+                try
                 {
-                    volume.IsMuted = isMuted;
+                    using var localEnumerator = new MMDeviceEnumerator();
+                    using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
+                    using (var volume = AudioEndpointVolume.FromDevice(device))
+                    {
+                        volume.IsMuted = isMuted;
+                    }
+                }
+                catch (Exception)
+                {
+                    // No output device right now
                 }
             });
         }
 
         // System Sounds Implementation
-        
+
         public bool GetSystemSoundsMute()
         {
+            // The polling loop asks for this straight after GetActiveAudioSessions, which has just
+            // seen the system sounds session, so use that instead of walking every session again.
+            lock (_pollLock)
+            {
+                if (_hasSystemSoundsSnapshot && Environment.TickCount64 - _systemSoundsSnapshotTicks < SystemSoundsSnapshotMaxAgeMs)
+                    return _systemSoundsMutedSnapshot;
+            }
+
             try
             {
             using var localEnumerator = new MMDeviceEnumerator();
@@ -407,11 +471,12 @@ namespace SoundBar.Services
                 {
                     foreach (var device in devices)
                     {
+                        string deviceId = device.DeviceID;
                         result.Add(new AudioDeviceModel
                         {
-                            Id = device.DeviceID,
-                            Name = device.FriendlyName,
-                            IsDefault = device.DeviceID == defaultDeviceId
+                            Id = deviceId,
+                            Name = GetDeviceName(device, deviceId),
+                            IsDefault = deviceId == defaultDeviceId
                         });
                         device.Dispose(); // Dispose each individual device after processing
                     }
@@ -453,11 +518,12 @@ namespace SoundBar.Services
                 {
                     foreach (var device in devices)
                     {
+                        string deviceId = device.DeviceID;
                         result.Add(new AudioDeviceModel
                         {
-                            Id = device.DeviceID,
-                            Name = device.FriendlyName,
-                            IsDefault = device.DeviceID == defaultDeviceId
+                            Id = deviceId,
+                            Name = GetDeviceName(device, deviceId),
+                            IsDefault = deviceId == defaultDeviceId
                         });
                         device.Dispose();
                     }
@@ -491,9 +557,12 @@ namespace SoundBar.Services
 
         public void SetInputMute(bool isMuted)
         {
+            // A fresh enumerator each time, like everywhere else. This gets called from the UI thread and from
+            // the companion server's threads, and a shared one made on the UI thread isn't safe to use from both.
             try
             {
-                using (var device = _enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
+                using var localEnumerator = new MMDeviceEnumerator();
+                using (var device = localEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
                 using (var volume = AudioEndpointVolume.FromDevice(device))
                 {
                     volume.IsMuted = isMuted;
@@ -518,7 +587,8 @@ namespace SoundBar.Services
 
         public void Dispose()
         {
-            _enumerator?.Dispose();
+            _processCache.Clear();
+            _deviceNameCache.Clear();
         }
 
         private void PerformActionOnSession(string targetProcessName, Action<SimpleAudioVolume> action)
@@ -534,26 +604,29 @@ namespace SoundBar.Services
                     {
                         foreach (var session in sessionEnumerator)
                         {
-                            // Dispose the raw session COM object to prevent COM handle leaks
-                            using (session)
-                            using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
-                            using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
+                            // A multi-process app (Chrome, Discord) has several sessions, so one failing
+                            // mustn't stop the rest of them getting the change
+                            try
                             {
-                                // Match by ProcessID using the cache — zero Process object allocations
-                                int processId = sessionControl.ProcessID;
-                                if (processId == 0) continue;
-
-                                bool matchFound = false;
-                                if (_processCache.TryGetValue(processId, out var cached) &&
-                                    string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                // Dispose the raw session COM object to prevent COM handle leaks
+                                using (session)
+                                using (var sessionControl = session.QueryInterface<AudioSessionControl2>())
+                                using (var simpleVolume = session.QueryInterface<SimpleAudioVolume>())
                                 {
-                                    matchFound = true;
-                                }
+                                    // Match by ProcessID using the cache — zero Process object allocations
+                                    int processId = sessionControl.ProcessID;
+                                    if (processId == 0) continue;
 
-                                if (matchFound)
-                                {
-                                    action(simpleVolume);
+                                    if (_processCache.TryGetValue(processId, out var cached) &&
+                                        string.Equals(cached.RawProcessName, targetProcessName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        action(simpleVolume);
+                                    }
                                 }
+                            }
+                            catch (Exception)
+                            {
+                                // That session just went away, carry on with the others
                             }
                         }
                     }
@@ -568,7 +641,9 @@ namespace SoundBar.Services
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, int processId);
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        // Unicode, so paths with accents or non-Latin characters (e.g. in a user's name) come back intact
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
         private static extern bool QueryFullProcessImageName(IntPtr hProcess, uint dwFlags, System.Text.StringBuilder lpExeName, ref uint lpdwSize);
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
@@ -578,13 +653,10 @@ namespace SoundBar.Services
 
         private static string? GetExecutablePathSafely(System.Diagnostics.Process process)
         {
+            // Asking Windows for the image name directly is far cheaper than Process.MainModule (which reads
+            // the whole module list), and it also works on anti-cheat protected games like Valorant
             try
             {
-                return process.MainModule?.FileName;
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // Fallback for Anti-Cheat protected processes (like Valorant / Vanguard)
                 IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.Id);
                 if (hProcess != IntPtr.Zero)
                 {
@@ -602,11 +674,20 @@ namespace SoundBar.Services
                         CloseHandle(hProcess);
                     }
                 }
-                return null;
             }
             catch (InvalidOperationException)
             {
                 // Process just exited
+                return null;
+            }
+
+            // Last resort
+            try
+            {
+                return process.MainModule?.FileName;
+            }
+            catch
+            {
                 return null;
             }
         }

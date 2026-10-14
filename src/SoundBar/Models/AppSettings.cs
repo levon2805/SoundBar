@@ -129,6 +129,16 @@ namespace SoundBar.Models
         /// Whether the active apps list is visible on the main page.
         /// </summary>
         public bool ShowActiveApps { get; set; } = true;
+
+        /// <summary>
+        /// Whether the pin (always on top) button is visible in the title bar.
+        /// </summary>
+        public bool ShowPinButton { get; set; } = true;
+
+        /// <summary>
+        /// Whether the mobile companion button is visible in the title bar.
+        /// </summary>
+        public bool ShowCompanionButton { get; set; } = true;
     }
 
     /// <summary>

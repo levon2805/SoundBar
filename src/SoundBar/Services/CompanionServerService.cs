@@ -28,8 +28,19 @@ namespace SoundBar.Services
         private CancellationTokenSource? _cts;
         private Task? _broadcastTask;
         private Task? _acceptTask;
-        private string? _lastBroadcastJson;
-        private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
+        private volatile string? _lastBroadcastJson;
+        private readonly ConcurrentDictionary<string, CompanionClient> _clients = new();
+
+        /// <summary>
+        /// One connected phone. A WebSocket only allows one send at a time, but the broadcast loop, pairing
+        /// replies and the pairing timeout can all want to send at once, so every send goes through SendLock.
+        /// </summary>
+        private sealed class CompanionClient
+        {
+            public CompanionClient(WebSocket socket) => Socket = socket;
+            public WebSocket Socket { get; }
+            public SemaphoreSlim SendLock { get; } = new(1, 1);
+        }
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
         private readonly ConcurrentDictionary<string, (int Attempts, DateTime LockoutEnd)> _failedAttempts = new();
 
@@ -46,8 +57,9 @@ namespace SoundBar.Services
         // Current media state cached from events
         private string _currentTitle = string.Empty;
         private string _currentArtist = string.Empty;
-        private string? _currentAlbumArtId;
-        private byte[]? _currentAlbumArtBytes;
+        private volatile string? _currentAlbumArtId;
+        private volatile byte[]? _currentAlbumArtBytes;
+        private int _albumArtVersion;
         private double _currentPositionSeconds;
         private double _currentDurationSeconds;
         private bool _currentIsPlaying;
@@ -145,8 +157,8 @@ namespace SoundBar.Services
                         UseShellExecute = true,
                         WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                     };
-                    var proc1 = System.Diagnostics.Process.Start(aclProcess);
-                    proc1?.WaitForExit();
+                    using var aclProc = System.Diagnostics.Process.Start(aclProcess);
+                    aclProc?.WaitForExit();
 
                     // Try starting again after granting permission
                     StartListener();
@@ -290,7 +302,9 @@ namespace SoundBar.Services
         /// </summary>
         public void Stop()
         {
-            if (!IsRunning) return;
+            // Don't go by IsRunning alone: if the listener died by itself IsRunning is already false,
+            // but the broadcast loop and any open sockets still need shutting down
+            if (!IsRunning && _cts == null && _httpListener == null && _clients.IsEmpty) return;
 
             _cts?.Cancel();
 
@@ -310,23 +324,11 @@ namespace SoundBar.Services
                 _httpListener = null;
             }
 
-            // Close all WebSocket connections gracefully in a background task to avoid UI deadlocks
-            var sockets = _clients.Values.ToList();
-            _ = Task.Run(async () =>
+            // Close all WebSocket connections in the background to avoid UI deadlocks
+            foreach (var client in _clients.Values)
             {
-                foreach (var ws in sockets)
-                {
-                    try
-                    {
-                        if (ws.State == WebSocketState.Open)
-                        {
-                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", cts.Token).ConfigureAwait(false);
-                        }
-                    }
-                    catch { }
-                }
-            });
+                _ = SendAndCloseAsync(client, null, WebSocketCloseStatus.NormalClosure, "Server stopping");
+            }
 
             _clients.Clear();
             _pairedClients.Clear();
@@ -348,25 +350,32 @@ namespace SoundBar.Services
         {
             try
             {
+                string? noGatewayFallback = null;
+
                 foreach (var netInterface in NetworkInterface.GetAllNetworkInterfaces())
                 {
                     if (netInterface.OperationalStatus != OperationalStatus.Up) continue;
-                    if (netInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    if (netInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                        netInterface.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
 
                     var ipProps = netInterface.GetIPProperties();
+
+                    // Virtual adapters (Hyper-V, WSL, VirtualBox's 192.168.56.x) usually have no gateway.
+                    // The one a phone can actually reach is the one that leads to the router.
+                    bool hasGateway = ipProps.GatewayAddresses.Any(g =>
+                        g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
+
                     foreach (var addr in ipProps.UnicastAddresses)
                     {
-                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
-                        {
-                            string ip = addr.Address.ToString();
-                            // Prefer 192.168.x.x or 10.x.x.x addresses
-                            if (ip.StartsWith("192.168.") || ip.StartsWith("10."))
-                            {
-                                return ip;
-                            }
-                        }
+                        // Any private range, including 172.16-31 (which phone hotspots like the iPhone's use)
+                        if (addr.Address.AddressFamily != AddressFamily.InterNetwork || !IsPrivateIp(addr.Address)) continue;
+
+                        if (hasGateway) return addr.Address.ToString();
+                        noGatewayFallback ??= addr.Address.ToString();
                     }
                 }
+
+                if (noGatewayFallback != null) return noGatewayFallback;
 
                 // Fallback: use DNS
                 var host = Dns.GetHostEntry(Dns.GetHostName());
@@ -382,13 +391,24 @@ namespace SoundBar.Services
             return null;
         }
 
+        private string? _cachedConnectionUrl;
+        private long _cachedConnectionUrlTicks;
+
         /// <summary>
         /// Gets the full URL that the companion app should connect to.
         /// </summary>
         public string GetConnectionUrl()
         {
+            // The UI asks for this every time a phone connects or disconnects, and looking through every
+            // network adapter isn't free, so reuse the answer for a little while
+            string? cached = _cachedConnectionUrl;
+            if (cached != null && Environment.TickCount64 - _cachedConnectionUrlTicks < 10_000) return cached;
+
             string? ip = GetLocalIpAddress();
-            return $"http://{ip ?? "localhost"}:{Port}";
+            string url = $"http://{ip ?? "localhost"}:{Port}";
+            _cachedConnectionUrlTicks = Environment.TickCount64;
+            _cachedConnectionUrl = url;
+            return url;
         }
 
         private async Task AcceptConnectionsAsync(CancellationToken ct)
@@ -416,6 +436,9 @@ namespace SoundBar.Services
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine($"Companion server request error: {ex.Message}");
+
+                        // Breathe for a moment so a listener stuck in a bad state can't peg the CPU
+                        await Task.Delay(100).ConfigureAwait(false);
                     }
                 }
             }
@@ -536,7 +559,9 @@ namespace SoundBar.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"HTTP serve error: {ex.Message}");
-                context.Response.StatusCode = 500;
+
+                // Throws if we'd already started sending the response, which is fine to ignore
+                try { context.Response.StatusCode = 500; } catch { }
             }
             finally
             {
@@ -551,7 +576,7 @@ namespace SoundBar.Services
             // 1. Anti-Brute Force Lockout Check
             if (_failedAttempts.TryGetValue(clientIp, out var tracker))
             {
-                if (tracker.Attempts >= 5 && DateTime.Now < tracker.LockoutEnd)
+                if (tracker.Attempts >= 5 && DateTime.UtcNow < tracker.LockoutEnd)
                 {
                     httpContext.Response.StatusCode = 429; // Too Many Requests
                     httpContext.Response.Close();
@@ -588,23 +613,26 @@ namespace SoundBar.Services
             {
                 var wsContext = await httpContext.AcceptWebSocketAsync(null);
                 ws = wsContext.WebSocket;
+                var client = new CompanionClient(ws);
 
                 // 3. DoS Protection - Connection Limits
                 if (_clients.Count >= 20)
                 {
                     var errorMsg = JsonSerializer.Serialize(new { type = "error", message = "Maximum socket connections reached (20/20)." }, _jsonOptions);
-                    await SendTextAsync(ws, errorMsg, ct);
-                    await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Connection limit reached", ct);
+                    await SendTextAsync(client, errorMsg, ct);
+
+                    // Just say goodbye rather than waiting for the reply; the finally below drops the socket
+                    try { await ws.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Connection limit reached", ct); } catch { }
                     return;
                 }
 
-                _clients[clientId] = ws;
+                _clients[clientId] = client;
 
                 System.Diagnostics.Debug.WriteLine($"Companion client connected: {clientId} ({clientIp})");
 
                 // Send a challenge requesting the pairing code
                 var challenge = JsonSerializer.Serialize(new { type = "pairingRequired" }, _jsonOptions);
-                await SendTextAsync(ws, challenge, ct);
+                await SendTextAsync(client, challenge, ct);
 
                 // Disconnect if the client doesn't pair within 30 seconds (Prevents connection starvation)
                 _ = Task.Run(async () =>
@@ -612,11 +640,10 @@ namespace SoundBar.Services
                     try
                     {
                         await Task.Delay(30000, ct);
-                        if (ws != null && ws.State == WebSocketState.Open && !_pairedClients.ContainsKey(clientId))
+                        if (client.Socket.State == WebSocketState.Open && !_pairedClients.ContainsKey(clientId))
                         {
                             var timeoutMsg = JsonSerializer.Serialize(new { type = "error", message = "Pairing timeout. Please refresh the page." }, _jsonOptions);
-                            await SendTextAsync(ws, timeoutMsg, ct);
-                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Pairing timeout", ct);
+                            await SendAndCloseAsync(client, timeoutMsg, WebSocketCloseStatus.NormalClosure, "Pairing timeout");
                         }
                     }
                     catch { /* Server stopped or socket already disposed — safe to ignore */ }
@@ -636,15 +663,15 @@ namespace SoundBar.Services
 
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
-                        // Anything bigger than 4KB gets the boot (EndOfMessage is false if it didn't fit in the buffer)
+                        // Anything bigger than 4KB gets the boot (EndOfMessage is false if it didn't fit in the buffer).
+                        // Breaking out drops the socket in the finally below.
                         if (!result.EndOfMessage)
                         {
-                            await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "Payload exceeds 4KB limit", ct);
                             break;
                         }
 
                         string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        ProcessClientMessage(clientId, clientIp, ws, message);
+                        ProcessClientMessage(clientId, clientIp, client, message);
                     }
                 }
             }
@@ -664,7 +691,7 @@ namespace SoundBar.Services
             }
         }
 
-        private void ProcessClientMessage(string clientId, string clientIp, WebSocket ws, string message)
+        private void ProcessClientMessage(string clientId, string clientIp, CompanionClient client, string message)
         {
             try
             {
@@ -675,11 +702,10 @@ namespace SoundBar.Services
                 if (!_pairedClients.ContainsKey(clientId))
                 {
                     // Enforce lockout for existing sockets that keep trying
-                    if (_failedAttempts.TryGetValue(clientIp, out var tracker) && tracker.Attempts >= 5 && DateTime.Now < tracker.LockoutEnd)
+                    if (_failedAttempts.TryGetValue(clientIp, out var tracker) && tracker.Attempts >= 5 && DateTime.UtcNow < tracker.LockoutEnd)
                     {
                         var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
-                        _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
-                        _ = ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Locked out", CancellationToken.None);
+                        _ = SendAndCloseAsync(client, response, WebSocketCloseStatus.PolicyViolation, "Locked out");
                         return;
                     }
 
@@ -689,7 +715,7 @@ namespace SoundBar.Services
                         if (_pairedClients.Count >= 5)
                         {
                             var limitResponse = JsonSerializer.Serialize(new { type = "error", message = "Max paired devices reached (5/5)." }, _jsonOptions);
-                            _ = SendTextAsync(ws, limitResponse, _cts?.Token ?? CancellationToken.None);
+                            _ = SendTextAsync(client, limitResponse, _cts?.Token ?? CancellationToken.None);
                             return;
                         }
 
@@ -699,7 +725,12 @@ namespace SoundBar.Services
                         _failedAttempts.TryRemove(clientIp, out _);
 
                         var response = JsonSerializer.Serialize(new { type = "paired", success = true }, _jsonOptions);
-                        _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                        _ = SendTextAsync(client, response, _cts?.Token ?? CancellationToken.None);
+
+                        // The broadcast loop skips sending when nothing's changed, which would leave a newly
+                        // paired phone blank until something did. Forget the last send so it goes out next tick.
+                        _lastBroadcastJson = null;
+
                         StateChanged?.Invoke();
                     }
                     else if (command.Action == "pair")
@@ -707,12 +738,12 @@ namespace SoundBar.Services
                         // Record failed attempt for Brute Force mitigation
                         bool isLockedOut = false;
                         _failedAttempts.AddOrUpdate(clientIp,
-                            addValueFactory: _ => (1, DateTime.Now),
+                            addValueFactory: _ => (1, DateTime.UtcNow),
                             updateValueFactory: (_, current) => 
                             {
                                 int newAttempts = current.Attempts + 1;
                                 // Lock out for 5 minutes if 5 failed attempts reached
-                                DateTime newEnd = newAttempts >= 5 ? DateTime.Now.AddMinutes(5) : current.LockoutEnd;
+                                DateTime newEnd = newAttempts >= 5 ? DateTime.UtcNow.AddMinutes(5) : current.LockoutEnd;
                                 if (newAttempts >= 5) isLockedOut = true;
                                 return (newAttempts, newEnd);
                             });
@@ -720,13 +751,12 @@ namespace SoundBar.Services
                         if (isLockedOut)
                         {
                             var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
-                            _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
-                            _ = ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Locked out", CancellationToken.None);
+                            _ = SendAndCloseAsync(client, response, WebSocketCloseStatus.PolicyViolation, "Locked out");
                         }
                         else
                         {
                             var response = JsonSerializer.Serialize(new { type = "paired", success = false }, _jsonOptions);
-                            _ = SendTextAsync(ws, response, _cts?.Token ?? CancellationToken.None);
+                            _ = SendTextAsync(client, response, _cts?.Token ?? CancellationToken.None);
                         }
                     }
                     return;
@@ -825,7 +855,7 @@ namespace SoundBar.Services
                     // Periodically prune expired brute-force lockout entries (every ~30 seconds)
                     if (tickCount % 60 == 0)
                     {
-                        var now = DateTime.Now;
+                        var now = DateTime.UtcNow;
                         foreach (var kvp in _failedAttempts)
                         {
                             if (kvp.Value.LockoutEnd < now)
@@ -848,19 +878,13 @@ namespace SoundBar.Services
 
                     foreach (var kvp in _pairedClients)
                     {
-                        if (_clients.TryGetValue(kvp.Key, out var ws) && ws.State == WebSocketState.Open)
+                        if (_clients.TryGetValue(kvp.Key, out var client) && client.Socket.State == WebSocketState.Open)
                         {
-                            try
-                            {
-                                // Async non-blocking send with its own cancellation timeout
-                                using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                                sendCts.CancelAfter(2000);
-                                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, sendCts.Token).ConfigureAwait(false);
-                            }
-                            catch
-                            {
-                                // Client dropped, timeout, or closed
-                            }
+                            // Async non-blocking send with its own cancellation timeout, so one stuck phone
+                            // can't hold up the others for long
+                            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                            sendCts.CancelAfter(2000);
+                            await SendBytesAsync(client, bytes, sendCts.Token).ConfigureAwait(false);
                         }
                     }
                 }
@@ -1010,10 +1034,13 @@ namespace SoundBar.Services
             _currentTitle = e.Title;
             _currentArtist = e.Artist;
 
+            // Every change gets a number, so a slow conversion can't overwrite a newer song's art
+            int version = Interlocked.Increment(ref _albumArtVersion);
+
             // Convert album art thumbnail to raw bytes for HTTP serving
             if (e.Thumbnail != null)
             {
-                _ = ConvertThumbnailAsync(e.Thumbnail);
+                _ = ConvertThumbnailAsync(e.Thumbnail, version);
             }
             else
             {
@@ -1022,7 +1049,7 @@ namespace SoundBar.Services
             }
         }
 
-        private async Task ConvertThumbnailAsync(Windows.Storage.Streams.IRandomAccessStreamReference thumbnail)
+        private async Task ConvertThumbnailAsync(Windows.Storage.Streams.IRandomAccessStreamReference thumbnail, int version)
         {
             try
             {
@@ -1030,13 +1057,25 @@ namespace SoundBar.Services
                 using var netStream = stream.AsStreamForRead();
                 using var ms = new MemoryStream();
                 await netStream.CopyToAsync(ms);
-                _currentAlbumArtBytes = ms.ToArray();
+                byte[] bytes = ms.ToArray();
+
+                if (version != Volatile.Read(ref _albumArtVersion)) return;
+
+                // Same picture as before (players often announce a track more than once), so keep the
+                // same URL and the phone won't download it again
+                var currentBytes = _currentAlbumArtBytes;
+                if (currentBytes != null && _currentAlbumArtId != null && bytes.AsSpan().SequenceEqual(currentBytes)) return;
+
+                _currentAlbumArtBytes = bytes;
                 _currentAlbumArtId = Guid.NewGuid().ToString("N");
             }
             catch
             {
-                _currentAlbumArtId = null;
-                _currentAlbumArtBytes = null;
+                if (version == Volatile.Read(ref _albumArtVersion))
+                {
+                    _currentAlbumArtId = null;
+                    _currentAlbumArtBytes = null;
+                }
             }
         }
 
@@ -1048,17 +1087,69 @@ namespace SoundBar.Services
             _lastTimelineUpdate = e.LastUpdatedTime;
         }
 
-        private static async Task SendTextAsync(WebSocket ws, string text, CancellationToken ct)
+        private static Task SendTextAsync(CompanionClient client, string text, CancellationToken ct)
+        {
+            return SendBytesAsync(client, Encoding.UTF8.GetBytes(text), ct);
+        }
+
+        private static async Task SendBytesAsync(CompanionClient client, byte[] bytes, CancellationToken ct)
         {
             try
             {
-                if (ws.State != WebSocketState.Open) return;
-                byte[] bytes = Encoding.UTF8.GetBytes(text);
-                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
+                await client.SendLock.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (client.Socket.State != WebSocketState.Open) return;
+                    await client.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    client.SendLock.Release();
+                }
             }
             catch (Exception)
             {
                 // Silently ignore drop/cancel
+            }
+        }
+
+        /// <summary>
+        /// Sends a last message (if there is one) and starts closing the connection. The receive loop picks up
+        /// the phone's reply and tidies up. If the phone never replies we cut it off, so it can't hog a slot.
+        /// </summary>
+        private static async Task SendAndCloseAsync(CompanionClient client, string? finalMessage, WebSocketCloseStatus status, string reason)
+        {
+            try
+            {
+                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                {
+                    await client.SendLock.WaitAsync(timeout.Token).ConfigureAwait(false);
+                    try
+                    {
+                        if (client.Socket.State != WebSocketState.Open) return;
+
+                        if (finalMessage != null)
+                        {
+                            byte[] bytes = Encoding.UTF8.GetBytes(finalMessage);
+                            await client.Socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
+                        }
+
+                        // CloseOutputAsync rather than CloseAsync, because the receive loop is already listening
+                        // on this socket and only one receive is allowed at a time
+                        await client.Socket.CloseOutputAsync(status, reason, timeout.Token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        client.SendLock.Release();
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                if (client.Socket.State != WebSocketState.Closed) client.Socket.Abort();
+            }
+            catch (Exception)
+            {
+                try { client.Socket.Abort(); } catch { }
             }
         }
 
