@@ -37,6 +37,8 @@
     const pairingError = document.getElementById('pairing-error');
     const connectionStatus = document.getElementById('connection-status');
     const clientStatus = document.getElementById('client-status');
+    const clientStatusDot = document.querySelector('#client-status-pill .status-dot');
+    const appsCount = document.getElementById('apps-count');
     const masterSlider = document.getElementById('master-slider');
     const masterValue = document.getElementById('master-value');
     const masterMuteBtn = document.getElementById('master-mute-btn');
@@ -131,7 +133,7 @@
                 if (msg.success) {
                     isPaired = true;
                     pairingError.textContent = '';
-                    if (clientStatus) clientStatus.textContent = 'Connected';
+                    setClientStatus('Connected', true);
                     showScreen('app');
                 } else {
                     isPaired = false;
@@ -233,10 +235,15 @@
     }
 
     function updateAppsList(apps) {
+        if (appsCount) {
+            appsCount.textContent = apps.length;
+            appsCount.classList.toggle('hidden', apps.length === 0);
+        }
+
         if (apps.length === 0) {
             // Only rebuild if it isn't already showing, rather than on every update
             if (appsList.children.length !== 1 || !appsList.querySelector('.empty-state')) {
-                appsList.innerHTML = '<div class="empty-state">No active audio applications</div>';
+                appsList.innerHTML = '<div class="empty-state">No apps are playing audio right now</div>';
             }
             return;
         }
@@ -349,7 +356,21 @@
     }
 
     function updateDeviceList(selectElement, devices, selectedId) {
-        if (!selectElement || devices.length === 0) return;
+        if (!selectElement) return;
+
+        // Nothing plugged in: say so, rather than sitting on "Loading..." forever
+        if (devices.length === 0) {
+            if (!selectElement.disabled) {
+                selectElement.innerHTML = '<option value="">No devices found</option>';
+                selectElement.disabled = true;
+            }
+            return;
+        }
+
+        if (selectElement.disabled) {
+            selectElement.disabled = false;
+            selectElement.innerHTML = '';
+        }
 
         // Only rebuild if devices changed
         const currentOptions = Array.from(selectElement.options).map(o => o.value);
@@ -425,7 +446,7 @@
         switch (status) {
             case 'connected':
                 dot.className = 'status-dot connected';
-                text.innerHTML = `${Icons.link} Connected - enter code above`;
+                text.innerHTML = `${Icons.link} Connected, enter the code above`;
                 break;
             case 'connecting':
                 dot.className = 'status-dot disconnected';
@@ -434,9 +455,8 @@
             case 'reconnecting':
                 dot.className = 'status-dot disconnected';
                 text.textContent = 'Reconnecting...';
-                // Show reconnecting overlay or switch back to pairing
                 if (isPaired) {
-                    clientStatus.textContent = 'Reconnecting...';
+                    setClientStatus('Reconnecting...', false);
                 }
                 break;
             case 'error':
@@ -444,6 +464,12 @@
                 text.textContent = message;
                 break;
         }
+    }
+
+    // The little status pill in the app header
+    function setClientStatus(text, connected) {
+        if (clientStatus) clientStatus.textContent = text;
+        if (clientStatusDot) clientStatusDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
     }
 
     // --- Event Listeners ---
@@ -534,31 +560,29 @@
     // --- Theme Toggle ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     if (themeToggleBtn) {
-        const updateMetaTheme = (theme) => {
-            const metaTheme = document.querySelector('meta[name="theme-color"]');
-            if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f4f4f8' : '#0a0a0f');
-        };
-
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        if (savedTheme === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
-            themeToggleBtn.innerHTML = Icons.sun;
-            updateMetaTheme('light');
-        }
-
-        themeToggleBtn.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme') || 'dark';
-            if (current === 'dark') {
+        const applyTheme = (theme) => {
+            if (theme === 'light') {
                 document.documentElement.setAttribute('data-theme', 'light');
-                localStorage.setItem('theme', 'light');
-                themeToggleBtn.innerHTML = Icons.sun;
-                updateMetaTheme('light');
             } else {
                 document.documentElement.removeAttribute('data-theme');
-                localStorage.setItem('theme', 'dark');
-                themeToggleBtn.innerHTML = Icons.moon;
-                updateMetaTheme('dark');
             }
+            themeToggleBtn.innerHTML = theme === 'light' ? Icons.sun : Icons.moon;
+
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f2f2f6' : '#0b0b10');
+        };
+
+        // Until you pick one, follow the phone's own light/dark setting.
+        // (Storage can be unavailable in private browsing, so don't let that break anything.)
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem('theme'); } catch (e) { }
+        const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        applyTheme(savedTheme || (prefersLight ? 'light' : 'dark'));
+
+        themeToggleBtn.addEventListener('click', () => {
+            const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            applyTheme(next);
+            try { localStorage.setItem('theme', next); } catch (e) { }
         });
     }
 

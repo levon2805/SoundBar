@@ -913,6 +913,9 @@ namespace SoundBar.ViewModels
             // Tidy up artwork left over from a previous session
             DeleteLeftoverThumbnails();
 
+            // Pick up edits made to config.json by hand while we're running
+            _settingsService.ChangedExternally += SettingsService_ChangedExternally;
+
             _mediaInfoService.MediaInfoChanged += MediaInfoService_MediaInfoChanged;
             _mediaInfoService.TimelineInfoChanged += MediaInfoService_TimelineInfoChanged;
             _ = _mediaInfoService.InitializeAsync();
@@ -938,6 +941,104 @@ namespace SoundBar.ViewModels
 
             // Check for updates
             _ = CheckForUpdatesAsync();
+        }
+
+        private void SettingsService_ChangedExternally(AppSettings fresh)
+        {
+            RunOnUIThread(() =>
+            {
+                if (!_isDisposed) ApplySettingsEditedByHand(fresh);
+            });
+        }
+
+        /// <summary>
+        /// Someone edited config.json and saved it while we're running, so switch over to what they wrote.
+        /// Most settings are read straight from the file's values; the rest we keep our own copy of and sync here.
+        /// </summary>
+        internal void ApplySettingsEditedByHand(AppSettings fresh)
+        {
+            var old = _settingsService.Settings;
+            _settingsService.ReplaceSettings(fresh);
+
+            // Settings we keep our own copy of
+            if (_isDoNotDisturbEnabled != fresh.IsDoNotDisturbEnabled)
+            {
+                _isDoNotDisturbEnabled = fresh.IsDoNotDisturbEnabled;
+                _lastDndChange = DateTime.UtcNow;
+                _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
+            }
+
+            if (_isLoudnessWarningEnabled != fresh.IsLoudnessWarningEnabled)
+            {
+                _isLoudnessWarningEnabled = fresh.IsLoudnessWarningEnabled;
+                if (!_isLoudnessWarningEnabled)
+                {
+                    ShowLoudnessWarning = false;
+                    _highVolumeStartTime = null;
+                }
+            }
+
+            _showMediaControls = fresh.ShowMediaControls;
+
+            if (_runAtStartup != fresh.RunAtStartup)
+            {
+                _runAtStartup = fresh.RunAtStartup;
+                UpdateStartupShortcut(_runAtStartup);
+            }
+
+            SyncList(HiddenApps, fresh.HiddenApps);
+            SyncList(AllowedBackgroundApps, fresh.AllowedBackgroundApps);
+
+            // Newly allowed background apps leave the "Background Apps" list. Anything newly hidden or no longer
+            // allowed gets moved out of the mixer by the next poll.
+            for (int i = SystemBackgroundApps.Count - 1; i >= 0; i--)
+            {
+                if (fresh.AllowedBackgroundApps.Any(a => string.Equals(a, SystemBackgroundApps[i], StringComparison.OrdinalIgnoreCase)))
+                {
+                    SystemBackgroundApps.RemoveAt(i);
+                }
+            }
+
+            // Nicknames
+            foreach (var app in Apps)
+            {
+                string rawName = app.RawProcessName ?? "";
+                string name = fresh.AppAliases.TryGetValue(rawName, out var alias) && !string.IsNullOrWhiteSpace(alias)
+                    ? alias
+                    : app.DisplayName ?? rawName;
+
+                if (app.Name != name)
+                {
+                    app.AliasChanged -= HandleAliasChanged; // Don't write it straight back to the file
+                    app.Name = name;
+                    app.AliasChanged += HandleAliasChanged;
+                }
+            }
+
+            // Everything else is read straight from the settings, so just tell the screen to look again
+            OnPropertyChanged(string.Empty);
+
+            // The window listens for these by name
+            OnPropertyChanged(nameof(WindowOpacity));
+            OnPropertyChanged(nameof(ShowOutputDevice));
+            OnPropertyChanged(nameof(ShowInputDevice));
+            if (old.Theme != fresh.Theme) ThemeChanged?.Invoke(this, fresh.Theme);
+
+            // A new port only matters if the server's on, in which case move it over
+            if (old.CompanionServerPort != fresh.CompanionServerPort && _companionServer != null && _companionServer.IsRunning)
+            {
+                StopCompanionServer();
+                _ = StartCompanionServerAsync();
+            }
+            RaiseCompanionStateChanged();
+        }
+
+        private static void SyncList(ObservableCollection<string> target, List<string> source)
+        {
+            if (target.SequenceEqual(source)) return;
+
+            target.Clear();
+            foreach (var item in source) target.Add(item);
         }
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
@@ -2089,6 +2190,8 @@ namespace SoundBar.ViewModels
 
             _companionServer?.Dispose();
             _companionServer = null;
+
+            _settingsService.ChangedExternally -= SettingsService_ChangedExternally;
 
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();

@@ -203,6 +203,37 @@ namespace SoundBar.Tests
         }
 
         [Fact]
+        public void SettingsEditedByHand_AreAppliedAndNotOverwritten()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                var fresh = new AppSettings
+                {
+                    CompanionServerPort = 8123,
+                    ShowPinButton = false,
+                    HiddenApps = new List<string> { "Spotify" }
+                };
+
+                viewModel.ApplySettingsEditedByHand(fresh);
+
+                Assert.Same(fresh, settings.Settings);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.PinButtonVisibility);
+                Assert.Equal(new[] { "Spotify" }, viewModel.HiddenApps);
+                Assert.Contains(":8123", viewModel.CompanionServerUrl);
+
+                // The next save (closing the window, say) keeps the edit rather than writing the old values back
+                settings.SaveSettings();
+                Assert.Equal(8123, new SettingsService(path).Settings.CompanionServerPort);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void CloseCompanionView_ReturnsToMixer()
         {
             var (viewModel, settings, path) = CreateViewModel();

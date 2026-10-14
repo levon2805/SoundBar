@@ -107,6 +107,9 @@ namespace SoundBar.Views
             _backgroundResizeTimer.Tick += BackgroundResizeTimer_Tick;
             _appWindow.Changed += AppWindow_Changed;
             _ = LoadBackgroundAsync();
+
+            // Apply edits made to config.json while we're running, instead of overwriting them on our next save
+            _settingsService.StartWatchingForExternalChanges();
         }
 
         private void BackgroundResizeTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
@@ -278,6 +281,15 @@ namespace SoundBar.Views
 
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            // Everything changed at once, which happens when config.json is edited by hand. The pin lives here
+            // rather than in the ViewModel, so pick up any change to it ourselves.
+            if (string.IsNullOrEmpty(e.PropertyName) && _settingsService.Settings.IsPinned != _isPinned)
+            {
+                _isPinned = _settingsService.Settings.IsPinned;
+                SetTopmost(_isPinned);
+                UpdatePinButtonVisual(_isPinned);
+            }
+
             if (e.PropertyName == nameof(MainViewModel.ShowOutputDevice) || 
                 e.PropertyName == nameof(MainViewModel.ShowInputDevice))
             {
@@ -447,6 +459,8 @@ namespace SoundBar.Views
                 ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 ViewModel.Dispose();
             }
+
+            _settingsService.Dispose();
         }
 
         // Makes a desktop shortcut the first time SoundBar runs. If the user deletes it, we respect that.

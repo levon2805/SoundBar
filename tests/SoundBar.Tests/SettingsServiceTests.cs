@@ -249,5 +249,98 @@ namespace SoundBar.Tests
             Assert.Null(service.LastSaveError);
             Assert.True(File.Exists(_testFilePath));
         }
+
+        // --- New v4.1.2 Tests ---
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(70000)]
+        public void Load_HandEditedPortOutOfRange_FallsBackToDefault(int savedPort)
+        {
+            File.WriteAllText(_testFilePath, $"{{ \"CompanionServerPort\": {savedPort} }}");
+
+            var service = new SettingsService(_testFilePath);
+
+            Assert.Equal(6767, service.Settings.CompanionServerPort);
+        }
+
+        [Fact]
+        public void Load_HandEditedNullList_DoesNotLeaveANull()
+        {
+            File.WriteAllText(_testFilePath, "{ \"HiddenApps\": null, \"AppAliases\": null }");
+
+            var service = new SettingsService(_testFilePath);
+
+            Assert.NotNull(service.Settings.HiddenApps);
+            Assert.NotNull(service.Settings.AppAliases);
+        }
+
+        /// <summary>
+        /// Starts watching, and hands back a task that finishes with the settings from the next hand edit
+        /// (or null if nothing turns up in time).
+        /// </summary>
+        private static System.Threading.Tasks.Task<Models.AppSettings?> WatchForEditAsync(SettingsService service, int timeoutMs = 3000)
+        {
+            var edited = new System.Threading.Tasks.TaskCompletionSource<Models.AppSettings?>();
+            service.ChangedExternally += settings => edited.TrySetResult(settings);
+            service.StartWatchingForExternalChanges();
+
+            _ = System.Threading.Tasks.Task.Delay(timeoutMs).ContinueWith(_ => edited.TrySetResult(null));
+            return edited.Task;
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task EditingTheFileByHand_IsPickedUpWhileRunning()
+        {
+            var service = new SettingsService(_testFilePath);
+            service.SaveSettings();
+            using (service)
+            {
+                var edit = WatchForEditAsync(service);
+
+                // Like someone changing the port in Notepad and saving
+                string json = File.ReadAllText(_testFilePath).Replace("\"CompanionServerPort\": 6767", "\"CompanionServerPort\": 8123");
+                File.WriteAllText(_testFilePath, json);
+
+                var edited = await edit;
+                Assert.NotNull(edited);
+                Assert.Equal(8123, edited!.CompanionServerPort);
+            }
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task OurOwnSaves_AreNotMistakenForHandEdits()
+        {
+            var service = new SettingsService(_testFilePath);
+            service.SaveSettings();
+            using (service)
+            {
+                var edit = WatchForEditAsync(service, timeoutMs: 1500);
+
+                service.Settings.WindowOpacity = 55;
+                service.SaveSettings();
+
+                Assert.Null(await edit);
+            }
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task HalfFinishedHandEdit_IsIgnored()
+        {
+            var service = new SettingsService(_testFilePath);
+            service.Settings.CompanionServerPort = 7000;
+            service.SaveSettings();
+            using (service)
+            {
+                var edit = WatchForEditAsync(service, timeoutMs: 1500);
+
+                File.WriteAllText(_testFilePath, "{ \"CompanionServerPort\": 80");
+
+                // No event, and we keep what we had rather than resetting to defaults
+                Assert.Null(await edit);
+                Assert.Equal(7000, service.Settings.CompanionServerPort);
+            }
+        }
     }
 }
