@@ -42,7 +42,7 @@ namespace SoundBar.Services
             public SemaphoreSlim SendLock { get; } = new(1, 1);
         }
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
-        private readonly ConcurrentDictionary<string, (int Attempts, DateTime LockoutEnd)> _failedAttempts = new();
+        private readonly PairingAttemptTracker _pairingAttempts = new();
 
         private readonly IAudioMixerService _audioService;
         private readonly MediaInfoService _mediaInfoService;
@@ -126,9 +126,10 @@ namespace SoundBar.Services
         }
 
         /// <summary>
-        /// Starts the HTTP + WebSocket server and begins broadcasting state.
+        /// Starts the HTTP + WebSocket server and begins broadcasting state. If Windows needs admin permission
+        /// first, we wait for the user to answer the prompt in the background, so the app never freezes.
         /// </summary>
-        public void Start()
+        public async Task StartAsync()
         {
             if (IsRunning) return;
 
@@ -144,21 +145,23 @@ namespace SoundBar.Services
             }
             catch (HttpListenerException ex) when (ex.ErrorCode == 5)
             {
-                // Windows said no. We need admin rights to reserve the URL, but it's a one-off for each port
+                // Windows said no. We need admin rights to reserve the URL, but it's a one-off for each port.
+                // The firewall rule needs admin too, so sort both out together and the user only sees one prompt.
                 try
                 {
-                    // "D:(A;;GX;;;WD)" is a slightly cryptic way of saying "Everyone". Using the ID rather than
-                    // the name means it still works on non-English Windows, where it isn't called "Everyone".
-                    var aclProcess = new System.Diagnostics.ProcessStartInfo
+                    bool needsFirewallRule = !await Task.Run(() => FirewallRuleExists(Port));
+
+                    string command = BuildUrlReservationCommand(Port);
+                    if (needsFirewallRule) command += " & " + BuildFirewallRuleCommand(Port);
+
+                    await Task.Run(() => RunElevated(command));
+
+                    // The window may have closed while the prompt was up
+                    if (_isDisposed)
                     {
-                        FileName = "netsh",
-                        Arguments = $"http add urlacl url=http://+:{Port}/ sddl=D:(A;;GX;;;WD)",
-                        Verb = "runas",
-                        UseShellExecute = true,
-                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                    };
-                    using var aclProc = System.Diagnostics.Process.Start(aclProcess);
-                    aclProc?.WaitForExit();
+                        FailStart("The server was closed before it could start.");
+                        return;
+                    }
 
                     // Try starting again after granting permission
                     StartListener();
@@ -241,18 +244,32 @@ namespace SoundBar.Services
         internal static string GetLegacyFirewallRuleName(int port) => $"SoundBar Companion ({port})";
 
         /// <summary>
-        /// Ensures a Windows Firewall inbound rule exists for the companion server port.
-        /// The rule only lets in devices on the same local network, but works on any network type.
-        /// On Public networks the app warns the user before the server is turned on instead.
-        /// Runs an elevated netsh command if the rule doesn't exist yet.
+        /// The command that lets SoundBar listen on the port without running as admin.
+        /// "D:(A;;GX;;;WD)" is a slightly cryptic way of saying "Everyone". Using the ID rather than
+        /// the name means it still works on non-English Windows, where it isn't called "Everyone".
         /// </summary>
-        public static void EnsureFirewallRule(int port)
+        internal static string BuildUrlReservationCommand(int port) =>
+            $"netsh http add urlacl url=http://+:{port}/ sddl=D:(A;;GX;;;WD)";
+
+        /// <summary>
+        /// The command that adds our firewall rule. While we're at it, it clears out the old pre-4.1 rule
+        /// ("SoundBar Companion"), which let in any address, and the 4.1.0 rule, which blocked Public networks entirely.
+        /// </summary>
+        internal static string BuildFirewallRuleCommand(int port) =>
+            "netsh advfirewall firewall delete rule name=\"SoundBar Companion\" >nul 2>&1 & " +
+            $"netsh advfirewall firewall delete rule name=\"{GetLegacyFirewallRuleName(port)}\" >nul 2>&1 & " +
+            $"netsh advfirewall firewall add rule name=\"{GetFirewallRuleName(port)}\" dir=in action=allow protocol=TCP localport={port} profile=any remoteip=localsubnet";
+
+        /// <summary>
+        /// True if our firewall rule is already there. Checking doesn't need admin rights.
+        /// </summary>
+        private static bool FirewallRuleExists(int port)
         {
             string ruleName = GetFirewallRuleName(port);
 
             try
             {
-                // See if the rule's already there (netsh only exits with 0 if it finds a match)
+                // netsh only exits with 0 if it finds a match
                 var checkPsi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "netsh",
@@ -265,30 +282,51 @@ namespace SoundBar.Services
                 string output = checkProc?.StandardOutput.ReadToEnd() ?? "";
                 checkProc?.WaitForExit(5000);
 
-                if (checkProc != null && checkProc.HasExited && checkProc.ExitCode == 0 && output.Contains(ruleName))
+                return checkProc != null && checkProc.HasExited && checkProc.ExitCode == 0 && output.Contains(ruleName);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't check the firewall rule: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Runs a command as admin (showing the Windows prompt) and waits for it to finish. Blocks, so only
+        /// call it from a background thread. Throws Win32Exception if the user says no.
+        /// </summary>
+        private static void RunElevated(string command)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/s /c \"{command}\"",
+                Verb = "runas",
+                UseShellExecute = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+            };
+            using var process = System.Diagnostics.Process.Start(psi);
+            process?.WaitForExit();
+        }
+
+        /// <summary>
+        /// Ensures a Windows Firewall inbound rule exists for the companion server port.
+        /// The rule only lets in devices on the same local network, but works on any network type.
+        /// On Public networks the app warns the user before the server is turned on instead.
+        /// Runs an elevated netsh command if the rule doesn't exist yet.
+        /// </summary>
+        public static void EnsureFirewallRule(int port)
+        {
+            try
+            {
+                if (FirewallRuleExists(port))
                 {
                     System.Diagnostics.Debug.WriteLine("Firewall rule already exists.");
                     return;
                 }
 
-                // No rule yet, so add one (this needs admin rights). While we're at it, clear out the old
-                // pre-4.1 rule ("SoundBar Companion"), which let in any address, and the 4.1.0 rule,
-                // which blocked Public networks entirely.
-                string command =
-                    "netsh advfirewall firewall delete rule name=\"SoundBar Companion\" >nul 2>&1 & " +
-                    $"netsh advfirewall firewall delete rule name=\"{GetLegacyFirewallRuleName(port)}\" >nul 2>&1 & " +
-                    $"netsh advfirewall firewall add rule name=\"{ruleName}\" dir=in action=allow protocol=TCP localport={port} profile=any remoteip=localsubnet";
-
-                var addPsi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = $"/s /c \"{command}\"",
-                    Verb = "runas",
-                    UseShellExecute = true,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                };
-                using var addProc = System.Diagnostics.Process.Start(addPsi);
-                addProc?.WaitForExit();
+                // No rule yet, so add one (this needs admin rights)
+                RunElevated(BuildFirewallRuleCommand(port));
                 System.Diagnostics.Debug.WriteLine("Firewall rule added successfully.");
             }
             catch (Exception ex)
@@ -333,7 +371,7 @@ namespace SoundBar.Services
             _clients.Clear();
             _pairedClients.Clear();
             _iconCache.Clear();
-            _failedAttempts.Clear();
+            _pairingAttempts.Clear();
             IsRunning = false;
             
             _cts?.Dispose();
@@ -574,14 +612,11 @@ namespace SoundBar.Services
             string clientIp = httpContext.Request.RemoteEndPoint.Address.ToString();
 
             // 1. Anti-Brute Force Lockout Check
-            if (_failedAttempts.TryGetValue(clientIp, out var tracker))
+            if (_pairingAttempts.IsLockedOut(clientIp, DateTime.UtcNow, out _))
             {
-                if (tracker.Attempts >= 5 && DateTime.UtcNow < tracker.LockoutEnd)
-                {
-                    httpContext.Response.StatusCode = 429; // Too Many Requests
-                    httpContext.Response.Close();
-                    return;
-                }
+                httpContext.Response.StatusCode = 429; // Too Many Requests
+                httpContext.Response.Close();
+                return;
             }
 
             // 2. Cross-Site WebSocket Hijacking (CSWSH) Mitigation
@@ -702,9 +737,9 @@ namespace SoundBar.Services
                 if (!_pairedClients.ContainsKey(clientId))
                 {
                     // Enforce lockout for existing sockets that keep trying
-                    if (_failedAttempts.TryGetValue(clientIp, out var tracker) && tracker.Attempts >= 5 && DateTime.UtcNow < tracker.LockoutEnd)
+                    if (_pairingAttempts.IsLockedOut(clientIp, DateTime.UtcNow, out var remaining))
                     {
-                        var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
+                        var response = JsonSerializer.Serialize(new { type = "error", message = PairingAttemptTracker.LockedOutMessage(remaining) }, _jsonOptions);
                         _ = SendAndCloseAsync(client, response, WebSocketCloseStatus.PolicyViolation, "Locked out");
                         return;
                     }
@@ -722,7 +757,7 @@ namespace SoundBar.Services
                         _pairedClients[clientId] = true;
                         
                         // Reset brute force tracking on success
-                        _failedAttempts.TryRemove(clientIp, out _);
+                        _pairingAttempts.RecordSuccess(clientIp);
 
                         var response = JsonSerializer.Serialize(new { type = "paired", success = true }, _jsonOptions);
                         _ = SendTextAsync(client, response, _cts?.Token ?? CancellationToken.None);
@@ -736,21 +771,11 @@ namespace SoundBar.Services
                     else if (command.Action == "pair")
                     {
                         // Record failed attempt for Brute Force mitigation
-                        bool isLockedOut = false;
-                        _failedAttempts.AddOrUpdate(clientIp,
-                            addValueFactory: _ => (1, DateTime.UtcNow),
-                            updateValueFactory: (_, current) => 
-                            {
-                                int newAttempts = current.Attempts + 1;
-                                // Lock out for 5 minutes if 5 failed attempts reached
-                                DateTime newEnd = newAttempts >= 5 ? DateTime.UtcNow.AddMinutes(5) : current.LockoutEnd;
-                                if (newAttempts >= 5) isLockedOut = true;
-                                return (newAttempts, newEnd);
-                            });
+                        TimeSpan? lockout = _pairingAttempts.RecordFailure(clientIp, DateTime.UtcNow);
 
-                        if (isLockedOut)
+                        if (lockout.HasValue)
                         {
-                            var response = JsonSerializer.Serialize(new { type = "error", message = "Too many failed attempts. Try again in 5 minutes." }, _jsonOptions);
+                            var response = JsonSerializer.Serialize(new { type = "error", message = PairingAttemptTracker.LockedOutMessage(lockout.Value) }, _jsonOptions);
                             _ = SendAndCloseAsync(client, response, WebSocketCloseStatus.PolicyViolation, "Locked out");
                         }
                         else
@@ -852,17 +877,10 @@ namespace SoundBar.Services
                     await Task.Delay(500, ct);
                     tickCount++;
 
-                    // Periodically prune expired brute-force lockout entries (every ~30 seconds)
+                    // Periodically forget addresses that stopped guessing a long time ago (every ~30 seconds)
                     if (tickCount % 60 == 0)
                     {
-                        var now = DateTime.UtcNow;
-                        foreach (var kvp in _failedAttempts)
-                        {
-                            if (kvp.Value.LockoutEnd < now)
-                            {
-                                _failedAttempts.TryRemove(kvp.Key, out _);
-                            }
-                        }
+                        _pairingAttempts.Prune(DateTime.UtcNow);
                     }
 
                     if (_pairedClients.IsEmpty) continue;
@@ -1183,8 +1201,11 @@ namespace SoundBar.Services
             return false;
         }
 
+        private volatile bool _isDisposed;
+
         public void Dispose()
         {
+            _isDisposed = true;
             _mediaInfoService.MediaInfoChanged -= OnMediaInfoChanged;
             _mediaInfoService.TimelineInfoChanged -= OnTimelineInfoChanged;
             Stop(); // Stop() already disposes _cts and sets it to null

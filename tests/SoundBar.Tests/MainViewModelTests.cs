@@ -109,6 +109,9 @@ namespace SoundBar.Tests
 
                 Assert.Equal(expected, viewModel.WindowOpacity);
                 Assert.Equal($"{expected}%", viewModel.WindowOpacityText);
+
+                // Saving waits for the slider to settle, and closing the app saves anything still waiting
+                viewModel.Dispose();
                 Assert.Equal(expected, new SettingsService(path).Settings.WindowOpacity);
             }
             finally
@@ -137,6 +140,28 @@ namespace SoundBar.Tests
         }
 
         // --- New v4.1.2 Tests ---
+
+        [Fact]
+        public async Task DraggingOpacitySlider_SavesTheFinalValueOnceItSettles()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                // A drag sends lots of values in quick succession
+                for (int value = 90; value >= 40; value -= 5)
+                {
+                    viewModel.WindowOpacity = value;
+                }
+
+                await WaitUntilAsync(() => System.IO.File.Exists(path) && new SettingsService(path).Settings.WindowOpacity == 40);
+                Assert.Equal(40, new SettingsService(path).Settings.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
 
         [Fact]
         public void PinAndCompanionButtons_AreVisibleByDefault()

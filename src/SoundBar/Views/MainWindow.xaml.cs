@@ -99,6 +99,19 @@ namespace SoundBar.Views
             }
             RestoreWindowPosition();
             ApplyWindowOpacity(ViewModel.WindowOpacity);
+
+            // Reload the background at a bigger size if the window outgrows it (see LoadBackgroundAsync)
+            _backgroundResizeTimer = DispatcherQueue.CreateTimer();
+            _backgroundResizeTimer.Interval = TimeSpan.FromMilliseconds(300);
+            _backgroundResizeTimer.IsRepeating = false;
+            _backgroundResizeTimer.Tick += BackgroundResizeTimer_Tick;
+            _appWindow.Changed += AppWindow_Changed;
+            _ = LoadBackgroundAsync();
+        }
+
+        private void BackgroundResizeTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        {
+            _ = LoadBackgroundAsync();
         }
 
         /// <summary>
@@ -143,6 +156,105 @@ namespace SoundBar.Views
                 : IntPtr.Zero;
         }
 
+        // --- Custom Background ---
+
+        /// <summary>
+        /// How much bigger than the window we make the background, so small resizes don't need a reload.
+        /// </summary>
+        private const double BackgroundHeadroom = 1.25;
+
+        private int _backgroundLoadVersion;
+        private int _backgroundCoversWidth;
+        private int _backgroundCoversHeight;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _backgroundResizeTimer;
+
+        /// <summary>
+        /// Shows the custom background. Rather than holding a full-size photo in memory (an 8K wallpaper is
+        /// over 130 MB once decoded), we shrink it to just bigger than the window and keep a small compressed
+        /// copy. You can't see the difference, because the window never shows more pixels than that anyway.
+        /// </summary>
+        private async Task LoadBackgroundAsync()
+        {
+            // Not set up yet; the constructor loads it once the window exists
+            if (_appWindow is null) return;
+
+            int version = ++_backgroundLoadVersion;
+            string? path = ViewModel.BackgroundImage;
+
+            if (string.IsNullOrEmpty(path))
+            {
+                BackgroundImageControl.Source = null;
+                _backgroundCoversWidth = _backgroundCoversHeight = 0;
+                return;
+            }
+
+            // The window's size in real screen pixels, plus some room to grow
+            var client = _appWindow.ClientSize;
+            int coverWidth = (int)Math.Ceiling(Math.Max(1, client.Width) * BackgroundHeadroom);
+            int coverHeight = (int)Math.Ceiling(Math.Max(1, client.Height) * BackgroundHeadroom);
+
+            try
+            {
+                var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                bool fullSize;
+
+                // Read through a stream we close ourselves, so the file isn't kept locked and can be swapped while we run
+                using (var file = await Windows.Storage.Streams.FileRandomAccessStream.OpenAsync(path, Windows.Storage.FileAccessMode.Read))
+                {
+                    // Only reads the header, so this is quick even for huge pictures
+                    var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(file);
+
+                    // UniformToFill grows the picture until it covers the window, so that's how big it needs to be
+                    double scale = BackgroundImageHelper.GetCoverScale(decoder.OrientedPixelWidth, decoder.OrientedPixelHeight, coverWidth, coverHeight);
+
+                    // Already small enough, or an animated GIF (shrinking would freeze it on its first frame)
+                    fullSize = scale >= 1 || decoder.FrameCount > 1;
+
+                    if (fullSize)
+                    {
+                        file.Seek(0);
+                        await bitmap.SetSourceAsync(file);
+                    }
+                    else
+                    {
+                        using var shrunk = await BackgroundImageHelper.ShrinkAsync(decoder, scale);
+                        await bitmap.SetSourceAsync(shrunk);
+                    }
+                }
+
+                // The window was resized or a different picture was picked while we worked, so a newer load wins
+                if (version != _backgroundLoadVersion) return;
+
+                BackgroundImageControl.Source = bitmap;
+                _backgroundCoversWidth = fullSize ? int.MaxValue : coverWidth;
+                _backgroundCoversHeight = fullSize ? int.MaxValue : coverHeight;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't load the background image: {ex.Message}");
+
+                if (version == _backgroundLoadVersion)
+                {
+                    BackgroundImageControl.Source = null;
+                    _backgroundCoversWidth = _backgroundCoversHeight = 0;
+                }
+            }
+        }
+
+        private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (!args.DidSizeChange || string.IsNullOrEmpty(ViewModel.BackgroundImage)) return;
+
+            // Only bother reloading once the window outgrows the picture we've got. Waiting for the resize
+            // to settle means dragging the edge doesn't reload it dozens of times.
+            var client = _appWindow.ClientSize;
+            if (client.Width > _backgroundCoversWidth || client.Height > _backgroundCoversHeight)
+            {
+                _backgroundResizeTimer?.Stop();
+                _backgroundResizeTimer?.Start();
+            }
+        }
+
         private bool _hasAppliedInitialPin = false;
 
         private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
@@ -174,6 +286,10 @@ namespace SoundBar.Views
             if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
             {
                 ApplyWindowOpacity(ViewModel.WindowOpacity);
+            }
+            if (e.PropertyName == nameof(MainViewModel.BackgroundImage))
+            {
+                _ = LoadBackgroundAsync();
             }
             if (e.PropertyName == nameof(MainViewModel.UpdateBannerVisibility))
             {
@@ -317,6 +433,13 @@ namespace SoundBar.Views
             SaveWindowSettings();
 
             SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
+
+            _appWindow.Changed -= AppWindow_Changed;
+            if (_backgroundResizeTimer != null)
+            {
+                _backgroundResizeTimer.Stop();
+                _backgroundResizeTimer.Tick -= BackgroundResizeTimer_Tick;
+            }
 
             if (ViewModel != null)
             {

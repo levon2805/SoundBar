@@ -157,11 +157,10 @@ namespace SoundBar.ViewModels
             get => _backgroundImage;
             private set
             {
-                if (_backgroundImage != value)
-                {
-                    _backgroundImage = value;
-                    OnPropertyChanged();
-                }
+                // Always announce it, even if the path is the same. The Reload button needs to pick up a
+                // picture that was replaced with one of the same name.
+                _backgroundImage = value;
+                OnPropertyChanged();
             }
         }
 
@@ -275,9 +274,32 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.WindowOpacity = clamped;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(WindowOpacityText));
-                    _settingsService.SaveSettings();
+                    ScheduleSettingsSave();
                 }
             }
+        }
+
+        // Dragging the slider changes the value on every step. The window updates live (that's cheap), but
+        // writing config.json each time isn't, so we save once the slider's been still for a moment.
+        private const int SettingsSaveDelayMs = 500;
+        private int _settingsSaveVersion;
+        private volatile bool _isSettingsSavePending;
+
+        private void ScheduleSettingsSave()
+        {
+            int version = Interlocked.Increment(ref _settingsSaveVersion);
+            _isSettingsSavePending = true;
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(SettingsSaveDelayMs);
+
+                // Another change came in while we waited, so leave the saving to that one
+                if (version != Volatile.Read(ref _settingsSaveVersion) || _isDisposed) return;
+
+                _isSettingsSavePending = false;
+                _settingsService.SaveSettings();
+            });
         }
 
         public string WindowOpacityText => $"{_settingsService.Settings.WindowOpacity}%";
@@ -373,7 +395,7 @@ namespace SoundBar.ViewModels
                 // "on" while the server's actually off (say it failed to start last time), and the power
                 // button still needs to work then.
                 if (value)
-                    StartCompanionServer();
+                    _ = StartCompanionServerAsync();
                 else
                     StopCompanionServer(userExplicit: true);
             }
@@ -391,15 +413,40 @@ namespace SoundBar.ViewModels
             OnPropertyChanged(nameof(CompanionActiveUiVisibility));
         }
 
-        public void StartCompanionServer()
+        private bool _isCompanionStarting;
+        /// <summary>
+        /// True while we're waiting for the user to answer the Windows admin prompt (first start only).
+        /// </summary>
+        public bool IsCompanionStarting
         {
+            get => _isCompanionStarting;
+            private set
+            {
+                if (_isCompanionStarting != value)
+                {
+                    _isCompanionStarting = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanStartCompanion));
+                    OnPropertyChanged(nameof(CompanionStartingVisibility));
+                    OnPropertyChanged(nameof(CompanionPowerHintVisibility));
+                }
+            }
+        }
+
+        public bool CanStartCompanion => !_isCompanionStarting;
+        public Microsoft.UI.Xaml.Visibility CompanionStartingVisibility => _isCompanionStarting ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility CompanionPowerHintVisibility => _isCompanionStarting ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+        public async Task StartCompanionServerAsync()
+        {
+            if (_isCompanionStarting) return;
             if (_companionServer != null && _companionServer.IsRunning) return;
 
             // Clean up any half-started server from a previous failed attempt
             _companionServer?.Dispose();
             CompanionErrorMessage = null;
 
-            _companionServer = new CompanionServerService(
+            var server = new CompanionServerService(
                 _audioService,
                 _mediaInfoService,
                 () => AppsSnapshot,
@@ -432,14 +479,31 @@ namespace SoundBar.ViewModels
                 _settingsService.Settings.CompanionServerPort
             );
 
-            _companionServer.StateChanged += () => RunOnUIThread(RaiseCompanionStateChanged);
+            _companionServer = server;
+            server.StateChanged += () => RunOnUIThread(RaiseCompanionStateChanged);
 
-            _companionServer.Start();
-
-            if (!_companionServer.IsRunning)
+            // Only actually waits if Windows needs admin permission, and then it waits without freezing the window
+            IsCompanionStarting = true;
+            try
             {
-                CompanionErrorMessage = _companionServer.LastError ?? "Couldn't start the server. Please try again.";
-                _companionServer.Dispose();
+                await server.StartAsync();
+            }
+            finally
+            {
+                IsCompanionStarting = false;
+            }
+
+            // The server was turned off, or the window closed, while the admin prompt was up
+            if (!ReferenceEquals(_companionServer, server))
+            {
+                server.Dispose();
+                return;
+            }
+
+            if (!server.IsRunning)
+            {
+                CompanionErrorMessage = server.LastError ?? "Couldn't start the server. Please try again.";
+                server.Dispose();
                 _companionServer = null;
             }
 
@@ -2009,12 +2073,19 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private bool _isDisposed;
+        private volatile bool _isDisposed;
 
         public void Dispose()
         {
             if (_isDisposed) return;
             _isDisposed = true;
+
+            // Don't lose a slider change that was still waiting to be saved
+            if (_isSettingsSavePending)
+            {
+                _isSettingsSavePending = false;
+                _settingsService.SaveSettings();
+            }
 
             _companionServer?.Dispose();
             _companionServer = null;
