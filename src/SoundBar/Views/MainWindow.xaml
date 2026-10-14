@@ -35,7 +35,8 @@
 
         <Grid>
             <!-- Background Image Layer -->
-            <Image Stretch="UniformToFill" Source="{Binding BackgroundImage}" />
+            <!-- Source is set from code so the picture can be decoded at window size rather than full size -->
+            <Image x:Name="BackgroundImageControl" Stretch="UniformToFill" />
             <!-- Dimming Overlay Layer -->
             <Border Background="{ThemeResource DimmingOverlayBrush}" />
 
@@ -117,6 +118,7 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="PinButton_Click"
+                        Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Always on Top"/>
 
                 <Button x:Name="CompanionButton"
@@ -131,6 +133,7 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="CompanionButton_Click"
+                        Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Mobile Companion"/>
 
                 <ToggleButton x:Name="DndToggleButton"
@@ -504,16 +507,27 @@
                                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                     BorderThickness="2"
                                     HorizontalAlignment="Center"
+                                    IsEnabled="{x:Bind ViewModel.CanStartCompanion, Mode=OneWay}"
                                     Click="CompanionPowerOn_Click">
-                                <TextBlock Text="&#xE7E8;" 
-                                           FontFamily="{ThemeResource SymbolThemeFontFamily}" 
-                                           FontSize="50" 
+                                <TextBlock Text="&#xE7E8;"
+                                           FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                           FontSize="50"
                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </Button>
-                            
-                            <TextBlock Text="Click to power on" 
-                                       FontSize="14" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
-                                       HorizontalAlignment="Center"/>
+
+                            <TextBlock Text="Click to power on"
+                                       FontSize="14" Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Visibility="{x:Bind ViewModel.CompanionPowerHintVisibility, Mode=OneWay}"/>
+
+                            <!-- First start only: Windows asks for admin permission once to open the port -->
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" MaxWidth="300"
+                                        Visibility="{x:Bind ViewModel.CompanionStartingVisibility, Mode=OneWay}">
+                                <ProgressRing IsActive="{x:Bind ViewModel.IsCompanionStarting, Mode=OneWay}" Width="16" Height="16" VerticalAlignment="Center"/>
+                                <TextBlock Text="Waiting for Windows permission. Choose Yes on the admin prompt (only needed once)."
+                                           FontSize="13" TextWrapping="Wrap" MaxWidth="270"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
 
@@ -734,7 +748,9 @@
                                 <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                </StackPanel>
+                                <ToggleSwitch Header="Pin to Top Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Mobile Companion Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                            </StackPanel>
                         </Expander>
 
                         <!-- Custom Background -->
@@ -910,7 +926,7 @@
                             </Expander.Header>
                             <StackPanel Spacing="15">
                                 <StackPanel>
-                                    <TextBlock Text="Modify hidden settings directly via the config file. (e.g. CompanionServerPort). A restart of the application is required to apply changes." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Modify hidden settings directly via the config file (e.g. CompanionServerPort). Changes apply as soon as you save the file." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                     <Button Content="Open config.json" 
                                             Click="{x:Bind ViewModel.OpenSettingsFile}" 
                                             Background="{ThemeResource ControlFillColorDefaultBrush}" 

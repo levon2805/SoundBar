@@ -1,10 +1,10 @@
-const CACHE_NAME = 'soundbar-remote-v16';
+const CACHE_NAME = 'soundbar-remote-v18';
 const ASSETS = [
     '/',
     '/index.html',
-    '/style.css?v=4',
-    '/app.js?v=12',
-    '/manifest.json?v=2'
+    '/style.css?v=5',
+    '/app.js?v=14',
+    '/manifest.json?v=3'
 ];
 
 self.addEventListener('install', (event) => {

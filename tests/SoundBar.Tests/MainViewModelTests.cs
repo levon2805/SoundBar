@@ -45,7 +45,7 @@ namespace SoundBar.Tests
                 mockAudioService.Object);
 
             // Give the polling loop a moment to pick up the initial devices
-            await Task.Delay(500); 
+            await WaitUntilAsync(() => viewModel.SelectedAudioDevice != null && viewModel.SelectedInputDevice != null);
 
             // Assert initial state: devices are selected
             Assert.NotNull(viewModel.SelectedAudioDevice);
@@ -58,13 +58,26 @@ namespace SoundBar.Tests
             mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
 
             // Wait for the next poll cycle to pick up the empty lists
-            await Task.Delay(500);
+            await WaitUntilAsync(() => viewModel.SelectedAudioDevice == null && viewModel.SelectedInputDevice == null);
 
             // Assert final state: selections are cleared to show placeholder text
             Assert.Null(viewModel.SelectedAudioDevice);
             Assert.Null(viewModel.SelectedInputDevice);
 
             viewModel.Dispose();
+        }
+
+        /// <summary>
+        /// The poll runs by itself once a second on another thread, so wait for it to deliver rather than
+        /// guessing a delay. A fixed wait could land halfway through a poll and catch it half done.
+        /// </summary>
+        private static async Task WaitUntilAsync(System.Func<bool> condition, int timeoutMs = 3000)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            while (!condition() && stopwatch.ElapsedMilliseconds < timeoutMs)
+            {
+                await Task.Delay(25);
+            }
         }
 
         // --- New v4.1.0 Tests ---
@@ -96,6 +109,9 @@ namespace SoundBar.Tests
 
                 Assert.Equal(expected, viewModel.WindowOpacity);
                 Assert.Equal($"{expected}%", viewModel.WindowOpacityText);
+
+                // Saving waits for the slider to settle, and closing the app saves anything still waiting
+                viewModel.Dispose();
                 Assert.Equal(expected, new SettingsService(path).Settings.WindowOpacity);
             }
             finally
@@ -115,6 +131,100 @@ namespace SoundBar.Tests
                 viewModel.ResetWindowOpacity();
 
                 Assert.Equal(100, viewModel.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        // --- New v4.1.2 Tests ---
+
+        [Fact]
+        public async Task DraggingOpacitySlider_SavesTheFinalValueOnceItSettles()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                // A drag sends lots of values in quick succession
+                for (int value = 90; value >= 40; value -= 5)
+                {
+                    viewModel.WindowOpacity = value;
+                }
+
+                await WaitUntilAsync(() => System.IO.File.Exists(path) && new SettingsService(path).Settings.WindowOpacity == 40);
+                Assert.Equal(40, new SettingsService(path).Settings.WindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void PinAndCompanionButtons_AreVisibleByDefault()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.PinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.CompanionButtonVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void HidingPinAndCompanionButtons_IsSavedAndCollapsesThem()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.ShowPinButton = false;
+                viewModel.ShowCompanionButton = false;
+
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.PinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.CompanionButtonVisibility);
+
+                var reloaded = new SettingsService(path).Settings;
+                Assert.False(reloaded.ShowPinButton);
+                Assert.False(reloaded.ShowCompanionButton);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void SettingsEditedByHand_AreAppliedAndNotOverwritten()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                var fresh = new AppSettings
+                {
+                    CompanionServerPort = 8123,
+                    ShowPinButton = false,
+                    HiddenApps = new List<string> { "Spotify" }
+                };
+
+                viewModel.ApplySettingsEditedByHand(fresh);
+
+                Assert.Same(fresh, settings.Settings);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.PinButtonVisibility);
+                Assert.Equal(new[] { "Spotify" }, viewModel.HiddenApps);
+                Assert.Contains(":8123", viewModel.CompanionServerUrl);
+
+                // The next save (closing the window, say) keeps the edit rather than writing the old values back
+                settings.SaveSettings();
+                Assert.Equal(8123, new SettingsService(path).Settings.CompanionServerPort);
             }
             finally
             {

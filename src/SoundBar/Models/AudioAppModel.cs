@@ -103,7 +103,7 @@ namespace SoundBar.Models
                     _volume = value;
 
                     // Note down the time so we don't immediately overwrite the user's change.
-                    LastModified = DateTime.Now;
+                    LastModified = DateTime.UtcNow;
 
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(VolumePercentage));
@@ -250,7 +250,7 @@ namespace SoundBar.Models
                 if (_isMuted != value)
                 {
                     _isMuted = value;
-                    LastModified = DateTime.Now;
+                    LastModified = DateTime.UtcNow;
 
                     OnPropertyChanged();
 
@@ -309,7 +309,9 @@ namespace SoundBar.Models
                         var hash = System.BitConverter.ToString(hashBytes).Replace("-", "");
                         string targetPath = System.IO.Path.Combine(_iconDir, hash + ".png");
 
-                        if (System.IO.File.Exists(targetPath))
+                        // An empty file means a save got cut short last time, so make it again
+                        var existing = new System.IO.FileInfo(targetPath);
+                        if (existing.Exists && existing.Length > 0)
                         {
                             _iconCache[IconPath] = targetPath;
                             return targetPath;
@@ -318,8 +320,26 @@ namespace SoundBar.Models
                         using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(IconPath);
                         if (sysIcon != null)
                         {
-                            using var bmp = sysIcon.ToBitmap();
-                            bmp.Save(targetPath, System.Drawing.Imaging.ImageFormat.Png);
+                            // Save to a private temp file first. Apps that share an exe (several Chrome
+                            // sessions, say) can get here at the same moment and would otherwise trip over each other.
+                            string tempPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
+                            try
+                            {
+                                using (var bmp = sysIcon.ToBitmap())
+                                {
+                                    bmp.Save(tempPath, System.Drawing.Imaging.ImageFormat.Png);
+                                }
+                                System.IO.File.Move(tempPath, targetPath, overwrite: true);
+                            }
+                            catch (System.IO.IOException) when (System.IO.File.Exists(targetPath))
+                            {
+                                // Someone else finished first and the file's already in use, so just share theirs
+                            }
+                            finally
+                            {
+                                try { System.IO.File.Delete(tempPath); } catch { }
+                            }
+
                             _iconCache[IconPath] = targetPath;
                             return targetPath;
                         }

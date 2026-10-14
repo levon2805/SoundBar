@@ -79,9 +79,11 @@ namespace SoundBar.Views
             this.Title = "SoundBar";
             _appWindow.Title = "SoundBar";
 
-            // We do NOT use _appWindow.SetIcon() here. 
+            // We do NOT use _appWindow.SetIcon() here.
             // WinUI 3 has a bug where setting the icon dynamically forces a UWP "plate" (white square) behind the taskbar icon.
-            // By doing nothing, the OS natively pulls the transparent SoundBar.ico directly from the compiled .exe without any plates!
+            // The taskbar button pulls the transparent SoundBar.ico straight from the .exe, but the hover preview
+            // and Alt+Tab ask the window itself, so we hand it the same icon the old-fashioned Win32 way.
+            ApplyWindowIcon();
 
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
@@ -97,6 +99,163 @@ namespace SoundBar.Views
             }
             RestoreWindowPosition();
             ApplyWindowOpacity(ViewModel.WindowOpacity);
+
+            // Reload the background at a bigger size if the window outgrows it (see LoadBackgroundAsync)
+            _backgroundResizeTimer = DispatcherQueue.CreateTimer();
+            _backgroundResizeTimer.Interval = TimeSpan.FromMilliseconds(300);
+            _backgroundResizeTimer.IsRepeating = false;
+            _backgroundResizeTimer.Tick += BackgroundResizeTimer_Tick;
+            _appWindow.Changed += AppWindow_Changed;
+            _ = LoadBackgroundAsync();
+
+            // Apply edits made to config.json while we're running, instead of overwriting them on our next save
+            _settingsService.StartWatchingForExternalChanges();
+        }
+
+        private void BackgroundResizeTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        {
+            _ = LoadBackgroundAsync();
+        }
+
+        /// <summary>
+        /// Gives the window its small and large icons, sized for the monitor it's on. Without these
+        /// the taskbar hover preview and Alt+Tab show the default blank application icon.
+        /// The icons stay alive as long as the window does, and Windows frees them when we exit.
+        /// </summary>
+        private void ApplyWindowIcon()
+        {
+            try
+            {
+                uint dpi = NativeMethods.GetDpiForWindow(_hWnd);
+                if (dpi == 0) dpi = 96;
+
+                IntPtr small = LoadAppIcon(NativeMethods.SM_CXSMICON, NativeMethods.SM_CYSMICON, dpi);
+                IntPtr big = LoadAppIcon(NativeMethods.SM_CXICON, NativeMethods.SM_CYICON, dpi);
+
+                if (small != IntPtr.Zero)
+                    NativeMethods.SendMessage(_hWnd, NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_SMALL, small);
+                if (big != IntPtr.Zero)
+                    NativeMethods.SendMessage(_hWnd, NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_BIG, big);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't set the window icon: {ex.Message}");
+            }
+        }
+
+        private static IntPtr LoadAppIcon(int widthMetric, int heightMetric, uint dpi)
+        {
+            int cx = NativeMethods.GetSystemMetricsForDpi(widthMetric, dpi);
+            int cy = NativeMethods.GetSystemMetricsForDpi(heightMetric, dpi);
+
+            // The icon baked into SoundBar.exe, picking the best-matching size from the .ico
+            IntPtr icon = NativeMethods.LoadImage(NativeMethods.GetModuleHandle(null), (IntPtr)NativeMethods.AppIconResourceId, NativeMethods.IMAGE_ICON, cx, cy, 0);
+            if (icon != IntPtr.Zero) return icon;
+
+            // Fall back to the copy that ships next to the exe
+            string icoPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
+            return System.IO.File.Exists(icoPath)
+                ? NativeMethods.LoadImage(IntPtr.Zero, icoPath, NativeMethods.IMAGE_ICON, cx, cy, NativeMethods.LR_LOADFROMFILE)
+                : IntPtr.Zero;
+        }
+
+        // --- Custom Background ---
+
+        /// <summary>
+        /// How much bigger than the window we make the background, so small resizes don't need a reload.
+        /// </summary>
+        private const double BackgroundHeadroom = 1.25;
+
+        private int _backgroundLoadVersion;
+        private int _backgroundCoversWidth;
+        private int _backgroundCoversHeight;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _backgroundResizeTimer;
+
+        /// <summary>
+        /// Shows the custom background. Rather than holding a full-size photo in memory (an 8K wallpaper is
+        /// over 130 MB once decoded), we shrink it to just bigger than the window and keep a small compressed
+        /// copy. You can't see the difference, because the window never shows more pixels than that anyway.
+        /// </summary>
+        private async Task LoadBackgroundAsync()
+        {
+            // Not set up yet; the constructor loads it once the window exists
+            if (_appWindow is null) return;
+
+            int version = ++_backgroundLoadVersion;
+            string? path = ViewModel.BackgroundImage;
+
+            if (string.IsNullOrEmpty(path))
+            {
+                BackgroundImageControl.Source = null;
+                _backgroundCoversWidth = _backgroundCoversHeight = 0;
+                return;
+            }
+
+            // The window's size in real screen pixels, plus some room to grow
+            var client = _appWindow.ClientSize;
+            int coverWidth = (int)Math.Ceiling(Math.Max(1, client.Width) * BackgroundHeadroom);
+            int coverHeight = (int)Math.Ceiling(Math.Max(1, client.Height) * BackgroundHeadroom);
+
+            try
+            {
+                var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                bool fullSize;
+
+                // Read through a stream we close ourselves, so the file isn't kept locked and can be swapped while we run
+                using (var file = await Windows.Storage.Streams.FileRandomAccessStream.OpenAsync(path, Windows.Storage.FileAccessMode.Read))
+                {
+                    // Only reads the header, so this is quick even for huge pictures
+                    var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(file);
+
+                    // UniformToFill grows the picture until it covers the window, so that's how big it needs to be
+                    double scale = BackgroundImageHelper.GetCoverScale(decoder.OrientedPixelWidth, decoder.OrientedPixelHeight, coverWidth, coverHeight);
+
+                    // Already small enough, or an animated GIF (shrinking would freeze it on its first frame)
+                    fullSize = scale >= 1 || decoder.FrameCount > 1;
+
+                    if (fullSize)
+                    {
+                        file.Seek(0);
+                        await bitmap.SetSourceAsync(file);
+                    }
+                    else
+                    {
+                        using var shrunk = await BackgroundImageHelper.ShrinkAsync(decoder, scale);
+                        await bitmap.SetSourceAsync(shrunk);
+                    }
+                }
+
+                // The window was resized or a different picture was picked while we worked, so a newer load wins
+                if (version != _backgroundLoadVersion) return;
+
+                BackgroundImageControl.Source = bitmap;
+                _backgroundCoversWidth = fullSize ? int.MaxValue : coverWidth;
+                _backgroundCoversHeight = fullSize ? int.MaxValue : coverHeight;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't load the background image: {ex.Message}");
+
+                if (version == _backgroundLoadVersion)
+                {
+                    BackgroundImageControl.Source = null;
+                    _backgroundCoversWidth = _backgroundCoversHeight = 0;
+                }
+            }
+        }
+
+        private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (!args.DidSizeChange || string.IsNullOrEmpty(ViewModel.BackgroundImage)) return;
+
+            // Only bother reloading once the window outgrows the picture we've got. Waiting for the resize
+            // to settle means dragging the edge doesn't reload it dozens of times.
+            var client = _appWindow.ClientSize;
+            if (client.Width > _backgroundCoversWidth || client.Height > _backgroundCoversHeight)
+            {
+                _backgroundResizeTimer?.Stop();
+                _backgroundResizeTimer?.Start();
+            }
         }
 
         private bool _hasAppliedInitialPin = false;
@@ -122,6 +281,15 @@ namespace SoundBar.Views
 
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
+            // Everything changed at once, which happens when config.json is edited by hand. The pin lives here
+            // rather than in the ViewModel, so pick up any change to it ourselves.
+            if (string.IsNullOrEmpty(e.PropertyName) && _settingsService.Settings.IsPinned != _isPinned)
+            {
+                _isPinned = _settingsService.Settings.IsPinned;
+                SetTopmost(_isPinned);
+                UpdatePinButtonVisual(_isPinned);
+            }
+
             if (e.PropertyName == nameof(MainViewModel.ShowOutputDevice) || 
                 e.PropertyName == nameof(MainViewModel.ShowInputDevice))
             {
@@ -130,6 +298,10 @@ namespace SoundBar.Views
             if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
             {
                 ApplyWindowOpacity(ViewModel.WindowOpacity);
+            }
+            if (e.PropertyName == nameof(MainViewModel.BackgroundImage))
+            {
+                _ = LoadBackgroundAsync();
             }
             if (e.PropertyName == nameof(MainViewModel.UpdateBannerVisibility))
             {
@@ -274,12 +446,21 @@ namespace SoundBar.Views
 
             SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
 
+            _appWindow.Changed -= AppWindow_Changed;
+            if (_backgroundResizeTimer != null)
+            {
+                _backgroundResizeTimer.Stop();
+                _backgroundResizeTimer.Tick -= BackgroundResizeTimer_Tick;
+            }
+
             if (ViewModel != null)
             {
                 ViewModel.ThemeChanged -= ViewModel_ThemeChanged;
                 ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 ViewModel.Dispose();
             }
+
+            _settingsService.Dispose();
         }
 
         // Makes a desktop shortcut the first time SoundBar runs. If the user deletes it, we respect that.
@@ -464,11 +645,15 @@ namespace SoundBar.Views
                 XamlRoot = this.Content.XamlRoot
             };
             
-            _ = dialog.ShowAsync();
+            var progressDialogTask = dialog.ShowAsync();
 
             // On success the app closes and restarts, so we only get past this if something went wrong
             string? error = await ViewModel.ApplyUpdate();
             dialog.Hide();
+
+            // Only one dialog can be open at once, so wait for this one to finish closing before
+            // showing the error, otherwise WinUI throws and takes the app down with it
+            await progressDialogTask;
 
             if (error != null)
             {
@@ -481,6 +666,19 @@ namespace SoundBar.Views
                 };
                 await errorDialog.ShowAsync();
             }
+        }
+
+        /// <summary>
+        /// Brings the window back up when someone launches SoundBar again while it's already running.
+        /// Activate() alone leaves a minimised window sitting in the taskbar.
+        /// </summary>
+        public void BringToFront()
+        {
+            if (_appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
+            {
+                presenter.Restore();
+            }
+            Activate();
         }
 
         private void DismissLoudnessWarning_Click(object sender, RoutedEventArgs e)

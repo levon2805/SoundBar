@@ -37,6 +37,8 @@
     const pairingError = document.getElementById('pairing-error');
     const connectionStatus = document.getElementById('connection-status');
     const clientStatus = document.getElementById('client-status');
+    const clientStatusDot = document.querySelector('#client-status-pill .status-dot');
+    const appsCount = document.getElementById('apps-count');
     const masterSlider = document.getElementById('master-slider');
     const masterValue = document.getElementById('master-value');
     const masterMuteBtn = document.getElementById('master-mute-btn');
@@ -131,7 +133,7 @@
                 if (msg.success) {
                     isPaired = true;
                     pairingError.textContent = '';
-                    if (clientStatus) clientStatus.textContent = 'Connected';
+                    setClientStatus('Connected', true);
                     showScreen('app');
                 } else {
                     isPaired = false;
@@ -174,10 +176,10 @@
         const muteIcon = masterMuteBtn.querySelector('.mute-icon');
         if (state.masterMuted) {
             masterMuteBtn.classList.add('muted');
-            muteIcon.innerHTML = Icons.volumeMuted;
+            setIcon(muteIcon, Icons.volumeMuted);
         } else {
             masterMuteBtn.classList.remove('muted');
-            muteIcon.innerHTML = state.masterVolume > 50 ? Icons.volumeHigh : state.masterVolume > 0 ? Icons.volumeLow : Icons.volumeMuted;
+            setIcon(muteIcon, state.masterVolume > 50 ? Icons.volumeHigh : state.masterVolume > 0 ? Icons.volumeLow : Icons.volumeMuted);
         }
 
         // Now Playing
@@ -207,7 +209,7 @@
             }
 
             // Play/Pause icon
-            playPauseBtn.innerHTML = state.nowPlaying.isPlaying ? Icons.pause : Icons.play;
+            setIcon(playPauseBtn, state.nowPlaying.isPlaying ? Icons.pause : Icons.play);
         } else {
             nowPlayingCard.classList.add('hidden');
         }
@@ -224,17 +226,25 @@
             const muteIcon = inputMuteBtn.querySelector('.mute-icon');
             if (state.inputMuted) {
                 inputMuteBtn.classList.add('muted');
-                muteIcon.innerHTML = Icons.micMuted;
+                setIcon(muteIcon, Icons.micMuted);
             } else {
                 inputMuteBtn.classList.remove('muted');
-                muteIcon.innerHTML = Icons.mic;
+                setIcon(muteIcon, Icons.mic);
             }
         }
     }
 
     function updateAppsList(apps) {
+        if (appsCount) {
+            appsCount.textContent = apps.length;
+            appsCount.classList.toggle('hidden', apps.length === 0);
+        }
+
         if (apps.length === 0) {
-            appsList.innerHTML = '<div class="empty-state">No active audio applications</div>';
+            // Only rebuild if it isn't already showing, rather than on every update
+            if (appsList.children.length !== 1 || !appsList.querySelector('.empty-state')) {
+                appsList.innerHTML = '<div class="empty-state">No apps are playing audio right now</div>';
+            }
             return;
         }
 
@@ -284,7 +294,7 @@
             const muteBtn = row.querySelector('.app-mute-btn');
             if (muteBtn) {
                 muteBtn.classList.toggle('muted', app.isMuted);
-                muteBtn.innerHTML = app.isMuted ? Icons.volumeMuted : Icons.volumeHigh;
+                setIcon(muteBtn, app.isMuted ? Icons.volumeMuted : Icons.volumeHigh);
             }
 
             // Update icon
@@ -304,15 +314,16 @@
         row.dataset.processName = app.rawProcessName;
 
         const hasIcon = app.iconUrl && app.iconUrl.length > 0;
+        const safeName = escapeHtml(app.name);
 
         row.innerHTML = `
             ${hasIcon 
-                ? `<img src="${app.iconUrl}" class="app-icon" alt="">` 
-                : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${app.name}">`
+                ? `<img src="${escapeHtml(app.iconUrl)}" class="app-icon" alt="">` 
+                : `<div class="app-icon-placeholder">${Icons.music}</div><img class="app-icon" style="display:none" alt="${safeName}">`
             }
             <div class="app-info">
                 <div class="app-name-row">
-                    <div class="app-name">${app.name}</div>
+                    <div class="app-name">${safeName}</div>
                     <span class="volume-value">${app.volume}%</span>
                 </div>
                 <div class="app-slider-row">
@@ -345,7 +356,21 @@
     }
 
     function updateDeviceList(selectElement, devices, selectedId) {
-        if (!selectElement || devices.length === 0) return;
+        if (!selectElement) return;
+
+        // Nothing plugged in: say so, rather than sitting on "Loading..." forever
+        if (devices.length === 0) {
+            if (!selectElement.disabled) {
+                selectElement.innerHTML = '<option value="">No devices found</option>';
+                selectElement.disabled = true;
+            }
+            return;
+        }
+
+        if (selectElement.disabled) {
+            selectElement.disabled = false;
+            selectElement.innerHTML = '';
+        }
 
         // Only rebuild if devices changed
         const currentOptions = Array.from(selectElement.options).map(o => o.value);
@@ -367,6 +392,21 @@
     }
 
     // --- Helper Functions ---
+
+    // App names can be anything (including nicknames typed on the PC), so never drop them into HTML raw
+    function escapeHtml(text) {
+        return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Swaps an icon only when it actually changes, instead of re-parsing the SVG on every update
+    const currentIcons = new WeakMap();
+    function setIcon(el, html) {
+        if (currentIcons.get(el) !== html) {
+            el.innerHTML = html;
+            currentIcons.set(el, html);
+        }
+    }
+
     function updateSliderFill(slider) {
         const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
         slider.style.setProperty('--fill', pct + '%');
@@ -374,13 +414,17 @@
 
     function formatTime(seconds) {
         if (!seconds || seconds < 0) return '0:00';
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+        // Long videos and podcasts get hours, e.g. 1:05:00 rather than 65:00
+        return hours > 0 ? `${hours}:${mins.toString().padStart(2, '0')}:${secs}` : `${mins}:${secs}`;
     }
 
     function isSliderActive(slider) {
-        if (slider.matches(':active') || document.activeElement === slider) return true;
+        // Not checking focus here: a slider keeps focus after you let go, which froze it and stopped
+        // it ever following changes made on the PC. The interaction window below covers dragging.
+        if (slider.matches(':active')) return true;
         // Prevent snapping back by ignoring server updates for 1500ms after ANY user interaction
         return (Date.now() - window.lastGlobalInteraction) < 1500;
     }
@@ -402,7 +446,7 @@
         switch (status) {
             case 'connected':
                 dot.className = 'status-dot connected';
-                text.innerHTML = `${Icons.link} Connected - enter code above`;
+                text.innerHTML = `${Icons.link} Connected, enter the code above`;
                 break;
             case 'connecting':
                 dot.className = 'status-dot disconnected';
@@ -411,9 +455,8 @@
             case 'reconnecting':
                 dot.className = 'status-dot disconnected';
                 text.textContent = 'Reconnecting...';
-                // Show reconnecting overlay or switch back to pairing
                 if (isPaired) {
-                    clientStatus.textContent = 'Reconnecting...';
+                    setClientStatus('Reconnecting...', false);
                 }
                 break;
             case 'error':
@@ -421,6 +464,12 @@
                 text.textContent = message;
                 break;
         }
+    }
+
+    // The little status pill in the app header
+    function setClientStatus(text, connected) {
+        if (clientStatus) clientStatus.textContent = text;
+        if (clientStatusDot) clientStatusDot.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
     }
 
     // --- Event Listeners ---
@@ -511,31 +560,29 @@
     // --- Theme Toggle ---
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     if (themeToggleBtn) {
-        const updateMetaTheme = (theme) => {
-            const metaTheme = document.querySelector('meta[name="theme-color"]');
-            if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f4f4f8' : '#0a0a0f');
-        };
-
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        if (savedTheme === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
-            themeToggleBtn.innerHTML = Icons.sun;
-            updateMetaTheme('light');
-        }
-
-        themeToggleBtn.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme') || 'dark';
-            if (current === 'dark') {
+        const applyTheme = (theme) => {
+            if (theme === 'light') {
                 document.documentElement.setAttribute('data-theme', 'light');
-                localStorage.setItem('theme', 'light');
-                themeToggleBtn.innerHTML = Icons.sun;
-                updateMetaTheme('light');
             } else {
                 document.documentElement.removeAttribute('data-theme');
-                localStorage.setItem('theme', 'dark');
-                themeToggleBtn.innerHTML = Icons.moon;
-                updateMetaTheme('dark');
             }
+            themeToggleBtn.innerHTML = theme === 'light' ? Icons.sun : Icons.moon;
+
+            const metaTheme = document.querySelector('meta[name="theme-color"]');
+            if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f2f2f6' : '#0b0b10');
+        };
+
+        // Until you pick one, follow the phone's own light/dark setting.
+        // (Storage can be unavailable in private browsing, so don't let that break anything.)
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem('theme'); } catch (e) { }
+        const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        applyTheme(savedTheme || (prefersLight ? 'light' : 'dark'));
+
+        themeToggleBtn.addEventListener('click', () => {
+            const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            applyTheme(next);
+            try { localStorage.setItem('theme', next); } catch (e) { }
         });
     }
 

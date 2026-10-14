@@ -14,6 +14,7 @@ namespace SoundBar
         public App()
         {
             this.InitializeComponent();
+            this.UnhandledException += App_UnhandledException;
         }
 
         /// <summary>
@@ -51,11 +52,36 @@ namespace SoundBar
             {
                 m_window.DispatcherQueue.TryEnqueue(() =>
                 {
-                    m_window.Activate();
+                    m_window.BringToFront();
                 });
             }
         }
 
-        private Window? m_window;
+        /// <summary>
+        /// Last line of defence for errors nobody caught (usually from an async click handler).
+        /// We note it down and keep running, because a volume mixer vanishing is worse than one hiccup.
+        /// </summary>
+        private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                string folder = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "SoundBar");
+                System.IO.Directory.CreateDirectory(folder);
+                string logPath = System.IO.Path.Combine(folder, "error.log");
+
+                // Start afresh once the log gets big, so it can't grow forever
+                var log = new System.IO.FileInfo(logPath);
+                if (log.Exists && log.Length > 256 * 1024) log.Delete();
+
+                System.IO.File.AppendAllText(logPath, $"[{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}] {SoundBar.Services.UpdateService.CurrentVersion}\n{e.Exception}\n\n");
+            }
+            catch { }
+
+            // If the window never got built there's nothing to keep alive. Letting it crash is better than
+            // leaving an invisible process behind that swallows every future launch.
+            e.Handled = m_window != null;
+        }
+
+        private SoundBar.Views.MainWindow? m_window;
     }
 }
