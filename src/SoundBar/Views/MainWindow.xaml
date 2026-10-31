@@ -348,17 +348,22 @@
                                         <ColumnDefinition Width="40"/>
                                     </Grid.ColumnDefinitions>
 
+                                    <!-- The "Hide" glyph (ED1A) isn't in the Windows 10 icon font, so draw it as
+                                         the "View" eye (in both fonts) with a slash across it -->
                                     <Button Grid.Column="0"
-                                            Content="&#xED1A;"
-                                            FontFamily="{ThemeResource SymbolThemeFontFamily}" 
-                                            Background="Transparent" 
+                                            Background="Transparent"
                                             Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
                                             BorderThickness="0" 
                                             Click="HideAppButton_Click" 
                                             ToolTipService.ToolTip="Hide App" 
                                             Padding="0" MinWidth="20" Height="20"
                                             VerticalAlignment="Center"
-                                            Margin="0,0,5,0" />
+                                            Margin="0,0,5,0">
+                                        <Grid Width="16" Height="16">
+                                            <FontIcon Glyph="&#xE890;" FontSize="14"/>
+                                            <PathIcon Data="M2,2.7 L2.7,2 L14,13.3 L13.3,14 Z"/>
+                                        </Grid>
+                                    </Button>
 
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Image Source="{Binding AppIcon}" Width="20" Height="20" Margin="0,0,8,0" Stretch="Uniform" Tapped="AppIcon_Tapped" ToolTipService.ToolTip="Click to Mute"/>
@@ -426,7 +431,7 @@
                                 </Image>
                             </Border>
                             <!-- Fallback Icon behind image -->
-                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE189;" FontSize="64" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE8D6;" FontSize="64" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
                         </Grid>
                     </Viewbox>
 

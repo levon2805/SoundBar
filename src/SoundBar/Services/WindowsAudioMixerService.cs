@@ -41,6 +41,10 @@ namespace SoundBar.Services
             var _seenProcessIdsThisTick = new HashSet<int>();
             bool? systemSoundsMuted = null;
 
+            // Listing processes means snapshotting every process on the PC, so take at most one per tick
+            // and share it, rather than one for every background app that's due a recheck
+            using var processes = new ProcessSnapshot();
+
             try
             {
             // Get the default audio device
@@ -88,7 +92,7 @@ namespace SoundBar.Services
                                 // Re-evaluate every 5 seconds to catch games like Blue Prince that delay their window creation.
                                 if (cachedApp.IsBackground && (DateTime.UtcNow - cachedApp.LastChecked).TotalSeconds > 5)
                                 {
-                                    bool stillBackground = CheckIfBackgroundProcess(cachedApp.RawProcessName);
+                                    bool stillBackground = processes.IsBackground(cachedApp.RawProcessName) ?? true;
                                     _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.UtcNow);
                                     cachedApp.IsBackground = stillBackground; // update local tuple
                                 }
@@ -135,49 +139,11 @@ namespace SoundBar.Services
                                 displayName = char.ToUpper(displayName[0]) + displayName.Substring(1);
                             }
 
-                            bool isBackground = true;
-                            string? safeIconPath = null;
+                            // Identify if this is a background process. If the process list can't be read,
+                            // fall back to checking just this one process for a window.
+                            bool isBackground = processes.IsBackground(processName) ?? HasNoWindow(process);
 
-                            // Identify if this is a background process
-                            try
-                            {
-                                string safeName = processName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-                                var procs = System.Diagnostics.Process.GetProcessesByName(safeName);
-                                try
-                                {
-                                    foreach (var p in procs)
-                                    {
-                                        try
-                                        {
-                                            if (p.MainWindowHandle != IntPtr.Zero)
-                                            {
-                                                isBackground = false;
-                                            }
-                                        }
-                                        catch
-                                        {
-                                            // Ignore access denied for this specific process instance
-                                        }
-                                    }
-                                }
-                                finally
-                                {
-                                    foreach (var p in procs) p.Dispose();
-                                }
-                            }
-                            catch
-                            {
-                                try
-                                {
-                                    isBackground = process.MainWindowHandle == IntPtr.Zero;
-                                }
-                                catch
-                                {
-                                    isBackground = true;
-                                }
-                            }
-
-                            safeIconPath = GetExecutablePathSafely(process);
+                            string? safeIconPath = GetExecutablePathSafely(process);
 
                             // Cache so we never run the slow path for this ProcessId again.
                             // We MUST do this before the _addedNames check so secondary sessions get cached 
@@ -243,38 +209,71 @@ namespace SoundBar.Services
             });
         }
 
-        private static bool CheckIfBackgroundProcess(string rawProcessName)
+        private static bool HasNoWindow(System.Diagnostics.Process process)
         {
-            string safeName = rawProcessName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-            System.Diagnostics.Process[] procs;
             try
             {
-                procs = System.Diagnostics.Process.GetProcessesByName(safeName);
+                return process.MainWindowHandle == IntPtr.Zero;
             }
             catch
             {
-                return true; // Couldn't look, so leave it as it was
+                return true;
             }
-            bool isBackground = true;
-            try
+        }
+
+        /// <summary>
+        /// Every running process, grouped by name. Only taken the first time it's needed, then shared
+        /// for the rest of the tick.
+        /// </summary>
+        private sealed class ProcessSnapshot : IDisposable
+        {
+            private System.Diagnostics.Process[]? _all;
+            private ILookup<string, System.Diagnostics.Process>? _byName;
+            private bool _failed;
+
+            /// <summary>
+            /// True if no process with this name has a window, which is how we tell background apps apart.
+            /// Null if the process list couldn't be read.
+            /// </summary>
+            public bool? IsBackground(string rawProcessName)
             {
-                foreach (var p in procs)
+                if (_byName == null && !_failed)
                 {
                     try
                     {
-                        if (p.MainWindowHandle != IntPtr.Zero)
-                        {
-                            isBackground = false;
-                        }
+                        _all = System.Diagnostics.Process.GetProcesses();
+                        _byName = _all.ToLookup(p => SafeName(p), StringComparer.OrdinalIgnoreCase);
                     }
-                    catch { } // Ignore access denied
+                    catch
+                    {
+                        _failed = true;
+                    }
                 }
+                if (_byName == null) return null;
+
+                string name = rawProcessName.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                foreach (var p in _byName[name])
+                {
+                    try
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero) return false;
+                    }
+                    catch { } // Ignore access denied for this one
+                }
+                return true;
             }
-            finally
+
+            private static string SafeName(System.Diagnostics.Process p)
             {
-                foreach (var p in procs) p.Dispose();
+                try { return p.ProcessName; }
+                catch { return ""; } // Exited while we looked
             }
-            return isBackground;
+
+            public void Dispose()
+            {
+                if (_all == null) return;
+                foreach (var p in _all) p.Dispose();
+            }
         }
 
         public void ClearCache()
