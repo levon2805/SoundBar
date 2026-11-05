@@ -189,15 +189,7 @@
             songArtist.textContent = state.nowPlaying.artist || '';
 
             // Album Art
-            if (state.nowPlaying.albumArtUrl) {
-                if (albumArt.getAttribute('src') !== state.nowPlaying.albumArtUrl) {
-                    albumArt.src = state.nowPlaying.albumArtUrl;
-                }
-                albumArt.classList.add('visible');
-            } else {
-                albumArt.classList.remove('visible');
-                albumArt.removeAttribute('src');
-            }
+            setAlbumArt(state.nowPlaying.albumArtUrl || null);
 
             // Seek slider
             if (!isSliderActive(seekSlider) && state.nowPlaying.durationSeconds > 0) {
@@ -233,6 +225,47 @@
             }
         }
     }
+
+    // --- Album Art ---
+    // The picture only shows once it has actually loaded, so a failed download never leaves a broken
+    // image on screen. If it fails (say the song changed mid-download, or the Wi-Fi blipped) we try again.
+    const MAX_ART_RETRIES = 3;
+    let currentArtUrl = null;
+    let artRetries = 0;
+    let artRetryTimer = null;
+
+    function setAlbumArt(url) {
+        if (url === currentArtUrl) return;
+
+        currentArtUrl = url;
+        artRetries = 0;
+        clearTimeout(artRetryTimer);
+
+        if (!url) {
+            albumArt.classList.remove('visible');
+            albumArt.removeAttribute('src');
+            return;
+        }
+
+        albumArt.src = url;
+    }
+
+    albumArt.addEventListener('load', () => {
+        if (currentArtUrl) albumArt.classList.add('visible');
+    });
+
+    albumArt.addEventListener('error', () => {
+        albumArt.classList.remove('visible');
+        if (!currentArtUrl || artRetries >= MAX_ART_RETRIES) return;
+
+        artRetries++;
+        const url = currentArtUrl;
+        clearTimeout(artRetryTimer);
+        artRetryTimer = setTimeout(() => {
+            // Only if it's still the picture we want; a new song brings its own address
+            if (currentArtUrl === url) albumArt.src = `${url}&retry=${artRetries}`;
+        }, 1000 * artRetries);
+    });
 
     function updateAppsList(apps) {
         if (appsCount) {

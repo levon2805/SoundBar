@@ -65,18 +65,25 @@ namespace SoundBar.Helpers
             try
             {
                 var networks = manager.GetNetworks(NLM_ENUM_NETWORK_CONNECTED);
-                while (networks.Next(1, out var network, out uint fetched) == 0 && fetched == 1)
+                try
                 {
-                    try
+                    while (networks.Next(1, out var network, out uint fetched) == 0 && fetched == 1)
                     {
-                        results.Add(new NetworkInfo(network.IsConnectedToInternet, (NetworkCategory)network.GetCategory()));
-                    }
-                    finally
-                    {
-                        Marshal.ReleaseComObject(network);
+                        try
+                        {
+                            results.Add(new NetworkInfo(network.IsConnectedToInternet, (NetworkCategory)network.GetCategory()));
+                        }
+                        finally
+                        {
+                            Marshal.ReleaseComObject(network);
+                        }
                     }
                 }
-                Marshal.ReleaseComObject(networks);
+                finally
+                {
+                    // Released even if reading one of the networks fails part-way
+                    Marshal.ReleaseComObject(networks);
+                }
             }
             finally
             {

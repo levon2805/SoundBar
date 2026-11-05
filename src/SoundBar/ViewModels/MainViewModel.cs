@@ -1298,7 +1298,7 @@ namespace SoundBar.ViewModels
                     System.IO.Directory.CreateDirectory(folder);
                 }
 
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+                using var started = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
                 {
                     FileName = folder,
                     UseShellExecute = true,
@@ -1731,7 +1731,7 @@ namespace SoundBar.ViewModels
         {
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                using var started = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "rundll32.exe",
                     Arguments = "shell32.dll,Control_RunDLL mmsys.cpl,,2",
@@ -1814,8 +1814,8 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private string? _currentSongThumbnail;
-        public string? CurrentSongThumbnail
+        private Microsoft.UI.Xaml.Media.ImageSource? _currentSongThumbnail;
+        public Microsoft.UI.Xaml.Media.ImageSource? CurrentSongThumbnail
         {
             get => _currentSongThumbnail;
             set
@@ -1941,7 +1941,15 @@ namespace SoundBar.ViewModels
             _ = _mediaInfoService.SeekAsync(seekPosition);
         }
 
+        // Versions before 4.2.0 saved the artwork to Temp; it's shown straight from memory now
         private const string ThumbnailFilePrefix = "SoundBar_Thumbnail_";
+
+        /// <summary>
+        /// The most pixels we decode the artwork's shorter side to. It's shown at most 280 wide, so this is
+        /// still sharp at 200% display scaling, while a 3000×3000 cover (some music files have them) takes
+        /// about 1.4 MB of memory instead of 36 MB.
+        /// </summary>
+        internal const int ThumbnailDecodeSize = 600;
 
         // Bumped on every media change, so a slow artwork load can't overwrite a newer song's art
         private int _thumbnailVersion;
@@ -1959,66 +1967,81 @@ namespace SoundBar.ViewModels
             CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
             CurrentSongArtist = e.Artist;
 
-            if (e.Thumbnail == null)
+            byte[]? bytes = e.Thumbnail;
+            if (bytes == null)
             {
                 SetThumbnail(null, null);
                 return;
             }
 
-            byte[] bytes;
-            try
-            {
-                using var stream = await e.Thumbnail.OpenReadAsync();
-                using var classicStream = stream.AsStreamForRead();
-                using var ms = new System.IO.MemoryStream();
-                await classicStream.CopyToAsync(ms);
-                bytes = ms.ToArray();
-            }
-            catch
-            {
-                if (version == _thumbnailVersion) SetThumbnail(null, null);
-                return;
-            }
-
-            if (version != _thumbnailVersion || _isDisposed) return;
-
             // Players often announce the same track several times (title first, artwork after).
-            // Same picture as before means there's nothing to rewrite or reload.
+            // Same picture as before means there's nothing to reload.
             if (_currentThumbnailBytes != null && CurrentSongThumbnail != null && bytes.AsSpan().SequenceEqual(_currentThumbnailBytes))
                 return;
 
-            string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{ThumbnailFilePrefix}{Guid.NewGuid():N}.png");
+            Microsoft.UI.Xaml.Media.Imaging.BitmapImage image;
             try
             {
-                await System.IO.File.WriteAllBytesAsync(tempPath, bytes);
+                image = await CreateThumbnailImageAsync(bytes);
             }
-            catch
+            catch (Exception ex)
             {
-                TryDeleteFile(tempPath);
+                System.Diagnostics.Debug.WriteLine($"Couldn't show the album art: {ex.Message}");
                 if (version == _thumbnailVersion) SetThumbnail(null, null);
                 return;
             }
 
-            // A newer song turned up while we were writing, so this picture is already out of date
-            if (version != _thumbnailVersion || _isDisposed)
-            {
-                TryDeleteFile(tempPath);
-                return;
-            }
+            // A newer song turned up while we were decoding, so this picture is already out of date
+            if (version != _thumbnailVersion || _isDisposed) return;
 
-            SetThumbnail(tempPath, bytes);
+            SetThumbnail(image, bytes);
         }
 
         /// <summary>
-        /// Swaps in the new artwork file and deletes the one it replaces, so temp files don't pile up.
+        /// Turns the artwork into something the window can show, shrinking big covers on the way in.
+        /// Must be called on the UI thread.
         /// </summary>
-        private void SetThumbnail(string? path, byte[]? bytes)
+        private static async Task<Microsoft.UI.Xaml.Media.Imaging.BitmapImage> CreateThumbnailImageAsync(byte[] bytes)
         {
-            string? oldPath = CurrentSongThumbnail;
-            _currentThumbnailBytes = bytes;
-            CurrentSongThumbnail = path;
+            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(bytes);
+                await writer.StoreAsync();
+                await writer.FlushAsync();
+                writer.DetachStream();
+            }
 
-            if (oldPath != null && oldPath != path) TryDeleteFile(oldPath);
+            var image = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+            try
+            {
+                // Only reads the picture's header, so it's quick
+                stream.Seek(0);
+                var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+                uint width = decoder.OrientedPixelWidth, height = decoder.OrientedPixelHeight;
+
+                // The artwork fills a square, so it's the shorter side that has to be big enough.
+                // Setting just one side keeps the shape. Small pictures are left alone rather than blown up.
+                if (Math.Min(width, height) > ThumbnailDecodeSize)
+                {
+                    if (width <= height) image.DecodePixelWidth = ThumbnailDecodeSize;
+                    else image.DecodePixelHeight = ThumbnailDecodeSize;
+                }
+            }
+            catch
+            {
+                // Couldn't read the header, so let the image work it out at full size
+            }
+
+            stream.Seek(0);
+            await image.SetSourceAsync(stream);
+            return image;
+        }
+
+        private void SetThumbnail(Microsoft.UI.Xaml.Media.ImageSource? image, byte[]? bytes)
+        {
+            _currentThumbnailBytes = bytes;
+            CurrentSongThumbnail = image;
         }
 
         private static void TryDeleteFile(string path)
@@ -2027,7 +2050,8 @@ namespace SoundBar.ViewModels
         }
 
         /// <summary>
-        /// Clears out artwork files left behind if SoundBar was closed unexpectedly last time.
+        /// Clears out artwork files that versions before 4.2.0 saved to Temp and left behind if they were
+        /// closed unexpectedly.
         /// </summary>
         private static void DeleteLeftoverThumbnails()
         {
@@ -2148,7 +2172,7 @@ namespace SoundBar.ViewModels
                         FileName = filePath,
                         UseShellExecute = true
                     };
-                    System.Diagnostics.Process.Start(psi);
+                    using var started = System.Diagnostics.Process.Start(psi);
                 }
             }
             catch (Exception ex)
@@ -2157,20 +2181,29 @@ namespace SoundBar.ViewModels
             }
         }
 
-        public void OpenReleaseNotes()
+        public const string ReadmeUrl = "https://github.com/levon2805/SoundBar#readme";
+
+        public void OpenReleaseNotes() => OpenInBrowser($"https://github.com/levon2805/SoundBar/releases/tag/{UpdateService.CurrentVersion}");
+
+        /// <summary>
+        /// Opens the user guide (the README on GitHub), which walks through every feature with pictures.
+        /// </summary>
+        public void OpenReadme() => OpenInBrowser(ReadmeUrl);
+
+        private static void OpenInBrowser(string url)
         {
             try
             {
-                var processInfo = new System.Diagnostics.ProcessStartInfo
+                // Process.Start hands back a Process for the browser, which we don't need to keep hold of
+                using var browser = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = $"https://github.com/levon2805/SoundBar/releases/tag/{UpdateService.CurrentVersion}",
+                    FileName = url,
                     UseShellExecute = true
-                };
-                System.Diagnostics.Process.Start(processInfo);
+                });
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to open release notes: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Failed to open {url}: {ex.Message}");
             }
         }
 
@@ -2236,8 +2269,9 @@ namespace SoundBar.ViewModels
                 updateDisposable.Dispose();
             }
 
-            // Don't leave the current album art lying around in Temp
-            if (CurrentSongThumbnail != null) TryDeleteFile(CurrentSongThumbnail);
+            // Let go of the album art
+            _currentThumbnailBytes = null;
+            _currentSongThumbnail = null;
         }
     }
 }

@@ -948,8 +948,15 @@
                                 <TextBlock Text="About &amp; Updates" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
                             </Expander.Header>
                             <StackPanel Spacing="15">
-                                <TextBlock Text="Check out the latest features and changes in this version." FontSize="12" TextWrapping="Wrap"/>
-                                <Button Content="View Release Notes" Click="VersionHyperlink_Click"/>
+                                <StackPanel>
+                                    <TextBlock Text="New to SoundBar? The user guide walks through every feature, with pictures." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <Button Content="Open User Guide" Click="UserGuide_Click"
+                                            ToolTipService.ToolTip="Opens the SoundBar guide in your web browser"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="Check out the latest features and changes in this version." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <Button Content="View Release Notes" Click="VersionHyperlink_Click"/>
+                                </StackPanel>
                             </StackPanel>
                         </Expander>
 

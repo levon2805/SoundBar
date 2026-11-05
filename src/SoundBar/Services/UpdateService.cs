@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.1.3";
+        public const string CurrentVersion = "v4.2.0";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -187,7 +187,7 @@ namespace SoundBar.Services
             string sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
 
             // We write a sneaky batch script to the temp folder. This will run independently, wait for us to close, and copy the files over.
-            string currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
+            string currentExePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "SoundBar.exe");
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
@@ -235,7 +235,7 @@ del "%~f0"
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
-            Process.Start(processInfo);
+            using (Process.Start(processInfo)) { }
 
             // Goodbye old version! The batch script will take it from here.
             // Use Application.Current.Exit() for a clean shutdown so Dispose chains run

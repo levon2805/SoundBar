@@ -478,7 +478,7 @@ namespace SoundBar.Views
 
                 if (!System.IO.File.Exists(lnkPath))
                 {
-                    string currentExePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
+                    string currentExePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "SoundBar.exe");
                     string currentAppDir = System.IO.Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
 
                     // Single quotes in paths (e.g. C:\Users\O'Brien) must be doubled for PowerShell
@@ -890,6 +890,11 @@ namespace SoundBar.Views
         private void VersionHyperlink_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.OpenReleaseNotes();
+        }
+
+        private void UserGuide_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.OpenReadme();
         }
     }
 }

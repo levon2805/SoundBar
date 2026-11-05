@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
@@ -9,7 +11,12 @@ namespace SoundBar.Services
     {
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
-        public IRandomAccessStreamReference? Thumbnail { get; set; }
+
+        /// <summary>
+        /// The album art as an image file (usually JPEG or PNG), or null if there isn't any.
+        /// Read once here and shared by everyone listening, so treat it as read-only.
+        /// </summary>
+        public byte[]? Thumbnail { get; set; }
     }
     public class TimelineInfoEventArgs : EventArgs
     {
@@ -142,31 +149,89 @@ namespace SoundBar.Services
             }
         }
 
+        // Bumped every time we start reading the song details, so only the newest read gets announced
+        private int _mediaPropertiesVersion;
+
+        /// <summary>
+        /// How long to wait before each extra look for artwork that hasn't turned up yet. Browsers and some
+        /// players announce the new song first and add the artwork a moment later, sometimes without saying so.
+        /// </summary>
+        private static readonly int[] ArtworkRetryDelaysMs = { 400, 1000, 2000 };
+
+        /// <summary>
+        /// Anything bigger than this isn't album art we want to hold on to.
+        /// </summary>
+        private const long MaxThumbnailBytes = 16 * 1024 * 1024;
+
         private async void UpdateMediaProperties()
         {
             var session = _currentSession;
             if (session == null) return;
 
+            // Players often fire several changes in a row when the song changes. Each read takes a moment and
+            // they can finish in any order, so an older read (say, from before the artwork arrived) must never
+            // overwrite a newer one. Only the latest read is allowed to announce anything.
+            int version = Interlocked.Increment(ref _mediaPropertiesVersion);
+            bool IsStillCurrent() => version == Volatile.Read(ref _mediaPropertiesVersion) && ReferenceEquals(session, _currentSession);
+
             try
             {
-                var props = await session.TryGetMediaPropertiesAsync();
-
-                // The player may have changed while we were waiting. If so, this is old news.
-                if (!ReferenceEquals(session, _currentSession)) return;
-
-                if (props != null)
+                for (int attempt = 0; ; attempt++)
                 {
-                    MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs
+                    var props = await session.TryGetMediaPropertiesAsync();
+                    if (props == null || !IsStillCurrent()) return;
+
+                    byte[]? artwork = await ReadThumbnailAsync(props.Thumbnail);
+                    if (!IsStillCurrent()) return;
+
+                    // Announce the song straight away so the title never waits on the artwork,
+                    // then again once the artwork turns up
+                    if (attempt == 0 || artwork != null)
                     {
-                        Title = props.Title,
-                        Artist = props.Artist,
-                        Thumbnail = props.Thumbnail
-                    });
+                        MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs
+                        {
+                            Title = props.Title ?? string.Empty,
+                            Artist = props.Artist ?? string.Empty,
+                            Thumbnail = artwork
+                        });
+                    }
+
+                    // Got it, nothing's playing, or we've waited long enough (some songs just don't have artwork)
+                    if (artwork != null || string.IsNullOrEmpty(props.Title) || attempt >= ArtworkRetryDelaysMs.Length) return;
+
+                    await Task.Delay(ArtworkRetryDelaysMs[attempt]);
+                    if (!IsStillCurrent()) return;
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to get media properties: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Reads the album art into memory. Returns null if there isn't any, or it couldn't be read yet
+        /// (players sometimes hand over an empty picture while they're still fetching the real one).
+        /// </summary>
+        private static async Task<byte[]?> ReadThumbnailAsync(IRandomAccessStreamReference? thumbnail)
+        {
+            if (thumbnail == null) return null;
+
+            try
+            {
+                using var stream = await thumbnail.OpenReadAsync();
+                if (stream.Size > MaxThumbnailBytes) return null;
+
+                using var source = stream.AsStreamForRead();
+                using var memory = new MemoryStream((int)stream.Size);
+                await source.CopyToAsync(memory);
+
+                return memory.Length > 0 ? memory.ToArray() : null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't read the album art: {ex.Message}");
+                return null;
             }
         }
 
