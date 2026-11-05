@@ -90,5 +90,20 @@ namespace SoundBar.Tests
             Assert.Equal("SoundBar Companion (6767)", CompanionServerService.GetLegacyFirewallRuleName(6767));
             Assert.NotEqual(CompanionServerService.GetLegacyFirewallRuleName(6767), CompanionServerService.GetFirewallRuleName(6767));
         }
+
+        // --- v4.2.0: album art is sent with the right picture type ---
+
+        [Theory]
+        [InlineData(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, "image/png")]
+        [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, "image/jpeg")]
+        [InlineData(new byte[] { (byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'9', (byte)'a' }, "image/gif")]
+        [InlineData(new byte[] { (byte)'B', (byte)'M', 0, 0 }, "image/bmp")]
+        [InlineData(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'E', (byte)'B', (byte)'P' }, "image/webp")]
+        [InlineData(new byte[] { 1, 2, 3 }, "image/jpeg")]
+        [InlineData(new byte[0], "image/jpeg")]
+        public void GetImageContentType_RecognisesCommonPictureTypes(byte[] bytes, string expected)
+        {
+            Assert.Equal(expected, CompanionServerService.GetImageContentType(bytes));
+        }
     }
 }

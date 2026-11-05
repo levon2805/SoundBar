@@ -1,9 +1,9 @@
-const CACHE_NAME = 'soundbar-remote-v18';
+const CACHE_NAME = 'soundbar-remote-v19';
 const ASSETS = [
     '/',
     '/index.html',
     '/style.css?v=5',
-    '/app.js?v=14',
+    '/app.js?v=15',
     '/manifest.json?v=3'
 ];
 
@@ -28,8 +28,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    // We only want to cache our static UI files, NOT the WebSocket or API.
-    if (event.request.url.includes('/ws')) return;
+    // We only want to cache our static UI files, NOT the WebSocket or API (album art, app icons).
+    // Returning without responding lets the browser fetch those itself, straight from the PC.
+    const url = new URL(event.request.url);
+    if (url.pathname === '/ws' || url.pathname.startsWith('/api/')) return;
 
     event.respondWith(
         caches.match(event.request)

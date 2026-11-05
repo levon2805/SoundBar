@@ -57,9 +57,14 @@ namespace SoundBar.Services
         // Current media state cached from events
         private string _currentTitle = string.Empty;
         private string _currentArtist = string.Empty;
-        private volatile string? _currentAlbumArtId;
-        private volatile byte[]? _currentAlbumArtBytes;
-        private int _albumArtVersion;
+        private volatile AlbumArt? _currentAlbumArt;
+
+        /// <summary>
+        /// The current song's artwork. The ID goes in the picture's web address, so a new picture gets a new
+        /// address and phones know to fetch it. Kept together in one object so the ID and the picture can
+        /// never get out of step while a song changes.
+        /// </summary>
+        private sealed record AlbumArt(string Id, byte[] Bytes, string ContentType);
         private double _currentPositionSeconds;
         private double _currentDurationSeconds;
         private bool _currentIsPlaying;
@@ -517,12 +522,17 @@ namespace SoundBar.Services
 
                 if (path == "/api/albumart")
                 {
-                    var artBytes = _currentAlbumArtBytes; // Snapshot to avoid race condition during song change
-                    if (artBytes != null)
+                    // If the song changed since the phone asked, it gets the new artwork, which it's about to ask for anyway
+                    var art = _currentAlbumArt;
+                    if (art != null)
                     {
-                        context.Response.ContentType = "image/jpeg";
-                        context.Response.ContentLength64 = artBytes.Length;
-                        context.Response.OutputStream.Write(artBytes, 0, artBytes.Length);
+                        context.Response.ContentType = art.ContentType;
+                        context.Response.ContentLength64 = art.Bytes.Length;
+
+                        // Every picture gets its own address, so a cached copy would never be used again.
+                        // Not caching stops the phone's browser filling up with old artwork.
+                        context.Response.Headers.Add("Cache-Control", "no-store");
+                        context.Response.OutputStream.Write(art.Bytes, 0, art.Bytes.Length);
                     }
                     else
                     {
@@ -946,6 +956,7 @@ namespace SoundBar.Services
             if (!string.IsNullOrEmpty(_currentTitle))
             {
                 // Calculate live position based on timeline update time
+                var art = _currentAlbumArt;
                 double livePosition = _currentPositionSeconds;
                 if (_currentIsPlaying && _lastTimelineUpdate != DateTimeOffset.MinValue)
                 {
@@ -957,7 +968,7 @@ namespace SoundBar.Services
                 {
                     Title = _currentTitle,
                     Artist = _currentArtist,
-                    AlbumArtUrl = _currentAlbumArtId != null ? $"/api/albumart?id={_currentAlbumArtId}" : null,
+                    AlbumArtUrl = art != null ? $"/api/albumart?id={art.Id}" : null,
                     PositionSeconds = livePosition,
                     DurationSeconds = _currentDurationSeconds,
                     IsPlaying = _currentIsPlaying
@@ -1052,49 +1063,36 @@ namespace SoundBar.Services
             _currentTitle = e.Title;
             _currentArtist = e.Artist;
 
-            // Every change gets a number, so a slow conversion can't overwrite a newer song's art
-            int version = Interlocked.Increment(ref _albumArtVersion);
+            byte[]? bytes = e.Thumbnail;
+            if (bytes == null)
+            {
+                _currentAlbumArt = null;
+                return;
+            }
 
-            // Convert album art thumbnail to raw bytes for HTTP serving
-            if (e.Thumbnail != null)
-            {
-                _ = ConvertThumbnailAsync(e.Thumbnail, version);
-            }
-            else
-            {
-                _currentAlbumArtId = null;
-                _currentAlbumArtBytes = null;
-            }
+            // Same picture as before (players often announce a track more than once), so keep the
+            // same address and the phone won't download it again
+            var current = _currentAlbumArt;
+            if (current != null && bytes.AsSpan().SequenceEqual(current.Bytes)) return;
+
+            _currentAlbumArt = new AlbumArt(Guid.NewGuid().ToString("N"), bytes, GetImageContentType(bytes));
         }
 
-        private async Task ConvertThumbnailAsync(Windows.Storage.Streams.IRandomAccessStreamReference thumbnail, int version)
+        /// <summary>
+        /// Works out what kind of picture the artwork is from its first few bytes. Players hand over PNGs as
+        /// well as JPEGs, and phones are fussier than desktop browsers about being told the wrong type.
+        /// </summary>
+        internal static string GetImageContentType(ReadOnlySpan<byte> bytes)
         {
-            try
-            {
-                using var stream = await thumbnail.OpenReadAsync();
-                using var netStream = stream.AsStreamForRead();
-                using var ms = new MemoryStream();
-                await netStream.CopyToAsync(ms);
-                byte[] bytes = ms.ToArray();
+            if (bytes.Length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return "image/png";
+            if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return "image/jpeg";
+            if (bytes.Length >= 6 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F') return "image/gif";
+            if (bytes.Length >= 2 && bytes[0] == 'B' && bytes[1] == 'M') return "image/bmp";
+            if (bytes.Length >= 12 && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F' &&
+                bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P') return "image/webp";
 
-                if (version != Volatile.Read(ref _albumArtVersion)) return;
-
-                // Same picture as before (players often announce a track more than once), so keep the
-                // same URL and the phone won't download it again
-                var currentBytes = _currentAlbumArtBytes;
-                if (currentBytes != null && _currentAlbumArtId != null && bytes.AsSpan().SequenceEqual(currentBytes)) return;
-
-                _currentAlbumArtBytes = bytes;
-                _currentAlbumArtId = Guid.NewGuid().ToString("N");
-            }
-            catch
-            {
-                if (version == Volatile.Read(ref _albumArtVersion))
-                {
-                    _currentAlbumArtId = null;
-                    _currentAlbumArtBytes = null;
-                }
-            }
+            // Most players use JPEG, and it's what we always said before
+            return "image/jpeg";
         }
 
         private void OnTimelineInfoChanged(object? sender, TimelineInfoEventArgs e)
