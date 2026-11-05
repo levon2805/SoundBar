@@ -214,3 +214,6 @@ secrets.*
 *.bak
 *.orig
 *.rej
+
+# Local working files (e.g. README screenshot decks)
+temp/
