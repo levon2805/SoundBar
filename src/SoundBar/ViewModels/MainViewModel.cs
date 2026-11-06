@@ -1881,6 +1881,26 @@ namespace SoundBar.ViewModels
             }
         }
 
+        // --- Settings page groups that can be folded away ---
+
+        public bool IsSettingsGroupFolded(string group) =>
+            _settingsService.Settings.FoldedSettingsGroups.Contains(group, StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Remembers whether a settings group is folded, so it stays that way next time.
+        /// </summary>
+        public void SetSettingsGroupFolded(string group, bool folded)
+        {
+            var folds = _settingsService.Settings.FoldedSettingsGroups;
+            bool isFolded = IsSettingsGroupFolded(group);
+            if (folded == isFolded) return;
+
+            if (folded) folds.Add(group);
+            else folds.RemoveAll(g => string.Equals(g, group, StringComparison.OrdinalIgnoreCase));
+
+            _settingsService.SaveSettings();
+        }
+
         // --- Settings page headings that include a count ---
 
         public string HiddenAppsTitle => $"Hidden Apps ({HiddenApps.Count})";

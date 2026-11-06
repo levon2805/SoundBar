@@ -622,6 +622,10 @@ namespace SoundBar.Views
             MainContentGrid.Visibility = Visibility.Collapsed;
             SettingsContentGrid.Visibility = Visibility.Visible;
             SettingsButton.Visibility = Visibility.Collapsed;
+            FooterPanel.Visibility = Visibility.Collapsed;
+
+            // Fold away the groups the user folded last time
+            FilterSettings(SettingsSearchBox.Text);
         }
 
         private void CloseSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -629,6 +633,7 @@ namespace SoundBar.Views
             SettingsContentGrid.Visibility = Visibility.Collapsed;
             MainContentGrid.Visibility = Visibility.Visible;
             SettingsButton.Visibility = Visibility.Visible;
+            FooterPanel.Visibility = Visibility.Visible;
 
             // Start fresh next time (this also folds back any sections the search opened)
             SettingsSearchBox.Text = string.Empty;
@@ -652,17 +657,36 @@ namespace SoundBar.Views
         }
 
         /// <summary>
-        /// Shows only the settings that contain every word typed, and opens any matching section.
-        /// Matches the card's own text, its group heading, and the extra words in its Tag.
+        /// Clicking a group heading (Look, Sound...) folds it away or opens it again. SoundBar remembers this.
+        /// While searching, every match is shown regardless, so the headings don't fold then.
+        /// </summary>
+        private void SettingsGroupHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button header || !string.IsNullOrWhiteSpace(SettingsSearchBox.Text)) return;
+
+            string group = GetSettingsGroupName(header);
+            ViewModel.SetSettingsGroupFolded(group, !ViewModel.IsSettingsGroupFolded(group));
+            FilterSettings(SettingsSearchBox.Text);
+        }
+
+        private static string GetSettingsGroupName(FrameworkElement header) =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(header);
+
+        /// <summary>
+        /// Decides what's showing on the settings page. With no search, folded groups are hidden.
+        /// With a search, only cards containing every word typed are shown (even in folded groups),
+        /// and matching sections are opened. A card matches on its own text, its group name and its Tag words.
         /// </summary>
         private void FilterSettings(string? query)
         {
             var words = (query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            bool searching = words.Length > 0;
             _settingsSearchText ??= BuildSettingsSearchText();
 
             bool anyMatch = false;
             FrameworkElement? groupHeader = null;
             bool groupHasMatch = false;
+            bool groupFolded = false;
 
             foreach (var child in SettingsStackPanel.Children.OfType<FrameworkElement>())
             {
@@ -670,22 +694,24 @@ namespace SoundBar.Views
 
                 if (child.Tag is "#group")
                 {
-                    if (groupHeader != null) groupHeader.Visibility = groupHasMatch ? Visibility.Visible : Visibility.Collapsed;
+                    FinishSettingsGroup(groupHeader, groupHasMatch, searching);
                     groupHeader = child;
                     groupHasMatch = false;
+                    groupFolded = !searching && ViewModel.IsSettingsGroupFolded(GetSettingsGroupName(child));
+                    SetSettingsGroupArrow(child, groupFolded);
                     continue;
                 }
 
                 string text = _settingsSearchText.TryGetValue(child, out var found) ? found : string.Empty;
                 bool matches = words.All(w => text.Contains(w, StringComparison.CurrentCultureIgnoreCase));
-                child.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
+                child.Visibility = matches && !groupFolded ? Visibility.Visible : Visibility.Collapsed;
 
                 if (matches)
                 {
                     groupHasMatch = true;
                     anyMatch = true;
 
-                    if (words.Length > 0 && child is Expander { IsExpanded: false } expander)
+                    if (searching && child is Expander { IsExpanded: false } expander)
                     {
                         expander.IsExpanded = true;
                         _expandedBySearch.Add(expander);
@@ -693,7 +719,7 @@ namespace SoundBar.Views
                 }
             }
 
-            if (groupHeader != null) groupHeader.Visibility = groupHasMatch ? Visibility.Visible : Visibility.Collapsed;
+            FinishSettingsGroup(groupHeader, groupHasMatch, searching);
 
             if (words.Length == 0)
             {
@@ -702,6 +728,26 @@ namespace SoundBar.Views
             }
 
             NoSettingsMatchText.Visibility = anyMatch ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// A group heading always shows when not searching (so folded groups can be opened),
+        /// and only when something in it matches while searching.
+        /// </summary>
+        private static void FinishSettingsGroup(FrameworkElement? header, bool hasMatch, bool searching)
+        {
+            if (header != null) header.Visibility = !searching || hasMatch ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Points the heading's arrow down when the group is open and right when it's folded.
+        /// </summary>
+        private static void SetSettingsGroupArrow(FrameworkElement header, bool folded)
+        {
+            if ((header as Button)?.Content is Panel panel && panel.Children.OfType<FontIcon>().FirstOrDefault() is { } arrow)
+            {
+                arrow.Glyph = folded ? "" : "";
+            }
         }
 
         private Dictionary<FrameworkElement, string> BuildSettingsSearchText()
@@ -713,7 +759,7 @@ namespace SoundBar.Views
             {
                 if (child.Tag is "#group")
                 {
-                    groupName = (child as TextBlock)?.Text ?? string.Empty;
+                    groupName = GetSettingsGroupName(child);
                     continue;
                 }
 

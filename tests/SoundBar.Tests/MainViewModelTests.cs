@@ -278,6 +278,30 @@ namespace SoundBar.Tests
         }
 
         [Fact]
+        public void SettingsGroups_StartOpen_AndFoldingIsRemembered()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.False(viewModel.IsSettingsGroupFolded("Sound"));
+
+                viewModel.SetSettingsGroupFolded("Sound", true);
+                viewModel.SetSettingsGroupFolded("Sound", true); // Folding twice doesn't add it twice
+                Assert.True(viewModel.IsSettingsGroupFolded("sound"));
+                Assert.Equal(new[] { "Sound" }, new SettingsService(path).Settings.FoldedSettingsGroups);
+
+                viewModel.SetSettingsGroupFolded("Sound", false);
+                Assert.False(viewModel.IsSettingsGroupFolded("Sound"));
+                Assert.Empty(new SettingsService(path).Settings.FoldedSettingsGroups);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void BluetoothPage_IsClosedByDefault_AndOtherPagesKeepItClosed()
         {
             var (viewModel, settings, path) = CreateViewModel();

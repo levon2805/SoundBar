@@ -1,7 +1,11 @@
 using System;
+using System.Linq;
+using System.Threading.Tasks;
+using SoundBar.Helpers;
 using SoundBar.Models;
 using SoundBar.ViewModels;
 using Windows.Devices.Enumeration;
+using Windows.Media.Devices;
 using Xunit;
 
 namespace SoundBar.Tests
@@ -107,6 +111,25 @@ namespace SoundBar.Tests
             Assert.Equal("Pairing cancelled.", BluetoothViewModel.DescribePairingFailure(DevicePairingResultStatus.RejectedByHandler, "Buds"));
             Assert.Contains("Buds", BluetoothViewModel.DescribePairingFailure(DevicePairingResultStatus.AuthenticationTimeout, "Buds"));
             Assert.Contains("pairing mode", BluetoothViewModel.DescribePairingFailure(DevicePairingResultStatus.Failed, "Buds"));
+        }
+
+        [Fact]
+        public async Task AudioEndpoints_AreStillFound_AfterCSCoreHasUsedTheSameComClass()
+        {
+            // CSCore (which the mixer uses) declares its own COM class for Windows' audio device enumerator.
+            // Once that's been created, "new" on a second [ComImport] class with the same ID throws
+            // InvalidCastException, which quietly hid the Connect button for every speaker and headset.
+            using (new CSCore.CoreAudioAPI.MMDeviceEnumerator()) { }
+
+            var outputs = await DeviceInformation.FindAllAsync(MediaDevice.GetAudioRenderSelector(), new[] { "System.Devices.ContainerId" });
+            var containerId = outputs
+                .Select(d => d.Properties.TryGetValue("System.Devices.ContainerId", out var value) && value is Guid id ? id : Guid.Empty)
+                .FirstOrDefault(id => id != Guid.Empty);
+
+            // No sound devices on this machine (a build server, say), so there's nothing to look up
+            if (containerId == Guid.Empty) return;
+
+            Assert.NotEmpty(BluetoothAudioControl.GetEndpoints(containerId));
         }
     }
 }

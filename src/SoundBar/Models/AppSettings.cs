@@ -152,6 +152,11 @@ namespace SoundBar.Models
         /// (how it looked before v4.3.0) instead of in the ⋯ menu. The Show... settings above still apply.
         /// </summary>
         public bool UseClassicTitleBar { get; set; } = false;
+
+        /// <summary>
+        /// Settings page groups (Look, Sound...) the user has folded away. Everything starts open.
+        /// </summary>
+        public System.Collections.Generic.List<string> FoldedSettingsGroups { get; set; } = new System.Collections.Generic.List<string>();
     }
 
     /// <summary>

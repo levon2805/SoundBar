@@ -92,14 +92,16 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="AppTitleText"
-                           Grid.Column="0"
-                           Text="SoundBar" 
-                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                           VerticalAlignment="Center" 
-                           Margin="0"
-                           FontSize="20"
-                           FontWeight="Bold"/>
+                <!-- Shrinks (never grows) the title when the classic title bar's buttons leave it too little room,
+                     rather than cutting it off part-way through the name -->
+                <Viewbox Grid.Column="0" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,4,0">
+                    <TextBlock x:Name="AppTitleText"
+                               Text="SoundBar" 
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                               Margin="0"
+                               FontSize="20"
+                               FontWeight="Bold"/>
+                </Viewbox>
 
 
 
@@ -137,7 +139,7 @@
                         FontSize="14"
                         Margin="0,0,5,0"
                         Click="SettingsButton_Click"
-                        ToolTipService.ToolTip="Settings"/>
+                        ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings"/>
 
                 <!-- More menu: keeps the title bar tidy on small windows. Each item can be hidden in Layout Settings,
                      or the classic title bar (separate buttons) can be switched back on there. -->
@@ -153,7 +155,7 @@
                         FontSize="14"
                         Margin="0,0,5,0"
                         Visibility="{x:Bind ViewModel.MoreMenuVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="More">
+                        ToolTipService.ToolTip="More" AutomationProperties.Name="More">
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <ToggleMenuFlyoutItem x:Name="PinMenuItem"
@@ -196,7 +198,7 @@
                         Margin="0,0,5,0"
                         Click="PinButton_Click"
                         Visibility="{x:Bind ViewModel.ClassicPinButtonVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="Always on Top"/>
+                        ToolTipService.ToolTip="Always on Top" AutomationProperties.Name="Always on Top"/>
 
                 <Button Grid.Column="4"
                         Content="&#xE8EA;"
@@ -210,7 +212,7 @@
                         Margin="0,0,5,0"
                         Click="CompanionButton_Click"
                         Visibility="{x:Bind ViewModel.ClassicCompanionButtonVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="Mobile Companion"/>
+                        ToolTipService.ToolTip="Mobile Companion" AutomationProperties.Name="Mobile Companion"/>
 
                 <Button Grid.Column="5"
                         Content="&#xE702;"
@@ -224,7 +226,7 @@
                         Margin="0,0,5,0"
                         Click="BluetoothButton_Click"
                         Visibility="{x:Bind ViewModel.ClassicBluetoothButtonVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="Bluetooth"/>
+                        ToolTipService.ToolTip="Bluetooth" AutomationProperties.Name="Bluetooth"/>
 
                 <ToggleButton x:Name="DndToggleButton"
                               Grid.Column="6"
@@ -240,7 +242,7 @@
                               IsChecked="{x:Bind ViewModel.IsDoNotDisturbEnabled, Mode=TwoWay}"
                               Checked="DndToggleButton_Changed"
                               Unchecked="DndToggleButton_Changed"
-                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)"/>
+                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)" AutomationProperties.Name="Do Not Disturb (Mute System Sounds)"/>
 
                 <Button x:Name="MinimizeButton"
                         Grid.Column="7"
@@ -252,7 +254,8 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         BorderThickness="0"
                         FontSize="14"
-                        Click="MinimizeButton_Click"/>
+                        Click="MinimizeButton_Click"
+                        ToolTipService.ToolTip="Minimise" AutomationProperties.Name="Minimise"/>
 
                 <Button Grid.Column="8"
                         Content="&#xE711;"
@@ -263,7 +266,8 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         BorderThickness="0"
                         FontSize="14"
-                        Click="CloseButton_Click"/>
+                        Click="CloseButton_Click"
+                        ToolTipService.ToolTip="Close" AutomationProperties.Name="Close"/>
             </Grid>
 
             <!-- Main Content -->
@@ -331,7 +335,7 @@
                                 CornerRadius="4"
                                 Click="MicMuteButton_Click"
                                 Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}"
-                                ToolTipService.ToolTip="Mute/Unmute Microphone">
+                                ToolTipService.ToolTip="Mute/Unmute Microphone" AutomationProperties.Name="Mute/Unmute Microphone">
                             <Grid>
                                 <!-- Live mic -->
                                 <TextBlock Text="&#xE720;"
@@ -409,7 +413,7 @@
                                     BorderBrush="Transparent"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    ToolTipService.ToolTip="Force refresh audio sessions"
+                                    ToolTipService.ToolTip="Force refresh audio sessions" AutomationProperties.Name="Force refresh audio sessions"
                                     Padding="4">
                                 <FontIcon Glyph="&#xE72C;" FontSize="12"/>
                             </Button>
@@ -445,7 +449,7 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                             BorderThickness="0" 
                                             Click="HideAppButton_Click" 
-                                            ToolTipService.ToolTip="Hide App" 
+                                            ToolTipService.ToolTip="Hide App" AutomationProperties.Name="Hide App"
                                             Padding="0" MinWidth="20" Height="20"
                                             VerticalAlignment="Center"
                                             Margin="0,0,5,0">
@@ -573,7 +577,7 @@
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 Click="CloseCompanionButton_Click"
-                                ToolTipService.ToolTip="Back"/>
+                                ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
 
                         <TextBlock Text="Mobile Companion"
                                    FontSize="20" FontWeight="Bold"
@@ -603,7 +607,8 @@
                                     BorderThickness="2"
                                     HorizontalAlignment="Center"
                                     IsEnabled="{x:Bind ViewModel.CanStartCompanion, Mode=OneWay}"
-                                    Click="CompanionPowerOn_Click">
+                                    Click="CompanionPowerOn_Click"
+                                    ToolTipService.ToolTip="Turn on the companion server" AutomationProperties.Name="Turn on the companion server">
                                 <TextBlock Text="&#xE7E8;"
                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                            FontSize="50"
@@ -685,7 +690,7 @@
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 Click="CloseBluetoothButton_Click"
-                                ToolTipService.ToolTip="Back"/>
+                                ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
 
                         <TextBlock Text="Bluetooth"
                                    FontSize="20" FontWeight="Bold"
@@ -736,7 +741,7 @@
                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     <TextBlock Grid.Column="1" Text="Bluetooth" VerticalAlignment="Center"
                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                    <ToggleSwitch x:Name="BluetoothRadioToggle"
+                                    <ToggleSwitch x:Name="BluetoothRadioToggle" AutomationProperties.Name="Bluetooth on or off"
                                                   Grid.Column="2"
                                                   MinWidth="0"
                                                   HorizontalAlignment="Right"
@@ -816,7 +821,7 @@
                                                         VerticalAlignment="Center"
                                                         IsEnabled="{Binding IsIdle}"
                                                         Click="BluetoothDeviceMore_Click"
-                                                        ToolTipService.ToolTip="More options"/>
+                                                        ToolTipService.ToolTip="More options" AutomationProperties.Name="More options"/>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -918,7 +923,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="ToggleMusicPlayerMode_Click" 
-                                ToolTipService.ToolTip="Toggle Music Player View" />
+                                ToolTipService.ToolTip="Toggle Music Player View" AutomationProperties.Name="Toggle Music Player View" />
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
                         <!-- Previous -->
@@ -933,7 +938,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPrevious_Click" 
-                                ToolTipService.ToolTip="Previous Track" />
+                                ToolTipService.ToolTip="Previous Track" AutomationProperties.Name="Previous Track" />
 
                         <!-- Play/Pause -->
                         <Button Background="{ThemeResource ControlFillColorSecondaryBrush}" 
@@ -943,7 +948,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPlayPause_Click" 
-                                ToolTipService.ToolTip="Play / Pause">
+                                ToolTipService.ToolTip="Play / Pause" AutomationProperties.Name="Play / Pause">
                             <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE768;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE769;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -962,7 +967,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaNext_Click" 
-                                ToolTipService.ToolTip="Next Track" />
+                                ToolTipService.ToolTip="Next Track" AutomationProperties.Name="Next Track" />
 
                         <!-- Mute -->
                         <Button Content="&#xE74F;" 
@@ -976,7 +981,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaMute_Click" 
-                                ToolTipService.ToolTip="Mute System" />
+                                ToolTipService.ToolTip="Mute System" AutomationProperties.Name="Mute System" />
                     </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -1000,7 +1005,7 @@
                             FontSize="18"
                             Margin="0,0,10,0"
                             Click="CloseSettingsButton_Click"
-                            ToolTipService.ToolTip="Back"/>
+                            ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
                     <TextBlock Text="Settings"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                FontSize="18"
@@ -1029,7 +1034,7 @@
                                    Style="{StaticResource SettingsDescriptionStyle}"/>
 
                         <!-- ===== LOOK ===== -->
-                        <TextBlock Text="Look" Tag="#group" Style="{StaticResource SettingsGroupHeaderStyle}"/>
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Look" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Look settings"><Grid><TextBlock Text="Look" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="theme dark mode light mode colour color appearance">
                             <Grid.ColumnDefinitions>
@@ -1113,7 +1118,7 @@
                         </Grid>
 
                         <!-- ===== MAIN PAGE ===== -->
-                        <TextBlock Text="Main page" Tag="#group" Style="{StaticResource SettingsGroupHeaderStyle}"/>
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Main page" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Main page settings"><Grid><TextBlock Text="Main page" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="layout sections show hide output device input microphone mic master volume active apps media controls">
                             <StackPanel>
@@ -1160,7 +1165,7 @@
                         </Grid>
 
                         <!-- ===== SOUND ===== -->
-                        <TextBlock Text="Sound" Tag="#group" Style="{StaticResource SettingsGroupHeaderStyle}"/>
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Sound" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Sound settings"><Grid><TextBlock Text="Sound" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="do not disturb dnd mute quiet notifications system sounds">
                             <Grid.ColumnDefinitions>
@@ -1251,7 +1256,7 @@
                         </Grid>
 
                         <!-- ===== APPS ===== -->
-                        <TextBlock Text="Apps" Tag="#group" Style="{StaticResource SettingsGroupHeaderStyle}"/>
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Apps" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Apps settings"><Grid><TextBlock Text="Apps" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
                         <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                   Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -1308,7 +1313,7 @@
                         </Expander>
 
                         <!-- ===== GENERAL ===== -->
-                        <TextBlock Text="General" Tag="#group" Style="{StaticResource SettingsGroupHeaderStyle}"/>
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="General" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide General settings"><Grid><TextBlock Text="General" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="run at startup start with windows boot login launch automatically">
                             <Grid.ColumnDefinitions>
@@ -1373,8 +1378,8 @@
                 </ScrollViewer>
             </Grid>
 
-            <!-- Footer -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
+            <!-- Footer (hidden while Settings is open: the About card shows the version there, and this would sit over the cards) -->
+            <StackPanel x:Name="FooterPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
                 <!-- App Version (Global) - click to open this version's release notes -->
                 <HyperlinkButton Content="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"

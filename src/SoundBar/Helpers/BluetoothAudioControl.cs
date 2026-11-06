@@ -37,7 +37,7 @@ namespace SoundBar.Helpers
             IMMDeviceEnumerator? enumerator = null;
             try
             {
-                enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+                enumerator = CreateEnumerator();
                 AddEndpoints(enumerator, EDataFlowRender, containerId, results);
                 AddEndpoints(enumerator, EDataFlowCapture, containerId, results);
             }
@@ -91,7 +91,7 @@ namespace SoundBar.Helpers
             IMMDeviceEnumerator? enumerator = null;
             try
             {
-                enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+                enumerator = CreateEnumerator();
                 foreach (var filterId in filterIds)
                 {
                     if (SendToDriver(enumerator, filterId!, propertyId)) anyAccepted = true;
@@ -274,8 +274,15 @@ namespace SoundBar.Helpers
             public uint Flags;
         }
 
-        [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-        private class MMDeviceEnumeratorComObject { }
+        private static readonly Guid CLSID_MMDeviceEnumerator = new("BCDE0395-E52F-467C-8E3D-C4579291692E");
+
+        /// <summary>
+        /// Creates Windows' audio device enumerator. We go by its class ID rather than declaring a [ComImport] class,
+        /// because CSCore declares one for the same class ID: once that's loaded, .NET hands back CSCore's type and
+        /// "new" on our own class throws InvalidCastException.
+        /// </summary>
+        private static IMMDeviceEnumerator CreateEnumerator() =>
+            (IMMDeviceEnumerator)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_MMDeviceEnumerator, throwOnError: true)!)!;
 
         [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IMMDeviceEnumerator
