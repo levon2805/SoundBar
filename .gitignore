@@ -217,3 +217,7 @@ secrets.*
 
 # Local working files (e.g. README screenshot decks)
 temp/
+
+# Personal release tool (builds, zips and signs a release onto the Desktop)
+release.cmd
+ReleaseTools/MakeRelease/

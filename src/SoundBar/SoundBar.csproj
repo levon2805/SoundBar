@@ -46,7 +46,11 @@
 
 
   <ItemGroup>
-    <Content Include="Assets\SoundBar.ico" />
+    <!-- Loaded at runtime for the window and shortcut icons, so it must be in the output and in publish builds -->
+    <Content Include="Assets\SoundBar.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <None Include="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

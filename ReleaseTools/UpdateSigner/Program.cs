@@ -3,8 +3,8 @@ using System.IO;
 using System.Security.Cryptography;
 
 /*
-cd "C:\Personal Projects\SoundBar\ReleaseTools\UpdateSigner"
-dotnet run -- "C:\Users\UKGC\Desktop\SoundBar.zip"
+Run from this folder (it reads private.key from here):
+dotnet run -- "path\to\SoundBar.zip"
 */
 
 namespace UpdateSigner
