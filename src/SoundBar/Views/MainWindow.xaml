@@ -49,8 +49,12 @@
 
             <!-- Title Bar -->
             <Grid x:Name="TitleBarGrid" Grid.Row="0" Margin="0,0,0,15" Padding="20,20,20,0" Background="Transparent" Canvas.ZIndex="10">
+                <!-- Title, then: ⋯ menu, Settings, [classic: Pin, Companion, Bluetooth], DND, Minimise, Close.
+                     Hidden buttons take up no room. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -106,9 +110,53 @@
                         Click="SettingsButton_Click"
                         ToolTipService.ToolTip="Settings"/>
 
+                <!-- More menu: keeps the title bar tidy on small windows. Each item can be hidden in Layout Settings,
+                     or the classic title bar (separate buttons) can be switched back on there. -->
+                <Button x:Name="MoreButton"
+                        Grid.Column="1"
+                        Content="&#xE712;"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Margin="0,0,5,0"
+                        Visibility="{x:Bind ViewModel.MoreMenuVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="More">
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <ToggleMenuFlyoutItem x:Name="PinMenuItem"
+                                                  Text="Always on Top"
+                                                  Click="PinButton_Click"
+                                                  Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}">
+                                <ToggleMenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE718;"/>
+                                </ToggleMenuFlyoutItem.Icon>
+                            </ToggleMenuFlyoutItem>
+                            <MenuFlyoutItem Text="Mobile Companion"
+                                            Click="CompanionButton_Click"
+                                            Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8EA;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Bluetooth"
+                                            Click="BluetoothButton_Click"
+                                            Visibility="{x:Bind ViewModel.BluetoothButtonVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE702;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Classic title bar: the ⋯ menu's items as their own buttons, as before v4.3.0 -->
                 <Button x:Name="PinButton"
                         Grid.Column="3"
-                        Content="&#xE718;" 
+                        Content="&#xE718;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -118,12 +166,11 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="PinButton_Click"
-                        Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.ClassicPinButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Always on Top"/>
 
-                <Button x:Name="CompanionButton"
-                        Grid.Column="4"
-                        Content="&#xE8EA;" 
+                <Button Grid.Column="4"
+                        Content="&#xE8EA;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -133,11 +180,25 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="CompanionButton_Click"
-                        Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.ClassicCompanionButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="Mobile Companion"/>
 
+                <Button Grid.Column="5"
+                        Content="&#xE702;"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        BorderThickness="0"
+                        FontSize="16"
+                        Margin="0,0,5,0"
+                        Click="BluetoothButton_Click"
+                        Visibility="{x:Bind ViewModel.ClassicBluetoothButtonVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="Bluetooth"/>
+
                 <ToggleButton x:Name="DndToggleButton"
-                              Grid.Column="5"
+                              Grid.Column="6"
                               Content="&#xE708;" 
                               FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               Width="36" Height="36"
@@ -153,7 +214,7 @@
                               ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)"/>
 
                 <Button x:Name="MinimizeButton"
-                        Grid.Column="5"
+                        Grid.Column="7"
                         Content="&#xE921;" 
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
@@ -164,8 +225,8 @@
                         FontSize="14"
                         Click="MinimizeButton_Click"/>
 
-                <Button Grid.Column="6"
-                        Content="&#xE711;" 
+                <Button Grid.Column="8"
+                        Content="&#xE711;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -574,6 +635,217 @@
                     </Grid>
                 </Grid>
 
+                <!-- BLUETOOTH VIEW: what it shows (and the Windows device watchers behind it) only exists while it's open -->
+                <Grid Grid.Row="0" Grid.RowSpan="2"
+                      Visibility="{x:Bind ViewModel.BluetoothViewVisibility, Mode=OneWay}"
+                      Padding="15,15,15,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <!-- Back to the mixer -->
+                        <Button Content="&#xE72B;"
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Background="Transparent"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                BorderThickness="0"
+                                Padding="5"
+                                FontSize="18"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Click="CloseBluetoothButton_Click"
+                                ToolTipService.ToolTip="Back"/>
+
+                        <TextBlock Text="Bluetooth"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="10" Padding="0,0,0,10">
+
+                            <!-- Still asking Windows about the radio -->
+                            <ProgressRing IsActive="True" Width="24" Height="24" Margin="0,30,0,0"
+                                          HorizontalAlignment="Center"
+                                          Visibility="{x:Bind ViewModel.Bluetooth.LoadingVisibility, Mode=OneWay}"/>
+
+                            <!-- No Bluetooth on this PC -->
+                            <StackPanel Spacing="8" Margin="0,30,0,0" HorizontalAlignment="Center" MaxWidth="300"
+                                        Visibility="{x:Bind ViewModel.Bluetooth.UnavailableVisibility, Mode=OneWay}">
+                                <FontIcon Glyph="&#xE702;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                <TextBlock Text="Bluetooth isn't available on this PC"
+                                           FontSize="16" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="If it should be, check it hasn't been switched off in Device Manager, or try Windows' own Bluetooth settings."
+                                           FontSize="13" TextAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <HyperlinkButton Content="Open Windows Bluetooth settings" HorizontalAlignment="Center" Click="OpenBluetoothSettings_Click"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.Bluetooth.AvailableVisibility, Mode=OneWay}">
+
+                                <!-- Something went wrong -->
+                                <InfoBar Severity="Warning"
+                                         IsClosable="True"
+                                         IsOpen="{x:Bind ViewModel.Bluetooth.HasMessage, Mode=OneWay}"
+                                         Message="{x:Bind ViewModel.Bluetooth.Message, Mode=OneWay}"
+                                         CloseButtonClick="BluetoothMessage_CloseButtonClick"/>
+
+                                <!-- On/off -->
+                                <Grid Padding="12,6" CornerRadius="8"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE702;" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Grid.Column="1" Text="Bluetooth" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                    <ToggleSwitch x:Name="BluetoothRadioToggle"
+                                                  Grid.Column="2"
+                                                  MinWidth="0"
+                                                  HorizontalAlignment="Right"
+                                                  OnContent="On" OffContent="Off"
+                                                  IsOn="{x:Bind ViewModel.Bluetooth.IsRadioOn, Mode=OneWay}"
+                                                  IsEnabled="{x:Bind ViewModel.Bluetooth.CanToggleRadio, Mode=OneWay}"
+                                                  Toggled="BluetoothRadioToggle_Toggled"/>
+                                </Grid>
+
+                                <!-- Pairing question (check or type a PIN) -->
+                                <Border Padding="12" CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="1"
+                                        Visibility="{x:Bind ViewModel.Bluetooth.PromptVisibility, Mode=OneWay}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="{x:Bind ViewModel.Bluetooth.PromptText, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <TextBox x:Name="BluetoothPinBox"
+                                                 PlaceholderText="PIN"
+                                                 KeyDown="BluetoothPinBox_KeyDown"
+                                                 Visibility="{x:Bind ViewModel.Bluetooth.PinEntryVisibility, Mode=OneWay}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                                    Visibility="{x:Bind ViewModel.Bluetooth.PromptButtonsVisibility, Mode=OneWay}">
+                                            <Button Style="{StaticResource AccentButtonStyle}"
+                                                    Content="{x:Bind ViewModel.Bluetooth.PromptAcceptText, Mode=OneWay}"
+                                                    Click="BluetoothPromptAccept_Click"/>
+                                            <Button Content="Cancel" Click="BluetoothPromptCancel_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Paired devices -->
+                                <TextBlock Text="Your devices" FontSize="14" FontWeight="SemiBold" Margin="0,6,0,0"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                                <TextBlock Text="No devices paired yet. Use Search below to add one."
+                                           FontSize="13" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           Visibility="{x:Bind ViewModel.Bluetooth.NoPairedDevicesVisibility, Mode=OneWay}"/>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Bluetooth.PairedDevices, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6" Padding="12,8" CornerRadius="8"
+                                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="{Binding Glyph}" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Content="{Binding ConnectButtonText}"
+                                                        Visibility="{Binding ConnectButtonVisibility}"
+                                                        IsEnabled="{Binding CanAct}"
+                                                        Margin="8,0,0,0" Padding="10,4"
+                                                        VerticalAlignment="Center"
+                                                        Click="BluetoothConnect_Click"/>
+                                                <Button Grid.Column="3"
+                                                        Content="&#xE712;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        Width="32" Height="32"
+                                                        Padding="0" MinWidth="0" MinHeight="0"
+                                                        Margin="4,0,0,0"
+                                                        Background="Transparent"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        BorderThickness="0"
+                                                        VerticalAlignment="Center"
+                                                        IsEnabled="{Binding IsIdle}"
+                                                        Click="BluetoothDeviceMore_Click"
+                                                        ToolTipService.ToolTip="More options"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Finding new devices -->
+                                <Grid Margin="0,6,0,0">
+                                    <TextBlock Text="Add a device" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <Button HorizontalAlignment="Right" Padding="10,4"
+                                            Content="{x:Bind ViewModel.Bluetooth.ScanButtonText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.Bluetooth.CanScan, Mode=OneWay}"
+                                            Click="BluetoothScan_Click"/>
+                                </Grid>
+
+                                <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.Bluetooth.ScanningVisibility, Mode=OneWay}">
+                                    <ProgressBar IsIndeterminate="True"/>
+                                    <TextBlock Text="Looking for devices. Make sure yours is switched on and in pairing mode."
+                                               FontSize="13" TextWrapping="Wrap"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Bluetooth.NearbyDevices, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6" Padding="12,8" CornerRadius="8"
+                                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="{Binding Glyph}" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding NearbyStatusText}" FontSize="12"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Content="Pair"
+                                                        IsEnabled="{Binding CanAct}"
+                                                        Margin="8,0,0,0" Padding="10,4"
+                                                        VerticalAlignment="Center"
+                                                        Click="BluetoothPair_Click"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <HyperlinkButton Content="More Bluetooth settings" Margin="0,4,0,0" Click="OpenBluetoothSettings_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
 
                 <!-- Media Controls -->
                 <StackPanel x:Name="MediaControlsPanel" Grid.Row="2" Margin="0,10,0,-10" Visibility="{x:Bind ViewModel.MediaControlsVisibility, Mode=OneWay}">
@@ -753,8 +1025,13 @@
                                 <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
                                 <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Pin to Top Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Mobile Companion Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                                <TextBlock Text="Title bar: keep Always on Top, Mobile Companion and Bluetooth tucked in the &#x22EF; menu, or give each its own button like before."
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <ToggleSwitch Header="Title Bar Buttons" OnContent="Separate (classic)" OffContent="In the &#x22EF; menu" IsOn="{x:Bind ViewModel.UseClassicTitleBar, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Always on Top" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Mobile Companion" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                                <ToggleSwitch Header="Bluetooth" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowBluetoothButton, Mode=TwoWay}"/>
                             </StackPanel>
                         </Expander>
 

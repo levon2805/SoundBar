@@ -295,6 +295,11 @@ namespace SoundBar.Views
             {
                 UpdateIODeviceLayout();
             }
+            if (e.PropertyName == nameof(MainViewModel.IsBluetoothViewMode) && !ViewModel.IsBluetoothViewMode && BluetoothPinBox != null)
+            {
+                // The page stays built while hidden, so don't leave a half-typed PIN in it for next time
+                BluetoothPinBox.Text = string.Empty;
+            }
             if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
             {
                 ApplyWindowOpacity(ViewModel.WindowOpacity);
@@ -548,9 +553,13 @@ namespace SoundBar.Views
             _settingsService.SaveSettings();
         }
 
-        // Updates the pin icon visual based on state
+        // Shows whether Always on Top is on: a tick in the ⋯ menu, and a lit-up pin on the classic title bar
         private void UpdatePinButtonVisual(bool isPinned)
         {
+            if (PinMenuItem != null)
+            {
+                PinMenuItem.IsChecked = isPinned;
+            }
             if (PinButton != null)
             {
                 PinButton.Opacity = isPinned ? 1.0 : 0.4;
@@ -718,16 +727,176 @@ namespace SoundBar.Views
             if (SettingsContentGrid.Visibility == Visibility.Visible)
             {
                 CloseSettingsButton_Click(sender, e);
-                ViewModel.IsCompanionViewMode = true;
-                return;
             }
 
-            ViewModel.IsCompanionViewMode = !ViewModel.IsCompanionViewMode;
+            ViewModel.IsCompanionViewMode = true;
         }
 
         private void CloseCompanionButton_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.IsCompanionViewMode = false;
+        }
+
+        // --- Bluetooth page ---
+
+        private void BluetoothButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Like the companion screen, the Bluetooth page lives in the main view
+            if (SettingsContentGrid.Visibility == Visibility.Visible)
+            {
+                CloseSettingsButton_Click(sender, e);
+            }
+
+            ViewModel.IsBluetoothViewMode = true;
+        }
+
+        private void CloseBluetoothButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.IsBluetoothViewMode = false;
+        }
+
+        private async void BluetoothRadioToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            // Also fires when the page itself moves the switch to match Windows, so only act on a real change
+            var bluetooth = ViewModel.Bluetooth;
+            if (bluetooth == null || sender is not ToggleSwitch toggle || toggle.IsOn == bluetooth.IsRadioOn) return;
+
+            try
+            {
+                await bluetooth.SetRadioAsync(toggle.IsOn);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth switch failed: {ex.Message}");
+            }
+        }
+
+        private void BluetoothMessage_CloseButtonClick(InfoBar sender, object args)
+        {
+            ViewModel.Bluetooth?.ClearMessage();
+        }
+
+        private void BluetoothScan_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.Bluetooth?.ToggleScan();
+        }
+
+        private async void BluetoothConnect_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Bluetooth is not { } bluetooth || (sender as FrameworkElement)?.DataContext is not BluetoothDeviceItem device) return;
+
+            try
+            {
+                await bluetooth.ToggleConnectionAsync(device);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth connect failed: {ex.Message}");
+            }
+        }
+
+        private async void BluetoothPair_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Bluetooth is not { } bluetooth || (sender as FrameworkElement)?.DataContext is not BluetoothDeviceItem device) return;
+
+            try
+            {
+                await bluetooth.PairAsync(device);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth pairing failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The ⋯ button on a paired device. The menu is built here so it always knows which device it's for.
+        /// </summary>
+        private void BluetoothDeviceMore_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement button || button.DataContext is not BluetoothDeviceItem device) return;
+
+            var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+
+            // Speakers and headsets can be connected and disconnected without unpairing them.
+            // Other devices (mice, keyboards, controllers) connect by themselves when they're switched on.
+            var connect = new MenuFlyoutItem
+            {
+                Text = device.IsAudio ? device.ConnectButtonText : "Connects when switched on",
+                Icon = new FontIcon { Glyph = "" },
+                IsEnabled = device.IsAudio && device.CanAct
+            };
+            connect.Click += (_, _) => BluetoothConnect_Click(button, new RoutedEventArgs());
+            menu.Items.Add(connect);
+
+            var remove = new MenuFlyoutItem { Text = "Remove device", Icon = new FontIcon { Glyph = "" } };
+            remove.Click += async (_, _) => await RemoveBluetoothDeviceAsync(device);
+            menu.Items.Add(remove);
+
+            menu.ShowAt(button);
+        }
+
+        private async Task RemoveBluetoothDeviceAsync(BluetoothDeviceItem device)
+        {
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = $"Remove {device.Name}?",
+                    Content = new TextBlock
+                    {
+                        Text = "It will need to be paired again before it can connect to this PC.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Remove",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Close,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+                // The page may have been closed while the question was up
+                if (ViewModel.Bluetooth is { } bluetooth) await bluetooth.RemoveAsync(device);
+            }
+            catch (Exception ex)
+            {
+                // ShowAsync throws if another dialog is already open
+                System.Diagnostics.Debug.WriteLine($"Couldn't remove the Bluetooth device: {ex.Message}");
+            }
+        }
+
+        private void BluetoothPromptAccept_Click(object sender, RoutedEventArgs e) => AnswerBluetoothPrompt(true);
+
+        private void BluetoothPromptCancel_Click(object sender, RoutedEventArgs e) => AnswerBluetoothPrompt(false);
+
+        private void BluetoothPinBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                AnswerBluetoothPrompt(true);
+            }
+        }
+
+        private void AnswerBluetoothPrompt(bool accepted)
+        {
+            var bluetooth = ViewModel.Bluetooth;
+            if (bluetooth == null) return;
+
+            bluetooth.AnswerPrompt(accepted, BluetoothPinBox?.Text);
+
+            // Once the question has gone, clear the PIN so it's not sitting there next time
+            if (bluetooth.PromptKind != BluetoothPromptKind.EnterPin && BluetoothPinBox != null)
+            {
+                BluetoothPinBox.Text = string.Empty;
+            }
+        }
+
+        private void OpenBluetoothSettings_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.OpenBluetoothSettings();
         }
 
         private void ResetOpacity_Click(object sender, RoutedEventArgs e)

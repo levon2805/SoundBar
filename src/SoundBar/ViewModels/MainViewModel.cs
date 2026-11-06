@@ -721,6 +721,7 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.ShowPinButton = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(PinButtonVisibility));
+                    RaiseTitleBarChanged();
                     _settingsService.SaveSettings();
                 }
             }
@@ -737,11 +738,66 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.ShowCompanionButton = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CompanionButtonVisibility));
+                    RaiseTitleBarChanged();
                     _settingsService.SaveSettings();
                 }
             }
         }
         public Microsoft.UI.Xaml.Visibility CompanionButtonVisibility => ShowCompanionButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        public bool ShowBluetoothButton
+        {
+            get => _settingsService.Settings.ShowBluetoothButton;
+            set
+            {
+                if (_settingsService.Settings.ShowBluetoothButton != value)
+                {
+                    _settingsService.Settings.ShowBluetoothButton = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(BluetoothButtonVisibility));
+                    RaiseTitleBarChanged();
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+        public Microsoft.UI.Xaml.Visibility BluetoothButtonVisibility => ShowBluetoothButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        /// <summary>
+        /// Separate title bar buttons (as before v4.3.0) instead of the ⋯ menu.
+        /// </summary>
+        public bool UseClassicTitleBar
+        {
+            get => _settingsService.Settings.UseClassicTitleBar;
+            set
+            {
+                if (_settingsService.Settings.UseClassicTitleBar != value)
+                {
+                    _settingsService.Settings.UseClassicTitleBar = value;
+                    OnPropertyChanged();
+                    RaiseTitleBarChanged();
+                    _settingsService.SaveSettings();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The title bar's ⋯ menu only shows up if it's in use and there's something in it.
+        /// </summary>
+        public Microsoft.UI.Xaml.Visibility MoreMenuVisibility =>
+            !UseClassicTitleBar && (ShowPinButton || ShowCompanionButton || ShowBluetoothButton) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        // The classic title bar's separate buttons
+        public Microsoft.UI.Xaml.Visibility ClassicPinButtonVisibility => UseClassicTitleBar && ShowPinButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility ClassicCompanionButtonVisibility => UseClassicTitleBar && ShowCompanionButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility ClassicBluetoothButtonVisibility => UseClassicTitleBar && ShowBluetoothButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private void RaiseTitleBarChanged()
+        {
+            OnPropertyChanged(nameof(MoreMenuVisibility));
+            OnPropertyChanged(nameof(ClassicPinButtonVisibility));
+            OnPropertyChanged(nameof(ClassicCompanionButtonVisibility));
+            OnPropertyChanged(nameof(ClassicBluetoothButtonVisibility));
+        }
 
         // Run At Startup Property
         private bool _runAtStartup;
@@ -1751,8 +1807,13 @@ namespace SoundBar.ViewModels
                 if (_isMusicPlayerMode != value)
                 {
                     _isMusicPlayerMode = value;
-                    if (value) IsCompanionViewMode = false; // Turn off companion view if turning on music player
-                    
+                    if (value)
+                    {
+                        // Only one view at a time
+                        IsCompanionViewMode = false;
+                        IsBluetoothViewMode = false;
+                    }
+
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(MusicPlayerViewVisibility));
                     OnPropertyChanged(nameof(MixerViewVisibility));
@@ -1769,8 +1830,13 @@ namespace SoundBar.ViewModels
                 if (_isCompanionViewMode != value)
                 {
                     _isCompanionViewMode = value;
-                    if (value) IsMusicPlayerMode = false; // Turn off music player if turning on companion view
-                    
+                    if (value)
+                    {
+                        // Only one view at a time
+                        IsMusicPlayerMode = false;
+                        IsBluetoothViewMode = false;
+                    }
+
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CompanionViewVisibility));
                     OnPropertyChanged(nameof(MixerViewVisibility));
@@ -1778,9 +1844,67 @@ namespace SoundBar.ViewModels
             }
         }
 
+        private bool _isBluetoothViewMode = false;
+        /// <summary>
+        /// The Bluetooth page. Its view model only exists while the page is open,
+        /// so the device watchers it runs stop as soon as you leave.
+        /// </summary>
+        public bool IsBluetoothViewMode
+        {
+            get => _isBluetoothViewMode;
+            set
+            {
+                if (_isBluetoothViewMode == value || _isDisposed) return;
+
+                _isBluetoothViewMode = value;
+
+                if (value)
+                {
+                    // Only one view at a time
+                    IsMusicPlayerMode = false;
+                    IsCompanionViewMode = false;
+
+                    // Made before the page appears, so the page has something to show from the start
+                    Bluetooth = new BluetoothViewModel(_dispatcherQueue);
+                    _ = Bluetooth.InitializeAsync();
+                }
+
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BluetoothViewVisibility));
+                OnPropertyChanged(nameof(MixerViewVisibility));
+
+                if (!value) CloseBluetooth();
+            }
+        }
+
+        private BluetoothViewModel? _bluetooth;
+        public BluetoothViewModel? Bluetooth
+        {
+            get => _bluetooth;
+            private set
+            {
+                if (ReferenceEquals(_bluetooth, value)) return;
+                _bluetooth = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private void CloseBluetooth()
+        {
+            var bluetooth = Bluetooth;
+            Bluetooth = null;
+            bluetooth?.Dispose();
+        }
+
+        /// <summary>
+        /// Windows' own Bluetooth page, for anything ours doesn't cover.
+        /// </summary>
+        public void OpenBluetoothSettings() => OpenInBrowser("ms-settings:bluetooth");
+
         public Microsoft.UI.Xaml.Visibility MusicPlayerViewVisibility => IsMusicPlayerMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         public Microsoft.UI.Xaml.Visibility CompanionViewVisibility => IsCompanionViewMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => (IsMusicPlayerMode || IsCompanionViewMode) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        public Microsoft.UI.Xaml.Visibility BluetoothViewVisibility => IsBluetoothViewMode ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility MixerViewVisibility => (IsMusicPlayerMode || IsCompanionViewMode || IsBluetoothViewMode) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         
         // Companion Server UI states (Power button vs QR code)
         public Microsoft.UI.Xaml.Visibility CompanionPowerButtonVisibility => IsCompanionServerRunning ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
@@ -2223,6 +2347,11 @@ namespace SoundBar.ViewModels
 
             _companionServer?.Dispose();
             _companionServer = null;
+
+            // Stops any Bluetooth device watchers if the window closes with the Bluetooth page open
+            var bluetooth = _bluetooth;
+            _bluetooth = null;
+            bluetooth?.Dispose();
 
             _settingsService.ChangedExternally -= SettingsService_ChangedExternally;
 

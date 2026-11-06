@@ -131,14 +131,27 @@ namespace SoundBar.Models
         public bool ShowActiveApps { get; set; } = true;
 
         /// <summary>
-        /// Whether the pin (always on top) button is visible in the title bar.
+        /// Whether Always on Top is offered in the title bar's ⋯ menu.
+        /// (It was its own title bar button before v4.3.0, hence the name.)
         /// </summary>
         public bool ShowPinButton { get; set; } = true;
 
         /// <summary>
-        /// Whether the mobile companion button is visible in the title bar.
+        /// Whether Mobile Companion is offered in the title bar's ⋯ menu.
+        /// (It was its own title bar button before v4.3.0, hence the name.)
         /// </summary>
         public bool ShowCompanionButton { get; set; } = true;
+
+        /// <summary>
+        /// Whether Bluetooth is offered in the title bar's ⋯ menu.
+        /// </summary>
+        public bool ShowBluetoothButton { get; set; } = true;
+
+        /// <summary>
+        /// Puts Always on Top, Mobile Companion and Bluetooth back on the title bar as separate buttons
+        /// (how it looked before v4.3.0) instead of in the ⋯ menu. The Show... settings above still apply.
+        /// </summary>
+        public bool UseClassicTitleBar { get; set; } = false;
     }
 
     /// <summary>

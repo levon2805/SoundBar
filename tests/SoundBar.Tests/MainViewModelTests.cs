@@ -202,6 +202,104 @@ namespace SoundBar.Tests
             }
         }
 
+        // --- v4.3.0: the title bar's ⋯ menu ---
+
+        [Fact]
+        public void MoreMenu_IsVisibleByDefault_WithBluetoothInIt()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MoreMenuVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.BluetoothButtonVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void MoreMenu_DisappearsOnlyWhenEverythingInItIsHidden()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.ShowPinButton = false;
+                viewModel.ShowCompanionButton = false;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MoreMenuVisibility);
+
+                viewModel.ShowBluetoothButton = false;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.BluetoothButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.MoreMenuVisibility);
+                Assert.False(new SettingsService(path).Settings.ShowBluetoothButton);
+
+                viewModel.ShowCompanionButton = true;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MoreMenuVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ClassicTitleBar_SwapsTheMenuForSeparateButtons_AndIsSaved()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                // Off by default: everything's in the ⋯ menu
+                Assert.False(viewModel.UseClassicTitleBar);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicPinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicCompanionButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicBluetoothButtonVisibility);
+
+                viewModel.UseClassicTitleBar = true;
+
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.MoreMenuVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicPinButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicCompanionButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicBluetoothButtonVisibility);
+                Assert.True(new SettingsService(path).Settings.UseClassicTitleBar);
+
+                // The individual show/hide switches still apply
+                viewModel.ShowCompanionButton = false;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicCompanionButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicPinButtonVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void BluetoothPage_IsClosedByDefault_AndOtherPagesKeepItClosed()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.False(viewModel.IsBluetoothViewMode);
+                Assert.Null(viewModel.Bluetooth);
+
+                viewModel.IsCompanionViewMode = true;
+                viewModel.IsMusicPlayerMode = true;
+
+                Assert.False(viewModel.IsBluetoothViewMode);
+                Assert.Null(viewModel.Bluetooth);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.BluetoothViewVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
         [Fact]
         public void SettingsEditedByHand_AreAppliedAndNotOverwritten()
         {
