@@ -958,6 +958,10 @@ namespace SoundBar.ViewModels
             AllowedBackgroundApps = new ObservableCollection<string>(_settingsService.Settings.AllowedBackgroundApps);
             AudioDevices = new ObservableCollection<AudioDeviceModel>();
 
+            // Settings shows how many are in each list, so you know before opening it
+            HiddenApps.CollectionChanged += HiddenApps_CollectionChanged;
+            SystemBackgroundApps.CollectionChanged += SystemBackgroundApps_CollectionChanged;
+
             try 
             {
                 _progressTimer = new DispatcherTimer();
@@ -1877,6 +1881,18 @@ namespace SoundBar.ViewModels
             }
         }
 
+        // --- Settings page headings that include a count ---
+
+        public string HiddenAppsTitle => $"Hidden Apps ({HiddenApps.Count})";
+
+        public string BackgroundAppsTitle => $"Background Apps ({SystemBackgroundApps.Count})";
+
+        private void HiddenApps_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+            OnPropertyChanged(nameof(HiddenAppsTitle));
+
+        private void SystemBackgroundApps_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+            OnPropertyChanged(nameof(BackgroundAppsTitle));
+
         private BluetoothViewModel? _bluetooth;
         public BluetoothViewModel? Bluetooth
         {
@@ -2354,6 +2370,9 @@ namespace SoundBar.ViewModels
             bluetooth?.Dispose();
 
             _settingsService.ChangedExternally -= SettingsService_ChangedExternally;
+
+            HiddenApps.CollectionChanged -= HiddenApps_CollectionChanged;
+            SystemBackgroundApps.CollectionChanged -= SystemBackgroundApps_CollectionChanged;
 
             _pollingCts?.Cancel();
             _pollingCts?.Dispose();

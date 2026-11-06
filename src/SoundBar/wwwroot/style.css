@@ -10,8 +10,8 @@
     --bg-control-active: rgba(255, 255, 255, 0.12);
     --track: rgba(255, 255, 255, 0.12);
     --text-primary: #f2f2f7;
-    --text-secondary: rgba(242, 242, 247, 0.62);
-    --text-muted: rgba(242, 242, 247, 0.38);
+    --text-secondary: rgba(242, 242, 247, 0.70);
+    --text-muted: rgba(242, 242, 247, 0.56);
     --accent: #4a9eff;
     --accent-hover: #3d8ef0;
     --accent-soft: rgba(74, 158, 255, 0.18);
@@ -43,8 +43,8 @@
     --bg-control-active: rgba(0, 0, 0, 0.1);
     --track: rgba(0, 0, 0, 0.12);
     --text-primary: #16161d;
-    --text-secondary: rgba(22, 22, 29, 0.68);
-    --text-muted: rgba(22, 22, 29, 0.45);
+    --text-secondary: rgba(22, 22, 29, 0.74);
+    --text-muted: rgba(22, 22, 29, 0.62);
     --accent: #0a6ed1;
     --accent-hover: #075fb5;
     --accent-soft: rgba(10, 110, 209, 0.14);

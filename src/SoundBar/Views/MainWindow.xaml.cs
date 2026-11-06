@@ -562,7 +562,7 @@ namespace SoundBar.Views
             }
             if (PinButton != null)
             {
-                PinButton.Opacity = isPinned ? 1.0 : 0.4;
+                PinButton.Opacity = isPinned ? 1.0 : 0.6; // Dimmed when off, but still easy to see in light mode
             }
         }
 
@@ -577,7 +577,7 @@ namespace SoundBar.Views
                 }
                 else
                 {
-                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorDisabledBrush"];
+                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }
         }
@@ -629,6 +629,139 @@ namespace SoundBar.Views
             SettingsContentGrid.Visibility = Visibility.Collapsed;
             MainContentGrid.Visibility = Visibility.Visible;
             SettingsButton.Visibility = Visibility.Visible;
+
+            // Start fresh next time (this also folds back any sections the search opened)
+            SettingsSearchBox.Text = string.Empty;
+        }
+
+        // --- Settings search ---
+
+        /// <summary>
+        /// Every searchable word for each card, built the first time someone searches.
+        /// </summary>
+        private Dictionary<FrameworkElement, string>? _settingsSearchText;
+
+        /// <summary>
+        /// Sections the search opened, so they can be folded away again when the search is cleared.
+        /// </summary>
+        private readonly HashSet<Expander> _expandedBySearch = new();
+
+        private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            FilterSettings(sender.Text);
+        }
+
+        /// <summary>
+        /// Shows only the settings that contain every word typed, and opens any matching section.
+        /// Matches the card's own text, its group heading, and the extra words in its Tag.
+        /// </summary>
+        private void FilterSettings(string? query)
+        {
+            var words = (query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            _settingsSearchText ??= BuildSettingsSearchText();
+
+            bool anyMatch = false;
+            FrameworkElement? groupHeader = null;
+            bool groupHasMatch = false;
+
+            foreach (var child in SettingsStackPanel.Children.OfType<FrameworkElement>())
+            {
+                if (ReferenceEquals(child, NoSettingsMatchText)) continue;
+
+                if (child.Tag is "#group")
+                {
+                    if (groupHeader != null) groupHeader.Visibility = groupHasMatch ? Visibility.Visible : Visibility.Collapsed;
+                    groupHeader = child;
+                    groupHasMatch = false;
+                    continue;
+                }
+
+                string text = _settingsSearchText.TryGetValue(child, out var found) ? found : string.Empty;
+                bool matches = words.All(w => text.Contains(w, StringComparison.CurrentCultureIgnoreCase));
+                child.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
+
+                if (matches)
+                {
+                    groupHasMatch = true;
+                    anyMatch = true;
+
+                    if (words.Length > 0 && child is Expander { IsExpanded: false } expander)
+                    {
+                        expander.IsExpanded = true;
+                        _expandedBySearch.Add(expander);
+                    }
+                }
+            }
+
+            if (groupHeader != null) groupHeader.Visibility = groupHasMatch ? Visibility.Visible : Visibility.Collapsed;
+
+            if (words.Length == 0)
+            {
+                foreach (var expander in _expandedBySearch) expander.IsExpanded = false;
+                _expandedBySearch.Clear();
+            }
+
+            NoSettingsMatchText.Visibility = anyMatch ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private Dictionary<FrameworkElement, string> BuildSettingsSearchText()
+        {
+            var result = new Dictionary<FrameworkElement, string>();
+            string groupName = string.Empty;
+
+            foreach (var child in SettingsStackPanel.Children.OfType<FrameworkElement>())
+            {
+                if (child.Tag is "#group")
+                {
+                    groupName = (child as TextBlock)?.Text ?? string.Empty;
+                    continue;
+                }
+
+                var text = new System.Text.StringBuilder(groupName);
+                if (child.Tag is string keywords) text.Append(' ').Append(keywords);
+                CollectSearchText(child, text, 0);
+                result[child] = text.ToString();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Gathers the words on a settings card: titles, descriptions, switch and button labels.
+        /// Walks the card's own content rather than what's on screen, so closed sections are searchable too.
+        /// </summary>
+        private static void CollectSearchText(object? node, System.Text.StringBuilder text, int depth)
+        {
+            if (node == null || depth > 12) return;
+
+            switch (node)
+            {
+                case string s:
+                    text.Append(' ').Append(s);
+                    break;
+                case TextBlock textBlock:
+                    text.Append(' ').Append(textBlock.Text);
+                    break;
+                case ToggleSwitch toggle:
+                    CollectSearchText(toggle.Header, text, depth + 1);
+                    break;
+                case Expander expander:
+                    CollectSearchText(expander.Header, text, depth + 1);
+                    CollectSearchText(expander.Content, text, depth + 1);
+                    break;
+                case ItemsControl:
+                    // Lists of app names would make every search match these cards
+                    break;
+                case ContentControl content: // Buttons, check boxes
+                    CollectSearchText(content.Content, text, depth + 1);
+                    break;
+                case Border border:
+                    CollectSearchText(border.Child, text, depth + 1);
+                    break;
+                case Panel panel:
+                    foreach (var child in panel.Children) CollectSearchText(child, text, depth + 1);
+                    break;
+            }
         }
 
         private void OpenBackgroundFolder_Click(object sender, RoutedEventArgs e)
