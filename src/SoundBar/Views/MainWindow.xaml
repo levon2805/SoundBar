@@ -9,19 +9,48 @@
         <Border.Resources>
             <ResourceDictionary>
                 <ResourceDictionary.ThemeDictionaries>
+                    <!-- Muted red: darker on light backgrounds and softer on dark ones, so it's easy to read in both -->
                     <ResourceDictionary x:Key="Light">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8EAEAEA" />
+                        <SolidColorBrush x:Key="MuteTrueBrush" Color="#C42B1C" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="Dark">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8202020" />
+                        <SolidColorBrush x:Key="MuteTrueBrush" Color="#FF6B6B" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="Default">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8202020" />
+                        <SolidColorBrush x:Key="MuteTrueBrush" Color="#FF6B6B" />
                     </ResourceDictionary>
                 </ResourceDictionary.ThemeDictionaries>
                 <SolidColorBrush x:Key="FocusTrueBrush" Color="#280078D7"/>
                 <SolidColorBrush x:Key="FocusFalseBrush" Color="Transparent"/>
-                <SolidColorBrush x:Key="MuteTrueBrush" Color="Red"/>
+
+                <!-- Settings page building blocks (plain text and layout only, so no control templates are replaced) -->
+                <Style x:Key="SettingsGroupHeaderStyle" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="13"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <Setter Property="Margin" Value="2,14,0,2"/>
+                </Style>
+                <Style x:Key="SettingsTitleStyle" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="14"/>
+                    <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <Setter Property="TextWrapping" Value="Wrap"/>
+                </Style>
+                <Style x:Key="SettingsDescriptionStyle" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="12"/>
+                    <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <Setter Property="TextWrapping" Value="Wrap"/>
+                </Style>
+                <Style x:Key="SettingsCardStyle" TargetType="Grid">
+                    <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                    <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="CornerRadius" Value="4"/>
+                    <Setter Property="Padding" Value="16,10"/>
+                    <Setter Property="MinHeight" Value="48"/>
+                </Style>
 
                 <helpers:BoolToBrushConverter x:Key="FocusedToBrushConverter"
                                              TrueBrush="{StaticResource FocusTrueBrush}"
@@ -49,6 +78,8 @@
 
             <!-- Title Bar -->
             <Grid x:Name="TitleBarGrid" Grid.Row="0" Margin="0,0,0,15" Padding="20,20,20,0" Background="Transparent" Canvas.ZIndex="10">
+                <!-- Title, then: ⋯ menu, Settings, [classic: Pin, Companion, Bluetooth], DND, Minimise, Close.
+                     Hidden buttons take up no room. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -57,16 +88,20 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="AppTitleText"
-                           Grid.Column="0"
-                           Text="SoundBar" 
-                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                           VerticalAlignment="Center" 
-                           Margin="0"
-                           FontSize="20"
-                           FontWeight="Bold"/>
+                <!-- Shrinks (never grows) the title when the classic title bar's buttons leave it too little room,
+                     rather than cutting it off part-way through the name -->
+                <Viewbox Grid.Column="0" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,4,0">
+                    <TextBlock x:Name="AppTitleText"
+                               Text="SoundBar" 
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
+                               Margin="0"
+                               FontSize="20"
+                               FontWeight="Bold"/>
+                </Viewbox>
 
 
 
@@ -104,11 +139,55 @@
                         FontSize="14"
                         Margin="0,0,5,0"
                         Click="SettingsButton_Click"
-                        ToolTipService.ToolTip="Settings"/>
+                        ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings"/>
 
+                <!-- More menu: keeps the title bar tidy on small windows. Each item can be hidden in Layout Settings,
+                     or the classic title bar (separate buttons) can be switched back on there. -->
+                <Button x:Name="MoreButton"
+                        Grid.Column="1"
+                        Content="&#xE712;"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        BorderThickness="0"
+                        FontSize="14"
+                        Margin="0,0,5,0"
+                        Visibility="{x:Bind ViewModel.MoreMenuVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="More" AutomationProperties.Name="More">
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <ToggleMenuFlyoutItem x:Name="PinMenuItem"
+                                                  Text="Always on Top"
+                                                  Click="PinButton_Click"
+                                                  Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}">
+                                <ToggleMenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE718;"/>
+                                </ToggleMenuFlyoutItem.Icon>
+                            </ToggleMenuFlyoutItem>
+                            <MenuFlyoutItem Text="Mobile Companion"
+                                            Click="CompanionButton_Click"
+                                            Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8EA;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Text="Bluetooth"
+                                            Click="BluetoothButton_Click"
+                                            Visibility="{x:Bind ViewModel.BluetoothButtonVisibility, Mode=OneWay}">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE702;"/>
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Classic title bar: the ⋯ menu's items as their own buttons, as before v4.3.0 -->
                 <Button x:Name="PinButton"
                         Grid.Column="3"
-                        Content="&#xE718;" 
+                        Content="&#xE718;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -118,12 +197,11 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="PinButton_Click"
-                        Visibility="{x:Bind ViewModel.PinButtonVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="Always on Top"/>
+                        Visibility="{x:Bind ViewModel.ClassicPinButtonVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="Always on Top" AutomationProperties.Name="Always on Top"/>
 
-                <Button x:Name="CompanionButton"
-                        Grid.Column="4"
-                        Content="&#xE8EA;" 
+                <Button Grid.Column="4"
+                        Content="&#xE8EA;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -133,27 +211,41 @@
                         FontSize="16"
                         Margin="0,0,5,0"
                         Click="CompanionButton_Click"
-                        Visibility="{x:Bind ViewModel.CompanionButtonVisibility, Mode=OneWay}"
-                        ToolTipService.ToolTip="Mobile Companion"/>
+                        Visibility="{x:Bind ViewModel.ClassicCompanionButtonVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="Mobile Companion" AutomationProperties.Name="Mobile Companion"/>
+
+                <Button Grid.Column="5"
+                        Content="&#xE702;"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        Width="36" Height="36"
+                        Padding="0" MinWidth="0" MinHeight="0"
+                        Background="Transparent"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        BorderThickness="0"
+                        FontSize="16"
+                        Margin="0,0,5,0"
+                        Click="BluetoothButton_Click"
+                        Visibility="{x:Bind ViewModel.ClassicBluetoothButtonVisibility, Mode=OneWay}"
+                        ToolTipService.ToolTip="Bluetooth" AutomationProperties.Name="Bluetooth"/>
 
                 <ToggleButton x:Name="DndToggleButton"
-                              Grid.Column="5"
+                              Grid.Column="6"
                               Content="&#xE708;" 
                               FontFamily="{ThemeResource SymbolThemeFontFamily}"
                               Width="36" Height="36"
                               Padding="0" MinWidth="0" MinHeight="0"
                               Background="Transparent"
-                              Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               BorderThickness="0"
                               FontSize="14"
                               Margin="0,0,5,0"
                               IsChecked="{x:Bind ViewModel.IsDoNotDisturbEnabled, Mode=TwoWay}"
                               Checked="DndToggleButton_Changed"
                               Unchecked="DndToggleButton_Changed"
-                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)"/>
+                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)" AutomationProperties.Name="Do Not Disturb (Mute System Sounds)"/>
 
                 <Button x:Name="MinimizeButton"
-                        Grid.Column="5"
+                        Grid.Column="7"
                         Content="&#xE921;" 
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
@@ -162,10 +254,11 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         BorderThickness="0"
                         FontSize="14"
-                        Click="MinimizeButton_Click"/>
+                        Click="MinimizeButton_Click"
+                        ToolTipService.ToolTip="Minimise" AutomationProperties.Name="Minimise"/>
 
-                <Button Grid.Column="6"
-                        Content="&#xE711;" 
+                <Button Grid.Column="8"
+                        Content="&#xE711;"
                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                         Width="36" Height="36"
                         Padding="0" MinWidth="0" MinHeight="0"
@@ -173,7 +266,8 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         BorderThickness="0"
                         FontSize="14"
-                        Click="CloseButton_Click"/>
+                        Click="CloseButton_Click"
+                        ToolTipService.ToolTip="Close" AutomationProperties.Name="Close"/>
             </Grid>
 
             <!-- Main Content -->
@@ -241,7 +335,7 @@
                                 CornerRadius="4"
                                 Click="MicMuteButton_Click"
                                 Visibility="{x:Bind ViewModel.InputDeviceVisibility, Mode=OneWay}"
-                                ToolTipService.ToolTip="Mute/Unmute Microphone">
+                                ToolTipService.ToolTip="Mute/Unmute Microphone" AutomationProperties.Name="Mute/Unmute Microphone">
                             <Grid>
                                 <!-- Live mic -->
                                 <TextBlock Text="&#xE720;"
@@ -251,7 +345,7 @@
                                            Visibility="{Binding IsInputMuted, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                                 <!-- Muted mic -->
                                 <TextBlock Text="&#xF12E;"
-                                           Foreground="{StaticResource MuteTrueBrush}"
+                                           Foreground="{ThemeResource MuteTrueBrush}"
                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                            FontSize="14"
                                            Visibility="{Binding IsInputMuted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -319,7 +413,7 @@
                                     BorderBrush="Transparent"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    ToolTipService.ToolTip="Force refresh audio sessions"
+                                    ToolTipService.ToolTip="Force refresh audio sessions" AutomationProperties.Name="Force refresh audio sessions"
                                     Padding="4">
                                 <FontIcon Glyph="&#xE72C;" FontSize="12"/>
                             </Button>
@@ -327,7 +421,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <ListView Grid.Row="1" 
+                <ListView Grid.Row="1" Margin="0,0,-16,0" Padding="0,0,16,0" 
                           Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}"
                           ItemsSource="{Binding Apps}" 
                           SelectionMode="None">
@@ -352,10 +446,10 @@
                                          the "View" eye (in both fonts) with a slash across it -->
                                     <Button Grid.Column="0"
                                             Background="Transparent"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                             BorderThickness="0" 
                                             Click="HideAppButton_Click" 
-                                            ToolTipService.ToolTip="Hide App" 
+                                            ToolTipService.ToolTip="Hide App" AutomationProperties.Name="Hide App"
                                             Padding="0" MinWidth="20" Height="20"
                                             VerticalAlignment="Center"
                                             Margin="0,0,5,0">
@@ -400,7 +494,7 @@
                                     <TextBlock Grid.Column="3"
                                                Text="&#xE74F;"
                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                               Foreground="{StaticResource MuteTrueBrush}"
+                                               Foreground="{ThemeResource MuteTrueBrush}"
                                                FontSize="16"
                                                VerticalAlignment="Center"
                                                HorizontalAlignment="Right"
@@ -431,7 +525,7 @@
                                 </Image>
                             </Border>
                             <!-- Fallback Icon behind image -->
-                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE8D6;" FontSize="64" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
+                            <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE8D6;" FontSize="64" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}" />
                         </Grid>
                     </Viewbox>
 
@@ -449,7 +543,7 @@
                             <ColumnDefinition Width="50"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.CurrentSongPositionText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                        <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.CurrentSongPositionText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                         
                         <Slider x:Name="SongPositionSlider"
                                 Grid.Column="1" 
@@ -460,7 +554,7 @@
                                 PointerCaptureLost="SongPositionSlider_PointerCaptureLost"
                                 VerticalAlignment="Center" />
 
-                        <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.CurrentSongDurationText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.CurrentSongDurationText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="10,0,0,0"/>
                     </Grid>
                 </Grid>
 
@@ -483,7 +577,7 @@
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
                                 Click="CloseCompanionButton_Click"
-                                ToolTipService.ToolTip="Back"/>
+                                ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
 
                         <TextBlock Text="Mobile Companion"
                                    FontSize="20" FontWeight="Bold"
@@ -513,7 +607,8 @@
                                     BorderThickness="2"
                                     HorizontalAlignment="Center"
                                     IsEnabled="{x:Bind ViewModel.CanStartCompanion, Mode=OneWay}"
-                                    Click="CompanionPowerOn_Click">
+                                    Click="CompanionPowerOn_Click"
+                                    ToolTipService.ToolTip="Turn on the companion server" AutomationProperties.Name="Turn on the companion server">
                                 <TextBlock Text="&#xE7E8;"
                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                            FontSize="50"
@@ -521,7 +616,7 @@
                             </Button>
 
                             <TextBlock Text="Click to power on"
-                                       FontSize="14" Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        HorizontalAlignment="Center"
                                        Visibility="{x:Bind ViewModel.CompanionPowerHintVisibility, Mode=OneWay}"/>
 
@@ -538,7 +633,7 @@
 
                     <!-- ON STATE: QR Code & Info -->
                     <Grid Grid.Row="1" Visibility="{x:Bind ViewModel.CompanionActiveUiVisibility, Mode=OneWay}">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,-16,0" Padding="0,0,16,0">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Padding="0,5">
                                 
                                 <TextBlock Text="Scan to connect" 
@@ -562,7 +657,7 @@
                                            HorizontalAlignment="Center" FontWeight="SemiBold"/>
 
                                 <TextBlock Text="{x:Bind ViewModel.CompanionServerUrl, Mode=OneWay}" 
-                                           FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                           FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                            HorizontalAlignment="Center" IsTextSelectionEnabled="True"/>
 
                                 <Button Content="Turn Off Server"
@@ -572,6 +667,243 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
+                </Grid>
+
+                <!-- BLUETOOTH VIEW: what it shows (and the Windows device watchers behind it) only exists while it's open -->
+                <Grid Grid.Row="0" Grid.RowSpan="2"
+                      Visibility="{x:Bind ViewModel.BluetoothViewVisibility, Mode=OneWay}"
+                      Padding="15,15,15,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <!-- Back to the mixer -->
+                        <Button Content="&#xE72B;"
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Background="Transparent"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                BorderThickness="0"
+                                Padding="5"
+                                FontSize="18"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Click="CloseBluetoothButton_Click"
+                                ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
+
+                        <TextBlock Text="Bluetooth"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,-16,0" Padding="0,0,16,0">
+                        <StackPanel Spacing="10" Padding="0,0,0,10">
+
+                            <!-- Still asking Windows about the radio. Only active while it's showing: a hidden
+                                 spinner that's still active keeps animating and using CPU in the background -->
+                            <ProgressRing IsActive="{x:Bind ViewModel.Bluetooth.IsLoading, Mode=OneWay, FallbackValue=False}" Width="24" Height="24" Margin="0,30,0,0"
+                                          HorizontalAlignment="Center"
+                                          Visibility="{x:Bind ViewModel.Bluetooth.LoadingVisibility, Mode=OneWay}"/>
+
+                            <!-- No Bluetooth on this PC -->
+                            <StackPanel Spacing="8" Margin="0,30,0,0" HorizontalAlignment="Center" MaxWidth="300"
+                                        Visibility="{x:Bind ViewModel.Bluetooth.UnavailableVisibility, Mode=OneWay}">
+                                <FontIcon Glyph="&#xE702;" FontSize="40" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock Text="Bluetooth isn't available on this PC"
+                                           FontSize="16" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="If it should be, check it hasn't been switched off in Device Manager, or try Windows' own Bluetooth settings."
+                                           FontSize="13" TextAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <HyperlinkButton Content="Open Windows Bluetooth settings" HorizontalAlignment="Center" Click="OpenBluetoothSettings_Click"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="10" Visibility="{x:Bind ViewModel.Bluetooth.AvailableVisibility, Mode=OneWay}">
+
+                                <!-- Something went wrong -->
+                                <InfoBar Severity="Warning"
+                                         IsClosable="True"
+                                         IsOpen="{x:Bind ViewModel.Bluetooth.HasMessage, Mode=OneWay}"
+                                         Message="{x:Bind ViewModel.Bluetooth.Message, Mode=OneWay}"
+                                         CloseButtonClick="BluetoothMessage_CloseButtonClick"/>
+
+                                <!-- On/off -->
+                                <Grid Padding="12,6" CornerRadius="8"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE702;" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Grid.Column="1" Text="Bluetooth" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                    <ToggleSwitch x:Name="BluetoothRadioToggle" AutomationProperties.Name="Bluetooth on or off"
+                                                  Grid.Column="2"
+                                                  MinWidth="0"
+                                                  HorizontalAlignment="Right"
+                                                  OnContent="On" OffContent="Off"
+                                                  IsOn="{x:Bind ViewModel.Bluetooth.IsRadioOn, Mode=OneWay}"
+                                                  IsEnabled="{x:Bind ViewModel.Bluetooth.CanToggleRadio, Mode=OneWay}"
+                                                  Toggled="BluetoothRadioToggle_Toggled"/>
+                                </Grid>
+
+                                <!-- Pairing question (check or type a PIN) -->
+                                <Border Padding="12" CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="1"
+                                        Visibility="{x:Bind ViewModel.Bluetooth.PromptVisibility, Mode=OneWay}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="{x:Bind ViewModel.Bluetooth.PromptText, Mode=OneWay}" TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                        <TextBox x:Name="BluetoothPinBox"
+                                                 PlaceholderText="PIN"
+                                                 KeyDown="BluetoothPinBox_KeyDown"
+                                                 Visibility="{x:Bind ViewModel.Bluetooth.PinEntryVisibility, Mode=OneWay}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                                    Visibility="{x:Bind ViewModel.Bluetooth.PromptButtonsVisibility, Mode=OneWay}">
+                                            <Button Style="{StaticResource AccentButtonStyle}"
+                                                    Content="{x:Bind ViewModel.Bluetooth.PromptAcceptText, Mode=OneWay}"
+                                                    Click="BluetoothPromptAccept_Click"/>
+                                            <Button Content="Cancel" Click="BluetoothPromptCancel_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Paired devices -->
+                                <TextBlock Text="Your devices" FontSize="14" FontWeight="SemiBold" Margin="0,6,0,0"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                                <TextBlock Text="No devices paired yet. Use Search below to add one."
+                                           FontSize="13" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="{x:Bind ViewModel.Bluetooth.NoPairedDevicesVisibility, Mode=OneWay}"/>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Bluetooth.PairedDevices, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6" Padding="12,8" CornerRadius="8"
+                                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="{Binding Glyph}" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Content="{Binding ConnectButtonText}"
+                                                        Visibility="{Binding ConnectButtonVisibility}"
+                                                        IsEnabled="{Binding CanAct}"
+                                                        Margin="8,0,0,0" Padding="10,4"
+                                                        VerticalAlignment="Center"
+                                                        Click="BluetoothConnect_Click"/>
+                                                <Button Grid.Column="3"
+                                                        Content="&#xE712;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        Width="32" Height="32"
+                                                        Padding="0" MinWidth="0" MinHeight="0"
+                                                        Margin="4,0,0,0"
+                                                        Background="Transparent"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        BorderThickness="0"
+                                                        VerticalAlignment="Center"
+                                                        IsEnabled="{Binding IsIdle}"
+                                                        Click="BluetoothDeviceMore_Click"
+                                                        ToolTipService.ToolTip="More options" AutomationProperties.Name="More options"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Finding new devices -->
+                                <Grid Margin="0,6,0,0">
+                                    <TextBlock Text="Add a device" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <Button HorizontalAlignment="Right" Padding="10,4"
+                                            Content="{x:Bind ViewModel.Bluetooth.ScanButtonText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.Bluetooth.CanScan, Mode=OneWay}"
+                                            Click="BluetoothScan_Click"/>
+                                </Grid>
+
+                                <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.Bluetooth.ScanningVisibility, Mode=OneWay}">
+                                    <!-- Like the spinner above, only animates while searching -->
+                                    <ProgressBar IsIndeterminate="{x:Bind ViewModel.Bluetooth.IsScanning, Mode=OneWay, FallbackValue=False}"/>
+                                    <TextBlock Text="Looking for devices. Make sure yours is switched on and in pairing mode."
+                                               FontSize="13" TextWrapping="Wrap"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Bluetooth.NearbyDevices, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6" Padding="12,8" CornerRadius="8"
+                                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="{Binding Glyph}" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding NearbyStatusText}" FontSize="12"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Content="Pair"
+                                                        IsEnabled="{Binding CanAct}"
+                                                        Margin="8,0,0,0" Padding="10,4"
+                                                        VerticalAlignment="Center"
+                                                        Click="BluetoothPair_Click"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Windows' own Bluetooth page, styled like the device cards above -->
+                                <Button Margin="0,6,0,0" Padding="12,8" CornerRadius="8"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                                        Click="OpenBluetoothSettings_Click"
+                                        AutomationProperties.Name="More Bluetooth settings">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Grid.Column="0" Glyph="&#xE713;" FontSize="18" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="More Bluetooth settings" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            <TextBlock Text="Opens Windows' own Bluetooth settings" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <FontIcon Grid.Column="2" Glyph="&#xE8A7;" FontSize="14" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    </Grid>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
 
@@ -587,13 +919,13 @@
                                 Content="&#xE8D6;" 
                                 FontFamily="{ThemeResource SymbolThemeFontFamily}" 
                                 Background="Transparent" 
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" 
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                 BorderThickness="0" 
                                 FontSize="18"
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="ToggleMusicPlayerMode_Click" 
-                                ToolTipService.ToolTip="Toggle Music Player View" />
+                                ToolTipService.ToolTip="Toggle Music Player View" AutomationProperties.Name="Toggle Music Player View" />
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
                         <!-- Previous -->
@@ -608,7 +940,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPrevious_Click" 
-                                ToolTipService.ToolTip="Previous Track" />
+                                ToolTipService.ToolTip="Previous Track" AutomationProperties.Name="Previous Track" />
 
                         <!-- Play/Pause -->
                         <Button Background="{ThemeResource ControlFillColorSecondaryBrush}" 
@@ -618,7 +950,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaPlayPause_Click" 
-                                ToolTipService.ToolTip="Play / Pause">
+                                ToolTipService.ToolTip="Play / Pause" AutomationProperties.Name="Play / Pause">
                             <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE768;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                 <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE769;" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -637,7 +969,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaNext_Click" 
-                                ToolTipService.ToolTip="Next Track" />
+                                ToolTipService.ToolTip="Next Track" AutomationProperties.Name="Next Track" />
 
                         <!-- Mute -->
                         <Button Content="&#xE74F;" 
@@ -651,7 +983,7 @@
                                 Width="36" Height="36"
                                 Padding="0" MinWidth="0" MinHeight="0"
                                 Click="MediaMute_Click" 
-                                ToolTipService.ToolTip="Mute System" />
+                                ToolTipService.ToolTip="Mute System" AutomationProperties.Name="Mute System" />
                     </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -661,11 +993,12 @@
             <Grid x:Name="SettingsContentGrid" Grid.Row="1" Visibility="Collapsed" Margin="20,0,20,20">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
-                    <Button Content="&#xE72B;" 
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="&#xE72B;"
                             FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Background="Transparent"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -673,302 +1006,385 @@
                             Padding="5"
                             FontSize="18"
                             Margin="0,0,10,0"
-                            Click="CloseSettingsButton_Click"/>
-                    <TextBlock Text="Settings" 
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                               FontSize="18" 
+                            Click="CloseSettingsButton_Click"
+                            ToolTipService.ToolTip="Back" AutomationProperties.Name="Back"/>
+                    <TextBlock Text="Settings"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                               FontSize="18"
                                FontWeight="Bold"
                                VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
-                    <StackPanel x:Name="DynamicSettingsStackPanel" Spacing="10">
-                        
-                        <!-- Appearance & Layout Header -->
-                        <TextBlock Text="Appearance &amp; Layout" FontSize="13" FontWeight="SemiBold" 
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,10,0,5"/>
+                <!-- Search: hides what doesn't match and opens what does -->
+                <AutoSuggestBox x:Name="SettingsSearchBox"
+                                Grid.Row="1"
+                                PlaceholderText="Search settings"
+                                QueryIcon="Find"
+                                Margin="0,0,0,6"
+                                AutomationProperties.Name="Search settings"
+                                TextChanged="SettingsSearchBox_TextChanged"/>
 
-                        <!-- Appearance (Theme) -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Appearance" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
+                <!-- The negative margin and matching padding put the scroll bar in the window's margin, clear of the cards -->
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,0,-16,0" Padding="0,0,16,0">
+                    <!-- Each card's Tag holds extra words people might search for; group headings are tagged #group -->
+                    <StackPanel x:Name="SettingsStackPanel" Spacing="6" Padding="0,0,0,10">
+
+                        <TextBlock x:Name="NoSettingsMatchText"
+                                   Text="No settings match your search."
+                                   Visibility="Collapsed"
+                                   Margin="2,16,0,0"
+                                   Style="{StaticResource SettingsDescriptionStyle}"/>
+
+                        <!-- ===== LOOK ===== -->
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Look" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Look settings"><Grid><TextBlock Text="Look" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="theme dark mode light mode colour color appearance">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Theme" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Follow Windows, or always light or dark." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="1"
+                                      VerticalAlignment="Center"
+                                      MinWidth="110"
+                                      ItemsSource="{Binding AvailableThemes}"
+                                      SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
+                                      AutomationProperties.Name="Theme"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="opacity transparent transparency see-through see through window">
                             <StackPanel>
-                                <TextBlock Text="Choose whether the app should follow your system settings or force Light/Dark mode." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ComboBox HorizontalAlignment="Stretch"
-                                          ItemsSource="{Binding AvailableThemes}"
-                                          SelectedItem="{Binding SelectedTheme, Mode=TwoWay}"
-                                          Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                          BorderThickness="1"
-                                          BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                          Margin="0,0,0,15"/>
-
-                                <!-- Window Opacity -->
-                                <TextBlock Text="Make SoundBar see-through so you can still see what's behind it." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <Grid Margin="0,0,0,15">
+                                <TextBlock Text="Window opacity" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Make SoundBar see-through so you can still see what's behind it." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <Grid Margin="0,4,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Slider Grid.Column="0"
-                                            Header="Window Opacity"
                                             Minimum="30" Maximum="100" StepFrequency="1"
                                             IsThumbToolTipEnabled="False"
-                                            Value="{x:Bind ViewModel.WindowOpacity, Mode=TwoWay}"
-                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Window opacity"
+                                            Value="{x:Bind ViewModel.WindowOpacity, Mode=TwoWay}"/>
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind ViewModel.WindowOpacityText, Mode=OneWay}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                MinWidth="40" TextAlignment="Right"
-                                               VerticalAlignment="Bottom" Margin="10,0,0,8"/>
+                                               VerticalAlignment="Center" Margin="10,0,0,0"/>
                                     <Button Grid.Column="2"
                                             Content="&#xE72C;"
                                             FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            VerticalAlignment="Bottom" Margin="5,0,0,2"
+                                            VerticalAlignment="Center" Margin="5,0,0,0"
                                             Click="ResetOpacity_Click"
-                                            ToolTipService.ToolTip="Reset to 100%"/>
+                                            ToolTipService.ToolTip="Reset to 100%"
+                                            AutomationProperties.Name="Reset opacity to 100%"/>
                                 </Grid>
-
-                                <TextBlock Text="Highlights the active application so you know which volume you are controlling via hotkeys." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Active App Highlight" 
-                                              IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}" 
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                             </StackPanel>
-                        </Expander>
+                        </Grid>
 
-                        <!-- Layout Settings -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Layout Settings" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="Toggle which sections are visible on the main page. Hidden sections are still functional via hotkeys." FontSize="12" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Output Device Picker" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowOutputDevice, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Input Device (Microphone)" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowInputDevice, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Master Volume Slider" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Active Apps List" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Media Controls" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Pin to Top Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
-                                <ToggleSwitch Header="Mobile Companion Button" OnContent="Visible" OffContent="Hidden" IsOn="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="active app highlight focus hotkeys">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Active app highlight" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Highlights the app your volume hotkeys are controlling." Style="{StaticResource SettingsDescriptionStyle}"/>
                             </StackPanel>
-                        </Expander>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Active app highlight"
+                                          IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}"/>
+                        </Grid>
 
-                        <!-- Custom Background -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Custom Background" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="custom background wallpaper image picture photo">
                             <StackPanel>
-                                <TextBlock Text="Place a .jpg or .png image in the backgrounds folder to personalise your SoundBar." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <Grid Margin="0,5">
+                                <TextBlock Text="Custom background" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Put a .jpg or .png in the backgrounds folder to personalise SoundBar." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <Grid Margin="0,8,0,0" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="10"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Content="Open Folder" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="OpenBackgroundFolder_Click"/>
-                                    <Button Grid.Column="2" Content="Reload" HorizontalAlignment="Stretch" Background="{ThemeResource ControlFillColorDefaultBrush}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="0" Click="ReloadBackground_Click"/>
+                                    <Button Grid.Column="0" Content="Open Folder" HorizontalAlignment="Stretch" Click="OpenBackgroundFolder_Click"/>
+                                    <Button Grid.Column="1" Content="Reload" HorizontalAlignment="Stretch" Click="ReloadBackground_Click"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- ===== MAIN PAGE ===== -->
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Main page" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Main page settings"><Grid><TextBlock Text="Main page" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="layout sections show hide output device input microphone mic master volume active apps media controls">
+                            <StackPanel>
+                                <TextBlock Text="Show on the main page" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Hidden sections still work with hotkeys." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <Grid Margin="0,6,0,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <CheckBox Grid.Row="0" Grid.Column="0" Content="Output device" IsChecked="{x:Bind ViewModel.ShowOutputDevice, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="0" Grid.Column="1" Content="Microphone" IsChecked="{x:Bind ViewModel.ShowInputDevice, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="1" Grid.Column="0" Content="Master volume" IsChecked="{x:Bind ViewModel.ShowMasterVolume, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="1" Grid.Column="1" Content="Active apps" IsChecked="{x:Bind ViewModel.ShowActiveApps, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="2" Grid.Column="0" Content="Media controls" IsChecked="{x:Bind ViewModel.ShowMediaControls, Mode=TwoWay}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="title bar buttons classic menu always on top pin mobile companion phone bluetooth">
+                            <StackPanel>
+                                <TextBlock Text="Title bar" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Tuck these into the &#x22EF; menu, or give each its own button like before." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <CheckBox Margin="0,6,0,0" Content="Separate buttons (classic title bar)" IsChecked="{x:Bind ViewModel.UseClassicTitleBar, Mode=TwoWay}"/>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <CheckBox Grid.Row="0" Grid.Column="0" Content="Always on Top" IsChecked="{x:Bind ViewModel.ShowPinButton, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="0" Grid.Column="1" Content="Mobile Companion" IsChecked="{x:Bind ViewModel.ShowCompanionButton, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Row="1" Grid.Column="0" Content="Bluetooth" IsChecked="{x:Bind ViewModel.ShowBluetoothButton, Mode=TwoWay}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- ===== SOUND ===== -->
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Sound" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Sound settings"><Grid><TextBlock Text="Sound" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="do not disturb dnd mute quiet notifications system sounds">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Do Not Disturb" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Mutes system sounds and notification sounds." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Do Not Disturb"
+                                          IsOn="{x:Bind ViewModel.IsDoNotDisturbEnabled, Mode=TwoWay}"
+                                          Toggled="DndToggleButton_Changed"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="hearing protection loudness loud volume warning ears">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Loudness warning" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Warns you if the master volume stays above 85% for a while." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Loudness warning"
+                                          IsOn="{x:Bind ViewModel.IsLoudnessWarningEnabled, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                  Tag="global hotkeys keyboard shortcuts keys volume up down mute microphone">
+                            <Expander.Header>
+                                <StackPanel Padding="0,8">
+                                    <TextBlock Text="Global hotkeys" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <TextBlock Text="Control the app you're using without leaving it." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Volume up (active app)" VerticalAlignment="Center" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <Button Grid.Column="1" MinWidth="120" Content="{x:Bind ViewModel.VolumeUpHotkey, Mode=OneWay}" Click="RecordVolumeUpHotkey_Click" AutomationProperties.Name="Volume up hotkey"/>
+                                </Grid>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Volume down (active app)" VerticalAlignment="Center" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <Button Grid.Column="1" MinWidth="120" Content="{x:Bind ViewModel.VolumeDownHotkey, Mode=OneWay}" Click="RecordVolumeDownHotkey_Click" AutomationProperties.Name="Volume down hotkey"/>
+                                </Grid>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Mute (active app)" VerticalAlignment="Center" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <Button Grid.Column="1" MinWidth="120" Content="{x:Bind ViewModel.MuteHotkey, Mode=OneWay}" Click="RecordMuteHotkey_Click" AutomationProperties.Name="Mute hotkey"/>
+                                </Grid>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Mute microphone" VerticalAlignment="Center" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <Button Grid.Column="1" MinWidth="120" Content="{x:Bind ViewModel.InputMuteHotkey, Mode=OneWay}" Click="RecordInputMuteHotkey_Click" AutomationProperties.Name="Mute microphone hotkey"/>
                                 </Grid>
                             </StackPanel>
                         </Expander>
 
-                        <!-- Audio & Focus Header -->
-                        <TextBlock Text="Audio &amp; Focus" FontSize="13" FontWeight="SemiBold" 
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
-
-                        <!-- Global Hotkeys -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Global Hotkeys" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <TextBlock Text="Control the volume of the app you are currently using without leaving it." FontSize="12" TextWrapping="Wrap"/>
-                                <StackPanel Margin="0,0,0,10">
-                                    <TextBlock Text="Volume Up Hotkey (Active App)" Margin="0,0,0,5"/>
-                                    <Button HorizontalAlignment="Stretch" Content="{x:Bind ViewModel.VolumeUpHotkey, Mode=OneWay}" Click="RecordVolumeUpHotkey_Click"/>
-                                </StackPanel>
-                                <StackPanel Margin="0,0,0,10">
-                                    <TextBlock Text="Volume Down Hotkey (Active App)" Margin="0,0,0,5"/>
-                                    <Button HorizontalAlignment="Stretch" Content="{x:Bind ViewModel.VolumeDownHotkey, Mode=OneWay}" Click="RecordVolumeDownHotkey_Click"/>
-                                </StackPanel>
-                                <StackPanel Margin="0,0,0,10">
-                                    <TextBlock Text="Mute Hotkey (Active App)" Margin="0,0,0,5"/>
-                                    <Button HorizontalAlignment="Stretch" Content="{x:Bind ViewModel.MuteHotkey, Mode=OneWay}" Click="RecordMuteHotkey_Click"/>
-                                </StackPanel>
-                                <StackPanel Margin="0,0,0,10">
-                                    <TextBlock Text="Mute Microphone Hotkey" Margin="0,0,0,5"/>
-                                    <Button HorizontalAlignment="Stretch" Content="{x:Bind ViewModel.InputMuteHotkey, Mode=OneWay}" Click="RecordInputMuteHotkey_Click"/>
-                                </StackPanel>
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="system sounds windows sound scheme notification event">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="System sounds" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Windows' sound schemes and notification sounds." Style="{StaticResource SettingsDescriptionStyle}"/>
                             </StackPanel>
+                            <Button Grid.Column="1" Content="Open" VerticalAlignment="Center" Click="OpenSystemSounds_Click"
+                                    AutomationProperties.Name="Open system sounds"/>
+                        </Grid>
+
+                        <!-- ===== APPS ===== -->
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Apps" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide Apps settings"><Grid><TextBlock Text="Apps" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
+
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                  Tag="hidden apps unhide mixer">
+                            <Expander.Header>
+                                <StackPanel Padding="0,8">
+                                    <TextBlock Text="{x:Bind ViewModel.HiddenAppsTitle, Mode=OneWay}" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <TextBlock Text="Apps you've hidden from the mixer." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                </StackPanel>
+                            </Expander.Header>
+                            <ItemsControl ItemsSource="{Binding HiddenApps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,4" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            <Button Grid.Column="1" Content="Unhide" Click="UnhideAppButton_Click"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </Expander>
 
-                        <!-- Do Not Disturb Mode -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                  Tag="background apps allow">
                             <Expander.Header>
-                                <TextBlock Text="Do Not Disturb Mode" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
+                                <StackPanel Padding="0,8">
+                                    <TextBlock Text="{x:Bind ViewModel.BackgroundAppsTitle, Mode=OneWay}" Style="{StaticResource SettingsTitleStyle}"/>
+                                    <TextBlock Text="Running in the background, not playing sound yet." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                </StackPanel>
                             </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <TextBlock Text="Mutes all system sounds and notifications when enabled." FontSize="12" TextWrapping="Wrap"/>
-                                <ToggleSwitch OnContent="Enabled" OffContent="Disabled" IsOn="{x:Bind ViewModel.IsDoNotDisturbEnabled, Mode=TwoWay}" Toggled="DndToggleButton_Changed"/>
-                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding SystemBackgroundApps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,4" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                            <Button Grid.Column="1" Content="Allow" Click="AllowBackgroundAppButton_Click"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </Expander>
 
-                        <!-- System Sounds -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="System Sounds" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <TextBlock Text="Opens the Windows Sound settings where you can manage sound schemes, change notification sounds, and configure programme event audio." FontSize="12" TextWrapping="Wrap"/>
-                                <Button Content="Open System Sounds" Click="OpenSystemSounds_Click"/>
-                            </StackPanel>
-                        </Expander>
+                        <!-- ===== GENERAL ===== -->
+                        <Button Tag="#group" Background="Transparent" BorderThickness="0" Padding="2,6" Margin="0,10,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" AutomationProperties.Name="General" Click="SettingsGroupHeader_Click" ToolTipService.ToolTip="Show or hide General settings"><Grid><TextBlock Text="General" Margin="0" Style="{StaticResource SettingsGroupHeaderStyle}"/><FontIcon Glyph="&#xE70D;" FontSize="12" HorizontalAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid></Button>
 
-                        <!-- Hearing Protection -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Hearing Protection" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="run at startup start with windows boot login launch automatically">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Run at startup" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Start SoundBar in the background when you sign in." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Run at startup"
+                                          IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="desktop shortcut icon">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Desktop shortcut" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Put a fresh SoundBar shortcut on your desktop." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Create" VerticalAlignment="Center"
+                                    Click="{x:Bind ViewModel.CreateDesktopShortcut}"
+                                    AutomationProperties.Name="Create desktop shortcut"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="advanced configuration config json file port companion server">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Advanced settings file" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Edit hidden settings (like the companion port) in config.json. Changes apply when you save." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Open" VerticalAlignment="Center"
+                                    Click="{x:Bind ViewModel.OpenSettingsFile}"
+                                    AutomationProperties.Name="Open config.json"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="about updates version help user guide readme release notes what's new">
                             <StackPanel>
-                                <TextBlock Text="Shows a warning if your master volume stays above 85% for an extended time." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ToggleSwitch Header="Excessive Loudness Warning" 
-                                              IsOn="{x:Bind ViewModel.IsLoudnessWarningEnabled, Mode=TwoWay}" 
-                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="About SoundBar" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="{x:Bind ViewModel.AppVersionText, Mode=OneWay}" Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <Grid Margin="0,8,0,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="User Guide" HorizontalAlignment="Stretch" Click="UserGuide_Click"
+                                            ToolTipService.ToolTip="Walks through every feature, with pictures (opens in your browser)"/>
+                                    <Button Grid.Column="1" Content="Release Notes" HorizontalAlignment="Stretch" Click="VersionHyperlink_Click"
+                                            ToolTipService.ToolTip="What's new in this version (opens in your browser)"/>
+                                </Grid>
                             </StackPanel>
-                        </Expander>
-
-                        <!-- App Management Header -->
-                        <TextBlock Text="App Management" FontSize="13" FontWeight="SemiBold" 
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
-
-                        <!-- Hidden Apps -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Hidden Apps" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Apps that you have manually hidden from the mixer." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ItemsControl ItemsSource="{Binding HiddenApps}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,5">
-                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                                <Button Content="Unhide" 
-                                                        Click="UnhideAppButton_Click" 
-                                                        HorizontalAlignment="Right" 
-                                                        Background="{ThemeResource ControlFillColorDefaultBrush}" 
-                                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                                        BorderThickness="0"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Expander>
-
-                        <!-- Background Apps -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Background Apps" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel>
-                                <TextBlock Text="Apps that are running in the background and not outputting audio yet." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                <ItemsControl ItemsSource="{Binding SystemBackgroundApps}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,5">
-                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="180" HorizontalAlignment="Left" />
-                                                <Button Content="Allow" 
-                                                        Click="AllowBackgroundAppButton_Click" 
-                                                        HorizontalAlignment="Right" 
-                                                        Background="{ThemeResource ControlFillColorDefaultBrush}" 
-                                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                                        BorderThickness="0"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Expander>
-
-                        <!-- General Header -->
-                        <TextBlock Text="General" FontSize="13" FontWeight="SemiBold" 
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,15,0,5"/>
-
-                        <!-- System Integration -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="System Integration" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <StackPanel>
-                                    <TextBlock Text="Automatically start SoundBar in the background when you log into Windows." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <ToggleSwitch Header="Run at Startup" 
-                                                  IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}" 
-                                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Text="Place a fresh shortcut to SoundBar directly on your Desktop." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <Button Content="Create Desktop Shortcut" 
-                                            Click="{x:Bind ViewModel.CreateDesktopShortcut}" 
-                                            Background="{ThemeResource ControlFillColorDefaultBrush}" 
-                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                            BorderThickness="1"
-                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Expander>
-
-                        <!-- Advanced Configuration -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="Advanced Configuration" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <StackPanel>
-                                    <TextBlock Text="Modify hidden settings directly via the config file (e.g. CompanionServerPort). Changes apply as soon as you save the file." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <Button Content="Open config.json" 
-                                            Click="{x:Bind ViewModel.OpenSettingsFile}" 
-                                            Background="{ThemeResource ControlFillColorDefaultBrush}" 
-                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}" 
-                                            BorderThickness="1"
-                                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Expander>
-
-                        <!-- About & Updates -->
-                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                            <Expander.Header>
-                                <TextBlock Text="About &amp; Updates" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="14" FontWeight="SemiBold"/>
-                            </Expander.Header>
-                            <StackPanel Spacing="15">
-                                <StackPanel>
-                                    <TextBlock Text="New to SoundBar? The user guide walks through every feature, with pictures." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <Button Content="Open User Guide" Click="UserGuide_Click"
-                                            ToolTipService.ToolTip="Opens the SoundBar guide in your web browser"/>
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Text="Check out the latest features and changes in this version." Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                    <Button Content="View Release Notes" Click="VersionHyperlink_Click"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Expander>
+                        </Grid>
 
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
 
-            <!-- Footer -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
+            <!-- Footer (hidden while Settings is open: the About card shows the version there, and this would sit over the cards) -->
+            <StackPanel x:Name="FooterPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
                 <!-- App Version (Global) - click to open this version's release notes -->
                 <HyperlinkButton Content="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
-                                 Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                  FontSize="10"
                                  Padding="4,2"
                                  MinHeight="0" MinWidth="0"

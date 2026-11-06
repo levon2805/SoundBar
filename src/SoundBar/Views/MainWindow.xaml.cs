@@ -295,6 +295,11 @@ namespace SoundBar.Views
             {
                 UpdateIODeviceLayout();
             }
+            if (e.PropertyName == nameof(MainViewModel.IsBluetoothViewMode) && !ViewModel.IsBluetoothViewMode && BluetoothPinBox != null)
+            {
+                // The page stays built while hidden, so don't leave a half-typed PIN in it for next time
+                BluetoothPinBox.Text = string.Empty;
+            }
             if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
             {
                 ApplyWindowOpacity(ViewModel.WindowOpacity);
@@ -386,9 +391,22 @@ namespace SoundBar.Views
             dialog.Content = stack;
             dialog.DataContext = ViewModel;
 
-            var result = await dialog.ShowAsync();
-
-            ViewModel.IsRecordingHotkey = false;
+            ContentDialogResult result;
+            try
+            {
+                result = await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                // ShowAsync throws if another dialog is already open
+                System.Diagnostics.Debug.WriteLine($"Couldn't open the hotkey dialog: {ex.Message}");
+                result = ContentDialogResult.None;
+            }
+            finally
+            {
+                // Otherwise every key press would keep going to the (closed) dialog and the hotkeys would stop working
+                ViewModel.IsRecordingHotkey = false;
+            }
 
             if (result == ContentDialogResult.Primary)
             {
@@ -548,12 +566,16 @@ namespace SoundBar.Views
             _settingsService.SaveSettings();
         }
 
-        // Updates the pin icon visual based on state
+        // Shows whether Always on Top is on: a tick in the ⋯ menu, and a lit-up pin on the classic title bar
         private void UpdatePinButtonVisual(bool isPinned)
         {
+            if (PinMenuItem != null)
+            {
+                PinMenuItem.IsChecked = isPinned;
+            }
             if (PinButton != null)
             {
-                PinButton.Opacity = isPinned ? 1.0 : 0.4;
+                PinButton.Opacity = isPinned ? 1.0 : 0.6; // Dimmed when off, but still easy to see in light mode
             }
         }
 
@@ -568,7 +590,7 @@ namespace SoundBar.Views
                 }
                 else
                 {
-                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorDisabledBrush"];
+                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                 }
             }
         }
@@ -613,6 +635,10 @@ namespace SoundBar.Views
             MainContentGrid.Visibility = Visibility.Collapsed;
             SettingsContentGrid.Visibility = Visibility.Visible;
             SettingsButton.Visibility = Visibility.Collapsed;
+            FooterPanel.Visibility = Visibility.Collapsed;
+
+            // Fold away the groups the user folded last time
+            FilterSettings(SettingsSearchBox.Text);
         }
 
         private void CloseSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -620,6 +646,181 @@ namespace SoundBar.Views
             SettingsContentGrid.Visibility = Visibility.Collapsed;
             MainContentGrid.Visibility = Visibility.Visible;
             SettingsButton.Visibility = Visibility.Visible;
+            FooterPanel.Visibility = Visibility.Visible;
+
+            // Start fresh next time (this also folds back any sections the search opened)
+            SettingsSearchBox.Text = string.Empty;
+        }
+
+        // --- Settings search ---
+
+        /// <summary>
+        /// Every searchable word for each card, built the first time someone searches.
+        /// </summary>
+        private Dictionary<FrameworkElement, string>? _settingsSearchText;
+
+        /// <summary>
+        /// Sections the search opened, so they can be folded away again when the search is cleared.
+        /// </summary>
+        private readonly HashSet<Expander> _expandedBySearch = new();
+
+        private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            FilterSettings(sender.Text);
+        }
+
+        /// <summary>
+        /// Clicking a group heading (Look, Sound...) folds it away or opens it again. SoundBar remembers this.
+        /// While searching, every match is shown regardless, so the headings don't fold then.
+        /// </summary>
+        private void SettingsGroupHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button header || !string.IsNullOrWhiteSpace(SettingsSearchBox.Text)) return;
+
+            string group = GetSettingsGroupName(header);
+            ViewModel.SetSettingsGroupFolded(group, !ViewModel.IsSettingsGroupFolded(group));
+            FilterSettings(SettingsSearchBox.Text);
+        }
+
+        private static string GetSettingsGroupName(FrameworkElement header) =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(header);
+
+        /// <summary>
+        /// Decides what's showing on the settings page. With no search, folded groups are hidden.
+        /// With a search, only cards containing every word typed are shown (even in folded groups),
+        /// and matching sections are opened. A card matches on its own text, its group name and its Tag words.
+        /// </summary>
+        private void FilterSettings(string? query)
+        {
+            var words = (query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            bool searching = words.Length > 0;
+            _settingsSearchText ??= BuildSettingsSearchText();
+
+            bool anyMatch = false;
+            FrameworkElement? groupHeader = null;
+            bool groupHasMatch = false;
+            bool groupFolded = false;
+
+            foreach (var child in SettingsStackPanel.Children.OfType<FrameworkElement>())
+            {
+                if (ReferenceEquals(child, NoSettingsMatchText)) continue;
+
+                if (child.Tag is "#group")
+                {
+                    FinishSettingsGroup(groupHeader, groupHasMatch, searching);
+                    groupHeader = child;
+                    groupHasMatch = false;
+                    groupFolded = !searching && ViewModel.IsSettingsGroupFolded(GetSettingsGroupName(child));
+                    SetSettingsGroupArrow(child, groupFolded);
+                    continue;
+                }
+
+                string text = _settingsSearchText.TryGetValue(child, out var found) ? found : string.Empty;
+                bool matches = words.All(w => text.Contains(w, StringComparison.CurrentCultureIgnoreCase));
+                child.Visibility = matches && !groupFolded ? Visibility.Visible : Visibility.Collapsed;
+
+                if (matches)
+                {
+                    groupHasMatch = true;
+                    anyMatch = true;
+
+                    if (searching && child is Expander { IsExpanded: false } expander)
+                    {
+                        expander.IsExpanded = true;
+                        _expandedBySearch.Add(expander);
+                    }
+                }
+            }
+
+            FinishSettingsGroup(groupHeader, groupHasMatch, searching);
+
+            if (words.Length == 0)
+            {
+                foreach (var expander in _expandedBySearch) expander.IsExpanded = false;
+                _expandedBySearch.Clear();
+            }
+
+            NoSettingsMatchText.Visibility = anyMatch ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// A group heading always shows when not searching (so folded groups can be opened),
+        /// and only when something in it matches while searching.
+        /// </summary>
+        private static void FinishSettingsGroup(FrameworkElement? header, bool hasMatch, bool searching)
+        {
+            if (header != null) header.Visibility = !searching || hasMatch ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Points the heading's arrow down when the group is open and right when it's folded.
+        /// </summary>
+        private static void SetSettingsGroupArrow(FrameworkElement header, bool folded)
+        {
+            if ((header as Button)?.Content is Panel panel && panel.Children.OfType<FontIcon>().FirstOrDefault() is { } arrow)
+            {
+                arrow.Glyph = folded ? "" : "";
+            }
+        }
+
+        private Dictionary<FrameworkElement, string> BuildSettingsSearchText()
+        {
+            var result = new Dictionary<FrameworkElement, string>();
+            string groupName = string.Empty;
+
+            foreach (var child in SettingsStackPanel.Children.OfType<FrameworkElement>())
+            {
+                if (child.Tag is "#group")
+                {
+                    groupName = GetSettingsGroupName(child);
+                    continue;
+                }
+
+                var text = new System.Text.StringBuilder(groupName);
+                if (child.Tag is string keywords) text.Append(' ').Append(keywords);
+                CollectSearchText(child, text, 0);
+                result[child] = text.ToString();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Gathers the words on a settings card: titles, descriptions, switch and button labels.
+        /// Walks the card's own content rather than what's on screen, so closed sections are searchable too.
+        /// </summary>
+        private static void CollectSearchText(object? node, System.Text.StringBuilder text, int depth)
+        {
+            if (node == null || depth > 12) return;
+
+            switch (node)
+            {
+                case string s:
+                    text.Append(' ').Append(s);
+                    break;
+                case TextBlock textBlock:
+                    text.Append(' ').Append(textBlock.Text);
+                    break;
+                case ToggleSwitch toggle:
+                    CollectSearchText(toggle.Header, text, depth + 1);
+                    break;
+                case Expander expander:
+                    CollectSearchText(expander.Header, text, depth + 1);
+                    CollectSearchText(expander.Content, text, depth + 1);
+                    break;
+                case ItemsControl:
+                    // Lists of app names would make every search match these cards
+                    break;
+                case ContentControl content: // Buttons, check boxes
+                    CollectSearchText(content.Content, text, depth + 1);
+                    break;
+                case Border border:
+                    CollectSearchText(border.Child, text, depth + 1);
+                    break;
+                case Panel panel:
+                    foreach (var child in panel.Children) CollectSearchText(child, text, depth + 1);
+                    break;
+            }
         }
 
         private void OpenBackgroundFolder_Click(object sender, RoutedEventArgs e)
@@ -718,16 +919,176 @@ namespace SoundBar.Views
             if (SettingsContentGrid.Visibility == Visibility.Visible)
             {
                 CloseSettingsButton_Click(sender, e);
-                ViewModel.IsCompanionViewMode = true;
-                return;
             }
 
-            ViewModel.IsCompanionViewMode = !ViewModel.IsCompanionViewMode;
+            ViewModel.IsCompanionViewMode = true;
         }
 
         private void CloseCompanionButton_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.IsCompanionViewMode = false;
+        }
+
+        // --- Bluetooth page ---
+
+        private void BluetoothButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Like the companion screen, the Bluetooth page lives in the main view
+            if (SettingsContentGrid.Visibility == Visibility.Visible)
+            {
+                CloseSettingsButton_Click(sender, e);
+            }
+
+            ViewModel.IsBluetoothViewMode = true;
+        }
+
+        private void CloseBluetoothButton_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.IsBluetoothViewMode = false;
+        }
+
+        private async void BluetoothRadioToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            // Also fires when the page itself moves the switch to match Windows, so only act on a real change
+            var bluetooth = ViewModel.Bluetooth;
+            if (bluetooth == null || sender is not ToggleSwitch toggle || toggle.IsOn == bluetooth.IsRadioOn) return;
+
+            try
+            {
+                await bluetooth.SetRadioAsync(toggle.IsOn);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth switch failed: {ex.Message}");
+            }
+        }
+
+        private void BluetoothMessage_CloseButtonClick(InfoBar sender, object args)
+        {
+            ViewModel.Bluetooth?.ClearMessage();
+        }
+
+        private void BluetoothScan_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.Bluetooth?.ToggleScan();
+        }
+
+        private async void BluetoothConnect_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Bluetooth is not { } bluetooth || (sender as FrameworkElement)?.DataContext is not BluetoothDeviceItem device) return;
+
+            try
+            {
+                await bluetooth.ToggleConnectionAsync(device);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth connect failed: {ex.Message}");
+            }
+        }
+
+        private async void BluetoothPair_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Bluetooth is not { } bluetooth || (sender as FrameworkElement)?.DataContext is not BluetoothDeviceItem device) return;
+
+            try
+            {
+                await bluetooth.PairAsync(device);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Bluetooth pairing failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The ⋯ button on a paired device. The menu is built here so it always knows which device it's for.
+        /// </summary>
+        private void BluetoothDeviceMore_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement button || button.DataContext is not BluetoothDeviceItem device) return;
+
+            var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+
+            // Speakers and headsets can be connected and disconnected without unpairing them.
+            // Other devices (mice, keyboards, controllers) connect by themselves when they're switched on.
+            var connect = new MenuFlyoutItem
+            {
+                Text = device.IsAudio ? device.ConnectButtonText : "Connects when switched on",
+                Icon = new FontIcon { Glyph = "" },
+                IsEnabled = device.IsAudio && device.CanAct
+            };
+            connect.Click += (_, _) => BluetoothConnect_Click(button, new RoutedEventArgs());
+            menu.Items.Add(connect);
+
+            var remove = new MenuFlyoutItem { Text = "Remove device", Icon = new FontIcon { Glyph = "" } };
+            remove.Click += async (_, _) => await RemoveBluetoothDeviceAsync(device);
+            menu.Items.Add(remove);
+
+            menu.ShowAt(button);
+        }
+
+        private async Task RemoveBluetoothDeviceAsync(BluetoothDeviceItem device)
+        {
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = $"Remove {device.Name}?",
+                    Content = new TextBlock
+                    {
+                        Text = "It will need to be paired again before it can connect to this PC.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Remove",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Close,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+                // The page may have been closed while the question was up
+                if (ViewModel.Bluetooth is { } bluetooth) await bluetooth.RemoveAsync(device);
+            }
+            catch (Exception ex)
+            {
+                // ShowAsync throws if another dialog is already open
+                System.Diagnostics.Debug.WriteLine($"Couldn't remove the Bluetooth device: {ex.Message}");
+            }
+        }
+
+        private void BluetoothPromptAccept_Click(object sender, RoutedEventArgs e) => AnswerBluetoothPrompt(true);
+
+        private void BluetoothPromptCancel_Click(object sender, RoutedEventArgs e) => AnswerBluetoothPrompt(false);
+
+        private void BluetoothPinBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                AnswerBluetoothPrompt(true);
+            }
+        }
+
+        private void AnswerBluetoothPrompt(bool accepted)
+        {
+            var bluetooth = ViewModel.Bluetooth;
+            if (bluetooth == null) return;
+
+            bluetooth.AnswerPrompt(accepted, BluetoothPinBox?.Text);
+
+            // Once the question has gone, clear the PIN so it's not sitting there next time
+            if (bluetooth.PromptKind != BluetoothPromptKind.EnterPin && BluetoothPinBox != null)
+            {
+                BluetoothPinBox.Text = string.Empty;
+            }
+        }
+
+        private void OpenBluetoothSettings_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.OpenBluetoothSettings();
         }
 
         private void ResetOpacity_Click(object sender, RoutedEventArgs e)

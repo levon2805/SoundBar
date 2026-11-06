@@ -149,6 +149,7 @@ namespace SoundBar.Services
 
             settings.HiddenApps ??= new();
             settings.AllowedBackgroundApps ??= new();
+            settings.FoldedSettingsGroups ??= new();
             settings.AppAliases ??= new();
             settings.VolumeUpHotkey ??= string.Empty;
             settings.VolumeDownHotkey ??= string.Empty;
