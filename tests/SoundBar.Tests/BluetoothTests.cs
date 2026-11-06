@@ -131,5 +131,22 @@ namespace SoundBar.Tests
 
             Assert.NotEmpty(BluetoothAudioControl.GetEndpoints(containerId));
         }
+
+        [Fact]
+        public void BusyAnimations_AreSwitchedOff_WhenThePageCloses()
+        {
+            // The page's spinner and searching bar keep animating (and using CPU) while hidden unless they're
+            // switched off, so closing the page must tell them, even if Windows hadn't answered yet
+            var bluetooth = new BluetoothViewModel(null);
+            Assert.True(bluetooth.IsLoading);
+
+            var announced = new System.Collections.Generic.List<string?>();
+            bluetooth.PropertyChanged += (_, e) => announced.Add(e.PropertyName);
+            bluetooth.Dispose();
+
+            Assert.False(bluetooth.IsLoading);
+            Assert.False(bluetooth.IsScanning);
+            Assert.Contains(nameof(BluetoothViewModel.IsLoading), announced);
+        }
     }
 }

@@ -391,9 +391,22 @@ namespace SoundBar.Views
             dialog.Content = stack;
             dialog.DataContext = ViewModel;
 
-            var result = await dialog.ShowAsync();
-
-            ViewModel.IsRecordingHotkey = false;
+            ContentDialogResult result;
+            try
+            {
+                result = await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                // ShowAsync throws if another dialog is already open
+                System.Diagnostics.Debug.WriteLine($"Couldn't open the hotkey dialog: {ex.Message}");
+                result = ContentDialogResult.None;
+            }
+            finally
+            {
+                // Otherwise every key press would keep going to the (closed) dialog and the hotkeys would stop working
+                ViewModel.IsRecordingHotkey = false;
+            }
 
             if (result == ContentDialogResult.Primary)
             {

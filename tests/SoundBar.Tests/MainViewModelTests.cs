@@ -9,8 +9,23 @@ using Xunit;
 
 namespace SoundBar.Tests
 {
-    public class MainViewModelTests
+    public class MainViewModelTests : System.IDisposable
     {
+        // Opening SoundBar checks its startup shortcut, so give every test its own Startup folder rather than the real one
+        private readonly string _startupFolder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"test_startup_{System.Guid.NewGuid():N}");
+
+        public MainViewModelTests()
+        {
+            System.IO.Directory.CreateDirectory(_startupFolder);
+            MainViewModel.StartupFolderOverride = _startupFolder;
+        }
+
+        public void Dispose()
+        {
+            MainViewModel.StartupFolderOverride = null;
+            try { System.IO.Directory.Delete(_startupFolder, true); } catch { }
+        }
+
         [Fact]
         public async Task PollSystemAudioState_WhenDevicesDisconnected_ClearsSelectedDevices()
         {
@@ -366,6 +381,98 @@ namespace SoundBar.Tests
 
                 viewModel.IsCompanionViewMode = false;
                 Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MixerViewVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        // --- v4.3.0 review ---
+
+        [Fact]
+        public async Task BackgroundApps_LeaveTheList_OnceTheyCloseOrOpenAWindow()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"test_vm_{System.Guid.NewGuid()}.json");
+            var settings = new SettingsService(path);
+
+            var helper = new AudioSessionData { ProcessId = 101, DisplayName = "Helper", RawProcessName = "helper", IsBackgroundApp = true };
+            var game = new AudioSessionData { ProcessId = 102, DisplayName = "Game", RawProcessName = "game", IsBackgroundApp = true };
+            var sessions = new List<AudioSessionData> { helper, game };
+
+            var mockAudioService = new Mock<IAudioMixerService>();
+            mockAudioService.Setup(s => s.GetAudioDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetActiveAudioSessions()).Returns(() => new List<AudioSessionData>(Volatile.Read(ref sessions)));
+
+            var viewModel = new MainViewModel(settings, mockAudioService.Object);
+            try
+            {
+                await WaitUntilAsync(() => viewModel.SystemBackgroundApps.Count == 2);
+                Assert.Equal(new[] { "Helper", "Game" }, viewModel.SystemBackgroundApps);
+                Assert.Equal("Background Apps (2)", viewModel.BackgroundAppsTitle);
+
+                // The helper closes, and the game opens its window (so it's a normal app in the mixer now)
+                var gameWithWindow = new AudioSessionData { ProcessId = 102, DisplayName = "Game", RawProcessName = "game", IsBackgroundApp = false };
+                Volatile.Write(ref sessions, new List<AudioSessionData> { gameWithWindow });
+
+                await WaitUntilAsync(() => viewModel.SystemBackgroundApps.Count == 0);
+                Assert.Empty(viewModel.SystemBackgroundApps);
+                Assert.Equal("Background Apps (0)", viewModel.BackgroundAppsTitle);
+                Assert.Contains(viewModel.AppsSnapshot, a => a.RawProcessName == "game");
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        private const string InstalledExe = @"C:\SoundBar\win-x64\SoundBar.exe";
+        private const string OtherCopyExe = @"C:\Users\Someone\Downloads\SoundBar\SoundBar.exe";
+
+        [Theory]
+        // Run at startup on: only make the shortcut if it's missing or leads nowhere
+        [InlineData(true, null, false, InstalledExe, "Create")]
+        [InlineData(true, "", false, InstalledExe, "Create")]
+        [InlineData(true, InstalledExe, false, OtherCopyExe, "Create")]
+        [InlineData(true, InstalledExe, true, InstalledExe, "None")]
+        // Another copy (a test build, say) leaves the installed copy's shortcut alone
+        [InlineData(true, InstalledExe, true, OtherCopyExe, "None")]
+        // Run at startup off: only remove a shortcut that opens this copy
+        [InlineData(false, null, false, InstalledExe, "None")]
+        [InlineData(false, InstalledExe, true, InstalledExe, "Delete")]
+        [InlineData(false, @"c:\soundbar\WIN-X64\soundbar.exe", true, InstalledExe, "Delete")]
+        [InlineData(false, InstalledExe, true, OtherCopyExe, "None")]
+        [InlineData(false, "", false, InstalledExe, "None")]
+        public void StartupShortcut_IsOnlyRepairedWhenSoundBarOpens(bool runAtStartup, string? target, bool targetExists, string thisExe, string expected)
+        {
+            Assert.Equal(expected, MainViewModel.GetStartupShortcutFix(runAtStartup, target, targetExists, thisExe).ToString());
+        }
+
+        [Fact]
+        public void OpeningSoundBar_LeavesAnotherCopysStartupShortcutAlone()
+        {
+            // Opening SoundBar with "Run at startup" off used to delete the startup shortcut whichever copy it
+            // belonged to (running these tests removed the user's real one). Plant one for another copy.
+            string shortcut = System.IO.Path.Combine(_startupFolder, "SoundBar.lnk");
+            string otherCopy = System.IO.Path.Combine(_startupFolder, "Installed", "SoundBar.exe");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(otherCopy)!);
+            System.IO.File.WriteAllText(otherCopy, "");
+
+            dynamic shell = System.Activator.CreateInstance(System.Type.GetTypeFromProgID("WScript.Shell")!)!;
+            dynamic link = shell.CreateShortcut(shortcut);
+            link.TargetPath = otherCopy;
+            link.Save();
+            byte[] before = System.IO.File.ReadAllBytes(shortcut);
+
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.False(settings.Settings.RunAtStartup);
+                Assert.True(System.IO.File.Exists(shortcut), "The other copy's startup shortcut was deleted");
+                Assert.Equal(before, System.IO.File.ReadAllBytes(shortcut));
             }
             finally
             {

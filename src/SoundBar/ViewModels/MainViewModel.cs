@@ -817,38 +817,149 @@ namespace SoundBar.ViewModels
             }
         }
 
+        /// <summary>
+        /// Tests point this at a scratch folder, so they never touch the real Startup folder.
+        /// </summary>
+        internal static string? StartupFolderOverride { get; set; }
+
+        private static string StartupShortcutPath =>
+            System.IO.Path.Combine(StartupFolderOverride ?? Environment.GetFolderPath(Environment.SpecialFolder.Startup), "SoundBar.lnk");
+
+        internal enum StartupShortcutFix { None, Create, Delete }
+
+        /// <summary>
+        /// What to do with the startup shortcut when SoundBar opens. We only ever repair it here. Another copy
+        /// (a test build, or one run straight from Downloads) mustn't take the shortcut over from the copy the
+        /// user installed, or delete one that isn't its own. Switching the setting itself still updates it.
+        /// </summary>
+        /// <param name="shortcutTarget">The program the shortcut opens, "" if it can't be read, or null if there's no shortcut.</param>
+        internal static StartupShortcutFix GetStartupShortcutFix(bool runAtStartup, string? shortcutTarget, bool shortcutTargetExists, string? thisExe)
+        {
+            if (runAtStartup)
+            {
+                return shortcutTarget == null || !shortcutTargetExists ? StartupShortcutFix.Create : StartupShortcutFix.None;
+            }
+
+            bool pointsAtUs = !string.IsNullOrEmpty(shortcutTarget) && !string.IsNullOrEmpty(thisExe) &&
+                string.Equals(System.IO.Path.GetFullPath(shortcutTarget), System.IO.Path.GetFullPath(thisExe), StringComparison.OrdinalIgnoreCase);
+            return pointsAtUs ? StartupShortcutFix.Delete : StartupShortcutFix.None;
+        }
+
+        private void RepairStartupShortcut()
+        {
+            RemoveOldStartupRegistryKey();
+
+            try
+            {
+                string? target = System.IO.File.Exists(StartupShortcutPath) ? ReadShortcutTarget(StartupShortcutPath) ?? "" : null;
+                bool targetExists = !string.IsNullOrEmpty(target) && System.IO.File.Exists(target);
+
+                switch (GetStartupShortcutFix(_runAtStartup, target, targetExists, Environment.ProcessPath))
+                {
+                    case StartupShortcutFix.Create: UpdateStartupShortcut(true); break;
+                    case StartupShortcutFix.Delete: UpdateStartupShortcut(false); break;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't check the startup shortcut: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Versions before the startup shortcut ran SoundBar from the registry instead.
+        /// </summary>
+        private static void RemoveOldStartupRegistryKey()
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+                if (key != null && key.GetValue("SoundBar") != null)
+                {
+                    key.DeleteValue("SoundBar", false);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// The program a shortcut opens, or null if it can't be read.
+        /// </summary>
+        private static string? ReadShortcutTarget(string shortcutPath)
+        {
+            object? shell = null;
+            try
+            {
+                Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (wshShellType == null) return null;
+                shell = Activator.CreateInstance(wshShellType);
+                if (shell == null) return null;
+
+                dynamic shortcut = ((dynamic)shell).CreateShortcut(shortcutPath);
+                try
+                {
+                    return (string?)shortcut.TargetPath;
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcut);
+                }
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                if (shell != null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+            }
+        }
+
+        /// <summary>
+        /// Makes a shortcut to this copy of SoundBar. Windows' shell objects are let go of straight away
+        /// rather than whenever the garbage collector gets round to it.
+        /// </summary>
+        private static void SaveShortcut(string shortcutPath, string? workingDirectory, string? description = null, string? iconLocation = null)
+        {
+            object? shell = null;
+            try
+            {
+                Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (wshShellType == null) return;
+                shell = Activator.CreateInstance(wshShellType);
+                if (shell == null) return;
+
+                dynamic shortcut = ((dynamic)shell).CreateShortcut(shortcutPath);
+                try
+                {
+                    shortcut.TargetPath = Environment.ProcessPath;
+                    shortcut.WorkingDirectory = workingDirectory;
+                    if (description != null) shortcut.Description = description;
+                    if (iconLocation != null) shortcut.IconLocation = iconLocation;
+                    shortcut.Save();
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shortcut);
+                }
+            }
+            finally
+            {
+                if (shell != null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+            }
+        }
+
         private void UpdateStartupShortcut(bool enable)
         {
             try
             {
-                // Clean up the old registry key if it exists
-                try
-                {
-                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-                    if (key != null && key.GetValue("SoundBar") != null)
-                    {
-                        key.DeleteValue("SoundBar", false);
-                    }
-                }
-                catch { }
+                RemoveOldStartupRegistryKey();
 
-                string startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                string shortcutPath = System.IO.Path.Combine(startupPath, "SoundBar.lnk");
+                string shortcutPath = StartupShortcutPath;
 
                 if (enable)
                 {
-                    Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
-                    if (wshShellType != null)
-                    {
-                        dynamic? shell = Activator.CreateInstance(wshShellType);
-                        if (shell != null)
-                        {
-                            dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                            shortcut.TargetPath = System.Environment.ProcessPath;
-                            shortcut.WorkingDirectory = AppContext.BaseDirectory;
-                            shortcut.Save();
-                        }
-                    }
+                    SaveShortcut(shortcutPath, AppContext.BaseDirectory);
                 }
                 else
                 {
@@ -990,8 +1101,8 @@ namespace SoundBar.ViewModels
             _runAtStartup = _settingsService.Settings.RunAtStartup;
             _audioService.SetSystemSoundsMute(_isDoNotDisturbEnabled);
 
-            // Ensure startup state is correctly applied (also cleans up old registry keys)
-            UpdateStartupShortcut(_runAtStartup);
+            // Make sure the startup shortcut is there if it should be (also cleans up old registry keys)
+            RepairStartupShortcut();
 
             // Start the monitoring loop
             StartPolling();
@@ -1715,6 +1826,18 @@ namespace SoundBar.ViewModels
                     }
                 }
             }
+
+            // The Background Apps list is for what's running now, so let go of apps that have closed
+            // or opened a window since (those are in the mixer now)
+            for (int i = SystemBackgroundApps.Count - 1; i >= 0; i--)
+            {
+                string name = SystemBackgroundApps[i];
+                if (!latestSessions.Any(s => s.IsBackgroundApp && string.Equals(s.DisplayName, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    SystemBackgroundApps.RemoveAt(i);
+                }
+            }
+
             AppsSnapshot = Apps.ToArray();
         }
 
@@ -1927,9 +2050,11 @@ namespace SoundBar.ViewModels
 
         private void CloseBluetooth()
         {
+            // Disposed while the page is still listening, so it hears that searching and loading have stopped
+            // (and switches their animations off) before it lets go
             var bluetooth = Bluetooth;
-            Bluetooth = null;
             bluetooth?.Dispose();
+            Bluetooth = null;
         }
 
         /// <summary>
@@ -2293,23 +2418,12 @@ namespace SoundBar.ViewModels
         {
             try
             {
-                Type? wshShellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (wshShellType != null)
-                {
-                    dynamic? shell = Activator.CreateInstance(wshShellType);
-                    if (shell != null)
-                    {
-                        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                        string shortcutPath = System.IO.Path.Combine(desktopPath, "SoundBar.lnk");
-                        
-                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                        shortcut.TargetPath = Environment.ProcessPath;
-                    shortcut.WorkingDirectory = System.IO.Path.GetDirectoryName(Environment.ProcessPath);
-                        shortcut.Description = "SoundBar Audio Mixer";
-                        shortcut.IconLocation = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico");
-                        shortcut.Save();
-                    }
-                }
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                SaveShortcut(
+                    System.IO.Path.Combine(desktopPath, "SoundBar.lnk"),
+                    System.IO.Path.GetDirectoryName(Environment.ProcessPath),
+                    "SoundBar Audio Mixer",
+                    System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "SoundBar.ico"));
             }
             catch (Exception ex)
             {

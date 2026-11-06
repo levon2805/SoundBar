@@ -701,8 +701,9 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,-16,0" Padding="0,0,16,0">
                         <StackPanel Spacing="10" Padding="0,0,0,10">
 
-                            <!-- Still asking Windows about the radio -->
-                            <ProgressRing IsActive="True" Width="24" Height="24" Margin="0,30,0,0"
+                            <!-- Still asking Windows about the radio. Only active while it's showing: a hidden
+                                 spinner that's still active keeps animating and using CPU in the background -->
+                            <ProgressRing IsActive="{x:Bind ViewModel.Bluetooth.IsLoading, Mode=OneWay, FallbackValue=False}" Width="24" Height="24" Margin="0,30,0,0"
                                           HorizontalAlignment="Center"
                                           Visibility="{x:Bind ViewModel.Bluetooth.LoadingVisibility, Mode=OneWay}"/>
 
@@ -838,7 +839,8 @@
                                 </Grid>
 
                                 <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.Bluetooth.ScanningVisibility, Mode=OneWay}">
-                                    <ProgressBar IsIndeterminate="True"/>
+                                    <!-- Like the spinner above, only animates while searching -->
+                                    <ProgressBar IsIndeterminate="{x:Bind ViewModel.Bluetooth.IsScanning, Mode=OneWay, FallbackValue=False}"/>
                                     <TextBlock Text="Looking for devices. Make sure yours is switched on and in pairing mode."
                                                FontSize="13" TextWrapping="Wrap"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

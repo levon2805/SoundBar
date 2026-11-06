@@ -104,6 +104,12 @@ namespace SoundBar.ViewModels
 
         public Visibility LoadingVisibility => _hasChecked ? Visibility.Collapsed : Visibility.Visible;
 
+        /// <summary>
+        /// Still asking Windows about the radio. Switches the loading spinner on and off, because a spinner
+        /// that's hidden but still active keeps animating (and using CPU) for as long as the app runs.
+        /// </summary>
+        public bool IsLoading => !_hasChecked && !_isDisposed;
+
         private bool _isRadioOn;
         public bool IsRadioOn
         {
@@ -334,6 +340,7 @@ namespace SoundBar.ViewModels
             OnPropertyChanged(nameof(AvailableVisibility));
             OnPropertyChanged(nameof(UnavailableVisibility));
             OnPropertyChanged(nameof(LoadingVisibility));
+            OnPropertyChanged(nameof(IsLoading));
             OnPropertyChanged(nameof(CanToggleRadio));
         }
 
@@ -988,6 +995,7 @@ namespace SoundBar.ViewModels
 
             StopScan();
             _isDisposed = true;
+            OnPropertyChanged(nameof(IsLoading)); // Closed before Windows answered, so stop the spinner
 
             foreach (var watcher in _pairedWatchers)
             {
