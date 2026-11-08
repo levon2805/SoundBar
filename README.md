@@ -65,8 +65,8 @@ This is the main SoundBar window. Each number is explained next to it.
         <li><b>Microphone:</b> Choose which microphone to use.</li>
         <li><b>Master volume:</b> The volume for your whole PC.</li>
         <li><b>Hide:</b> Remove an app you don't need from the list.</li>
-        <li><b>App name:</b> Click the name to give it a nickname. Click the app's icon to mute it.</li>
-        <li><b>App volume:</b> Every app gets its own slider.</li>
+        <li><b>App name:</b> Shown above the app's slider. Click it to give the app a nickname.</li>
+        <li><b>App volume:</b> Every app gets its own slider. Click the app's icon beside it to mute it.</li>
         <li><b>Music player:</b> Switch to a big view of the song that's playing.</li>
         <li><b>Media buttons:</b> Previous, play/pause, next and mute everything.</li>
         <li><b>Version:</b> Click to see what's new in this version.</li>
@@ -81,11 +81,11 @@ This is the main SoundBar window. Each number is explained next to it.
 
 ## Control every app's volume
 
-Every app that's playing sound gets its own slider, so you can balance a game, a video call and your music without opening Windows settings.
+Every app that's playing sound gets its own slider, so you can balance a game, a video call and your music without opening Windows settings. Each app's name sits just above its slider, so the slider can stretch across nearly the whole window, even when SoundBar is small.
 
 - **Drag a slider** to change that app's volume.
-- **Click an app's icon** to mute or unmute it.
-- **Click an app's name** to rename it to something friendlier (handy for apps with confusing names).
+- **Click an app's icon** (beside its slider) to mute or unmute it.
+- **Click an app's name** (above its slider) to rename it to something friendlier (handy for apps with confusing names).
 - **Click the eye** to hide an app you never want to see. You can bring it back at any time from **Settings > Apps > Hidden Apps**.
 - **Missing an app?** Apps only appear once they start playing sound. Click the refresh arrow next to **Active Apps** to check again.
 
