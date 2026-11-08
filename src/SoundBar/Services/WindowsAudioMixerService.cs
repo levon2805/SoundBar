@@ -88,13 +88,20 @@ namespace SoundBar.Services
 
                             if (hitCache)
                             {
-                                // If it was previously a background app, it might have spawned a window now!
-                                // Re-evaluate every 5 seconds to catch games like Blue Prince that delay their window creation.
-                                if (cachedApp.IsBackground && (DateTime.UtcNow - cachedApp.LastChecked).TotalSeconds > 5)
+                                // Recheck every 5 seconds for things that weren't ready the first time round:
+                                // a background app might have opened its window by now (games like Blue Prince
+                                // create theirs late), and an exe path that couldn't be read (the process was
+                                // starting up or shutting down, e.g. during a Firefox update restart) might be readable now.
+                                bool needsRecheck = cachedApp.IsBackground || cachedApp.IconPath == null;
+                                if (needsRecheck && (DateTime.UtcNow - cachedApp.LastChecked).TotalSeconds > 5)
                                 {
-                                    bool stillBackground = processes.IsBackground(cachedApp.RawProcessName) ?? true;
-                                    _processCache[processId] = (cachedApp.DisplayName, cachedApp.RawProcessName, stillBackground, cachedApp.IconPath, DateTime.UtcNow);
-                                    cachedApp.IsBackground = stillBackground; // update local tuple
+                                    if (cachedApp.IsBackground)
+                                        cachedApp.IsBackground = processes.IsBackground(cachedApp.RawProcessName) ?? true;
+                                    if (cachedApp.IconPath == null)
+                                        cachedApp.IconPath = GetExecutablePathSafely(processId);
+
+                                    cachedApp.LastChecked = DateTime.UtcNow;
+                                    _processCache[processId] = cachedApp;
                                 }
 
                                 if (_addedNames.Contains(cachedApp.DisplayName)) continue;
@@ -652,11 +659,40 @@ namespace SoundBar.Services
 
         private static string? GetExecutablePathSafely(System.Diagnostics.Process process)
         {
+            int processId;
+            try
+            {
+                processId = process.Id;
+            }
+            catch (InvalidOperationException)
+            {
+                return null; // Process just exited
+            }
+
+            string? path = GetExecutablePathSafely(processId);
+            if (path != null) return path;
+
+            // Last resort
+            try
+            {
+                return process.MainModule?.FileName;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The full path of a process's exe, or null if Windows won't tell us right now.
+        /// </summary>
+        private static string? GetExecutablePathSafely(int processId)
+        {
             // Asking Windows for the image name directly is far cheaper than Process.MainModule (which reads
             // the whole module list), and it also works on anti-cheat protected games like Valorant
             try
             {
-                IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.Id);
+                IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
                 if (hProcess != IntPtr.Zero)
                 {
                     try
@@ -674,21 +710,11 @@ namespace SoundBar.Services
                     }
                 }
             }
-            catch (InvalidOperationException)
-            {
-                // Process just exited
-                return null;
-            }
-
-            // Last resort
-            try
-            {
-                return process.MainModule?.FileName;
-            }
             catch
             {
-                return null;
             }
+
+            return null;
         }
     }
 }

@@ -1455,6 +1455,9 @@ namespace SoundBar.ViewModels
         {
             _audioService.ClearCache();
             AudioAppModel.ClearIconCache();
+
+            // Any app still missing its icon gets another go on the next tick instead of waiting
+            foreach (var app in Apps) app.ResetIconRetry();
         }
 
         public void OpenBackgroundFolder()
@@ -1824,6 +1827,9 @@ namespace SoundBar.ViewModels
                         existingApp.SyncVolumeFromOS(sessionData.Volume);
                         existingApp.SyncMuteFromOS(sessionData.IsMuted);
                     }
+
+                    // If the icon didn't load first time, try again now and then (does nothing once it has one)
+                    existingApp.RetryIconIfMissing(sessionData.IconPath);
                 }
             }
 

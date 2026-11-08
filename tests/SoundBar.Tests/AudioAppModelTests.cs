@@ -244,5 +244,83 @@ namespace SoundBar.Tests
             // Assert — calling Dispose again should be safe (idempotent)
             model.Dispose();
         }
+
+        // An exe that's on every Windows PC and has an icon
+        private static readonly string RealExe = System.IO.Path.Combine(System.Environment.SystemDirectory, "cmd.exe");
+
+        private static async Task WaitForIconAsync(AudioAppModel model)
+        {
+            for (int i = 0; i < 100 && model.AppIcon == null; i++) await Task.Delay(50);
+        }
+
+        // Only for icons of throwaway exes. cmd.exe's icon is shared between tests through the app's cache.
+        private static void DeleteIconFile(AudioAppModel model)
+        {
+            if (model.AppIcon != null) try { System.IO.File.Delete(model.AppIcon); } catch { }
+        }
+
+        [Fact]
+        public async Task RetryIconIfMissing_LoadsIcon_WhenRowWasCreatedWithoutAPath()
+        {
+            // The first look at the app couldn't read its exe path (it was starting up or shutting down)
+            var model = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "firefox" };
+            await model.LoadIconAsync();
+            Assert.Null(model.AppIcon);
+
+            // A later tick has the path, so the icon should load straight away
+            model.RetryIconIfMissing(RealExe);
+            await WaitForIconAsync(model);
+
+            Assert.Equal(RealExe, model.IconPath);
+            Assert.NotNull(model.AppIcon);
+            Assert.True(System.IO.File.Exists(model.AppIcon));
+        }
+
+        [Fact]
+        public async Task RetryIconIfMissing_WaitsBeforeRetryingTheSamePath_UnlessReset()
+        {
+            // An exe path that can't be read yet
+            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarTests_" + System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(dir);
+            string exe = System.IO.Path.Combine(dir, "app.exe");
+            try
+            {
+                var model = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "app", IconPath = exe };
+                await model.LoadIconAsync();
+                Assert.Null(model.AppIcon);
+
+                // Now it's readable, but a retry straight after a failure is held back so we don't hammer the disk
+                System.IO.File.Copy(RealExe, exe);
+                model.RetryIconIfMissing(exe);
+                await Task.Delay(300);
+                Assert.Null(model.AppIcon);
+
+                // The refresh button resets the wait, so the next retry goes ahead
+                model.ResetIconRetry();
+                model.RetryIconIfMissing(exe);
+                await WaitForIconAsync(model);
+                Assert.NotNull(model.AppIcon);
+                DeleteIconFile(model);
+            }
+            finally
+            {
+                try { System.IO.Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task RetryIconIfMissing_DoesNothing_OnceTheIconHasLoaded()
+        {
+            var model = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "cmd", IconPath = RealExe };
+            await model.LoadIconAsync();
+            string? icon = model.AppIcon;
+            Assert.NotNull(icon);
+
+            model.ResetIconRetry();
+            model.RetryIconIfMissing(@"C:\Somewhere\Else.exe");
+
+            Assert.Equal(RealExe, model.IconPath);
+            Assert.Equal(icon, model.AppIcon);
+        }
     }
 }
