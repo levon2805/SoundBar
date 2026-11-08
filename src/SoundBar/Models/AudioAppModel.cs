@@ -281,14 +281,51 @@ namespace SoundBar.Models
             _iconCache.Clear();
         }
 
+        // How long to wait before trying a missing icon again, so an exe that really has no icon
+        // doesn't get re-read every second
+        private static readonly TimeSpan IconRetryInterval = TimeSpan.FromSeconds(30);
+        private DateTime _lastIconAttempt = DateTime.MinValue;
+        private bool _iconLoading;
+
+        /// <summary>
+        /// Gives an app with no icon another go. The first attempt can miss if the app was starting up or
+        /// shutting down at the time (Firefox restarting for an update, say), and apps like Firefox keep
+        /// their row for as long as any of their processes are running, so without this the icon stays blank.
+        /// </summary>
+        /// <param name="latestIconPath">The exe path from the newest look at the app's audio sessions.</param>
+        public void RetryIconIfMissing(string? latestIconPath)
+        {
+            if (AppIcon != null || _iconLoading) return;
+
+            if (!string.IsNullOrEmpty(latestIconPath) && latestIconPath != IconPath)
+            {
+                // A path we haven't tried yet is worth trying straight away
+                IconPath = latestIconPath;
+                _lastIconAttempt = DateTime.MinValue;
+            }
+
+            if (DateTime.UtcNow - _lastIconAttempt < IconRetryInterval) return;
+            _ = LoadIconAsync();
+        }
+
+        /// <summary>
+        /// Lets the next <see cref="RetryIconIfMissing"/> try straight away (used by the refresh button).
+        /// </summary>
+        public void ResetIconRetry()
+        {
+            _lastIconAttempt = DateTime.MinValue;
+        }
+
         /// <summary>
         /// Attempts to extract a lovely icon from the application's executable.
         /// We do the heavy lifting in the background to keep the UI smooth.
         /// </summary>
         public async Task LoadIconAsync()
         {
-            if (string.IsNullOrEmpty(IconPath) || AppIcon != null) return;
+            if (string.IsNullOrEmpty(IconPath) || AppIcon != null || _iconLoading) return;
 
+            _iconLoading = true;
+            _lastIconAttempt = DateTime.UtcNow;
             try
             {
                 if (_iconCache.TryGetValue(IconPath, out var cachedPath))
@@ -354,6 +391,10 @@ namespace SoundBar.Models
                 }
             }
             catch { }
+            finally
+            {
+                _iconLoading = false;
+            }
         }
 
         /// <summary>
