@@ -397,7 +397,7 @@
                         </Grid>
                     </StackPanel>
 
-                    <Border Height="1" Background="{ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,20,0,10"/>
+                    <Border Height="1" Background="{ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,0,0,10"/>
 
                     <!-- Active Apps Header + List -->
                     <StackPanel x:Name="ActiveAppsHeaderPanel" Visibility="{x:Bind ViewModel.ActiveAppsVisibility, Mode=OneWay}">
@@ -434,17 +434,23 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,0,0,15" Background="{Binding IsHighlightVisible, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
+                                <!-- Name on a thin line above, icon + slider + % below, so the slider gets
+                                     nearly the full width even at the default window size -->
+                                <Grid Margin="0,0,0,6" Background="{Binding IsHighlightVisible, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="30"/>
-                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="40"/>
                                     </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
                                     <!-- The "Hide" glyph (ED1A) isn't in the Windows 10 icon font, so draw it as
                                          the "View" eye (in both fonts) with a slash across it -->
-                                    <Button Grid.Column="0"
+                                    <Button Grid.Column="0" Grid.RowSpan="2"
                                             Background="Transparent"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                             BorderThickness="0" 
@@ -459,29 +465,36 @@
                                         </Grid>
                                     </Button>
 
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Image Source="{Binding AppIcon}" Width="20" Height="20" Margin="0,0,8,0" Stretch="Uniform" Tapped="AppIcon_Tapped" ToolTipService.ToolTip="Click to Mute"/>
-                                        <TextBox Text="{Binding Name, Mode=TwoWay}" 
-                                                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                 Background="Transparent"
-                                                 BorderThickness="0"
-                                                 VerticalAlignment="Center"
-                                                 MinHeight="0"
-                                                 MinWidth="0"
-                                                 Padding="0"
-                                                 Margin="0"
-                                                 KeyDown="TextBox_KeyDown"
-                                                 ToolTipService.ToolTip="Click to rename"/>
-                                    </StackPanel>
+                                    <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3"
+                                             Text="{Binding Name, Mode=TwoWay}"
+                                             Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             FontSize="13"
+                                             HorizontalAlignment="Left"
+                                             VerticalAlignment="Center"
+                                             MinHeight="0"
+                                             MinWidth="0"
+                                             Padding="0"
+                                             Margin="0,2,0,0"
+                                             KeyDown="TextBox_KeyDown"
+                                             ToolTipService.ToolTip="Click to rename"/>
 
-                                    <Slider Grid.Column="2" 
-                                            Minimum="0" 
-                                            Maximum="100" 
+                                    <Image Grid.Row="1" Grid.Column="1"
+                                           Source="{Binding AppIcon}" Width="20" Height="20" Stretch="Uniform"
+                                           VerticalAlignment="Center"
+                                           Tapped="AppIcon_Tapped" ToolTipService.ToolTip="Click to Mute"/>
+
+                                    <!-- Negative top/bottom margin trims the slider's built-in padding so the row stays short -->
+                                    <Slider Grid.Row="1" Grid.Column="2"
+                                            Minimum="0"
+                                            Maximum="100"
                                             Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                            Margin="10,0"/>
+                                            VerticalAlignment="Center"
+                                            Margin="10,-4,10,-4"/>
 
                                     <!-- Volume % -->
-                                    <TextBlock Grid.Column="3"
+                                    <TextBlock Grid.Row="1" Grid.Column="3"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                FontSize="14"
                                                VerticalAlignment="Center"
@@ -491,7 +504,7 @@
                                     </TextBlock>
 
                                     <!-- Muted icon -->
-                                    <TextBlock Grid.Column="3"
+                                    <TextBlock Grid.Row="1" Grid.Column="3"
                                                Text="&#xE74F;"
                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                Foreground="{ThemeResource MuteTrueBrush}"
