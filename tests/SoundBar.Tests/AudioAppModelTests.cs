@@ -277,7 +277,7 @@ namespace SoundBar.Tests
         }
 
         [Fact]
-        public async Task RetryIconIfMissing_WaitsBeforeRetryingTheSamePath_UnlessReset()
+        public async Task RetryIconIfMissing_WaitsBeforeRetryingTheSamePath_ButRefreshDoesNot()
         {
             // An exe path that can't be read yet
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarTests_" + System.Guid.NewGuid().ToString("N"));
@@ -295,9 +295,8 @@ namespace SoundBar.Tests
                 await Task.Delay(300);
                 Assert.Null(model.AppIcon);
 
-                // The refresh button resets the wait, so the next retry goes ahead
-                model.ResetIconRetry();
-                model.RetryIconIfMissing(exe);
+                // The refresh button doesn't wait
+                model.ReloadIcon();
                 await WaitForIconAsync(model);
                 Assert.NotNull(model.AppIcon);
                 DeleteIconFile(model);
@@ -316,11 +315,73 @@ namespace SoundBar.Tests
             string? icon = model.AppIcon;
             Assert.NotNull(icon);
 
-            model.ResetIconRetry();
             model.RetryIconIfMissing(@"C:\Somewhere\Else.exe");
 
             Assert.Equal(RealExe, model.IconPath);
             Assert.Equal(icon, model.AppIcon);
+        }
+
+        // A throwaway copy of a real exe, so tests can delete its icon without upsetting the others
+        private static string MakeThrowawayExe(out string dir)
+        {
+            dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarTests_" + System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(dir);
+            string exe = System.IO.Path.Combine(dir, "app.exe");
+            System.IO.File.Copy(RealExe, exe);
+            return exe;
+        }
+
+        [Fact]
+        public async Task LoadIconAsync_MakesTheIconAgain_WhenItsSavedFileWasDeleted()
+        {
+            // Windows tidying up can delete a saved icon while SoundBar is running. The next row for that
+            // app (it closed and reopened, say) used to point at the missing file and show a blank space.
+            string exe = MakeThrowawayExe(out string dir);
+            try
+            {
+                var first = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "app", IconPath = exe };
+                await first.LoadIconAsync();
+                Assert.NotNull(first.AppIcon);
+                System.IO.File.Delete(first.AppIcon!);
+
+                var reopened = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "app", IconPath = exe };
+                await reopened.LoadIconAsync();
+
+                Assert.NotNull(reopened.AppIcon);
+                Assert.True(System.IO.File.Exists(reopened.AppIcon));
+                DeleteIconFile(reopened);
+            }
+            finally
+            {
+                try { System.IO.Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task ReloadIcon_BringsBackAnIconWhoseFileWentMissing()
+        {
+            string exe = MakeThrowawayExe(out string dir);
+            try
+            {
+                var model = new AudioAppModel(new Mock<IAudioMixerService>().Object) { RawProcessName = "app", IconPath = exe };
+                await model.LoadIconAsync();
+                Assert.NotNull(model.AppIcon);
+
+                // The row still has its icon path, but the file behind it has gone, so it shows blank
+                System.IO.File.Delete(model.AppIcon!);
+
+                // The refresh button
+                model.ReloadIcon();
+                await WaitForIconAsync(model);
+
+                Assert.NotNull(model.AppIcon);
+                Assert.True(System.IO.File.Exists(model.AppIcon));
+                DeleteIconFile(model);
+            }
+            finally
+            {
+                try { System.IO.Directory.Delete(dir, true); } catch { }
+            }
         }
     }
 }

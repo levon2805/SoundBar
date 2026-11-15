@@ -1456,8 +1456,8 @@ namespace SoundBar.ViewModels
             _audioService.ClearCache();
             AudioAppModel.ClearIconCache();
 
-            // Any app still missing its icon gets another go on the next tick instead of waiting
-            foreach (var app in Apps) app.ResetIconRetry();
+            // Rebuild every icon from scratch, so a blank one always comes back
+            foreach (var app in Apps) app.ReloadIcon();
         }
 
         public void OpenBackgroundFolder()
