@@ -572,7 +572,7 @@
                 </Grid>
 
                 <!-- COMPANION VIEW -->
-                <Grid Grid.Row="0" Grid.RowSpan="2" Visibility="{x:Bind ViewModel.CompanionViewVisibility, Mode=OneWay}" Padding="15">
+                <Grid Grid.Row="0" Grid.RowSpan="2" Visibility="{x:Bind ViewModel.CompanionViewVisibility, Mode=OneWay}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -684,8 +684,7 @@
 
                 <!-- BLUETOOTH VIEW: what it shows (and the Windows device watchers behind it) only exists while it's open -->
                 <Grid Grid.Row="0" Grid.RowSpan="2"
-                      Visibility="{x:Bind ViewModel.BluetoothViewVisibility, Mode=OneWay}"
-                      Padding="15,15,15,0">
+                      Visibility="{x:Bind ViewModel.BluetoothViewVisibility, Mode=OneWay}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>

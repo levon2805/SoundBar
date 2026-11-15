@@ -274,7 +274,11 @@ namespace SoundBar.Models
         }
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _iconCache = new();
-        private static readonly string _iconDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SoundBarIcons");
+
+        // Not in %TEMP%: Windows (Storage Sense, Disk Cleanup) tidies that folder while we're running, and an
+        // app row pointing at a deleted file just shows a blank space
+        private static readonly string _iconDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundBar", "Icons");
 
         public static void ClearIconCache()
         {
@@ -309,11 +313,36 @@ namespace SoundBar.Models
         }
 
         /// <summary>
-        /// Lets the next <see cref="RetryIconIfMissing"/> try straight away (used by the refresh button).
+        /// Builds this app's icon again from scratch (used by the refresh button). Throws away the saved
+        /// picture first, so a missing or broken file can't keep the icon blank.
         /// </summary>
-        public void ResetIconRetry()
+        public void ReloadIcon()
         {
+            if (_iconLoading) return;
+
+            if (!string.IsNullOrEmpty(IconPath)) _iconCache.TryRemove(IconPath, out _);
+            if (AppIcon != null)
+            {
+                try { System.IO.File.Delete(AppIcon); } catch { }
+                AppIcon = null;
+            }
+
+            // If we don't know the exe yet, the next update tick tries as soon as it does
             _lastIconAttempt = DateTime.MinValue;
+            _ = LoadIconAsync();
+        }
+
+        private static bool IsUsableIconFile(string path)
+        {
+            try
+            {
+                var file = new System.IO.FileInfo(path);
+                return file.Exists && file.Length > 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -330,8 +359,14 @@ namespace SoundBar.Models
             {
                 if (_iconCache.TryGetValue(IconPath, out var cachedPath))
                 {
-                    AppIcon = cachedPath;
-                    return;
+                    if (IsUsableIconFile(cachedPath))
+                    {
+                        AppIcon = cachedPath;
+                        return;
+                    }
+
+                    // The file's gone (or got emptied) since we made it, so make it again below
+                    _iconCache.TryRemove(IconPath, out _);
                 }
 
                 // Pop onto a background thread for disk reads.
@@ -347,8 +382,7 @@ namespace SoundBar.Models
                         string targetPath = System.IO.Path.Combine(_iconDir, hash + ".png");
 
                         // An empty file means a save got cut short last time, so make it again
-                        var existing = new System.IO.FileInfo(targetPath);
-                        if (existing.Exists && existing.Length > 0)
+                        if (IsUsableIconFile(targetPath))
                         {
                             _iconCache[IconPath] = targetPath;
                             return targetPath;
