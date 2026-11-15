@@ -221,3 +221,6 @@ temp/
 # Personal release tool (builds, zips and signs a release onto the Desktop)
 release.cmd
 ReleaseTools/MakeRelease/
+# Personal winget submit tool (sends a new SoundBar version to winget)
+winget-submit.cmd
+ReleaseTools/WingetSubmit/
