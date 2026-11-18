@@ -111,6 +111,7 @@ namespace SoundBar.ViewModels
                     _updateAvailable = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(UpdateBannerVisibility));
+                    RaiseTitleBarChanged();
                 }
             }
         }
@@ -126,6 +127,7 @@ namespace SoundBar.ViewModels
                     _latestVersion = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(UpdateBannerText));
+                    OnPropertyChanged(nameof(UpdateMenuText));
                 }
             }
         }
@@ -147,6 +149,14 @@ namespace SoundBar.ViewModels
 
         public Microsoft.UI.Xaml.Visibility UpdateBannerVisibility => UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         public string UpdateBannerText => IsUpdating ? "Downloading Update..." : $"Update Available ({LatestVersion}) - Click to Install";
+
+        /// <summary>The update's entry in the ⋯ menu (where it lives unless the classic title bar is on).</summary>
+        public string UpdateMenuText => string.IsNullOrEmpty(LatestVersion) ? "Update SoundBar" : $"Update to {LatestVersion}";
+
+        /// <summary>The release page for the new version, for downloading it by hand if the update stalls.</summary>
+        public string UpdateDownloadPageUrl => string.IsNullOrEmpty(LatestVersion)
+            ? "https://github.com/levon2805/SoundBar/releases/latest"
+            : $"https://github.com/levon2805/SoundBar/releases/tag/{LatestVersion}";
 
         public string AppVersionText => $"SoundBar {UpdateService.CurrentVersion}";
 
@@ -784,7 +794,19 @@ namespace SoundBar.ViewModels
         /// The title bar's ⋯ menu only shows up if it's in use and there's something in it.
         /// </summary>
         public Microsoft.UI.Xaml.Visibility MoreMenuVisibility =>
-            !UseClassicTitleBar && (ShowPinButton || ShowCompanionButton || ShowBluetoothButton) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+            !UseClassicTitleBar && (HasMoreMenuItems || UpdateAvailable) ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private bool HasMoreMenuItems => ShowPinButton || ShowCompanionButton || ShowBluetoothButton;
+
+        public string MoreButtonToolTip => UpdateAvailable && !UseClassicTitleBar ? "More (update available)" : "More";
+
+        // Only needed between the update and the menu's other items
+        public Microsoft.UI.Xaml.Visibility UpdateMenuSeparatorVisibility =>
+            UpdateAvailable && HasMoreMenuItems ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        // The classic title bar keeps the big green update button, which sits in place of the app's title
+        public Microsoft.UI.Xaml.Visibility ClassicUpdateButtonVisibility => UseClassicTitleBar && UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility AppTitleVisibility => UseClassicTitleBar && UpdateAvailable ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 
         // The classic title bar's separate buttons
         public Microsoft.UI.Xaml.Visibility ClassicPinButtonVisibility => UseClassicTitleBar && ShowPinButton ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -794,6 +816,10 @@ namespace SoundBar.ViewModels
         private void RaiseTitleBarChanged()
         {
             OnPropertyChanged(nameof(MoreMenuVisibility));
+            OnPropertyChanged(nameof(MoreButtonToolTip));
+            OnPropertyChanged(nameof(UpdateMenuSeparatorVisibility));
+            OnPropertyChanged(nameof(ClassicUpdateButtonVisibility));
+            OnPropertyChanged(nameof(AppTitleVisibility));
             OnPropertyChanged(nameof(ClassicPinButtonVisibility));
             OnPropertyChanged(nameof(ClassicCompanionButtonVisibility));
             OnPropertyChanged(nameof(ClassicBluetoothButtonVisibility));
@@ -1111,8 +1137,11 @@ namespace SoundBar.ViewModels
             _ = LoadBackgroundImageAsync();
 
             // Check for updates
-            _ = CheckForUpdatesAsync();
+            UpdateCheck = CheckForUpdatesAsync();
         }
+
+        /// <summary>The startup update check, so tests can wait for it to finish.</summary>
+        internal Task UpdateCheck { get; private set; } = Task.CompletedTask;
 
         private void SettingsService_ChangedExternally(AppSettings fresh)
         {

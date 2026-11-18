@@ -93,10 +93,6 @@ namespace SoundBar.Views
             }
 
             this.Activated += MainWindow_Activated;
-                        if (AppTitleText != null)
-            {
-                AppTitleText.Visibility = ViewModel.UpdateBannerVisibility == Microsoft.UI.Xaml.Visibility.Visible ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
-            }
             RestoreWindowPosition();
             ApplyWindowOpacity(ViewModel.WindowOpacity);
 
@@ -307,13 +303,6 @@ namespace SoundBar.Views
             if (e.PropertyName == nameof(MainViewModel.BackgroundImage))
             {
                 _ = LoadBackgroundAsync();
-            }
-            if (e.PropertyName == nameof(MainViewModel.UpdateBannerVisibility))
-            {
-                if (AppTitleText != null)
-                {
-                    AppTitleText.Visibility = ViewModel.UpdateBannerVisibility == Microsoft.UI.Xaml.Visibility.Visible ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
-                }
             }
         }
 
@@ -839,17 +828,49 @@ namespace SoundBar.Views
             stack.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Downloading and installing the latest version. SoundBar will restart automatically in a few moments...", TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap });
             stack.Children.Add(new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true });
 
+            // Shown if the update takes much longer than usual, so nobody is left waiting on a stuck download
+            var slowHelp = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 4, Visibility = Microsoft.UI.Xaml.Visibility.Collapsed };
+            slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock
+            {
+                Text = "This is taking longer than usual. If it doesn't finish soon, you can download the new version yourself from the GitHub release page instead.",
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            });
+            slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.HyperlinkButton
+            {
+                Content = "Open the GitHub release page",
+                NavigateUri = new Uri(ViewModel.UpdateDownloadPageUrl),
+                Padding = new Microsoft.UI.Xaml.Thickness(0)
+            });
+            stack.Children.Add(slowHelp);
+
             var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
             {
                 Title = "Updating SoundBar...",
                 Content = stack,
                 XamlRoot = this.Content.XamlRoot
             };
-            
+
+            var slowTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            slowTimer.Tick += (_, _) =>
+            {
+                slowTimer.Stop();
+                slowHelp.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            };
+            slowTimer.Start();
+
             var progressDialogTask = dialog.ShowAsync();
 
             // On success the app closes and restarts, so we only get past this if something went wrong
-            string? error = await ViewModel.ApplyUpdate();
+            string? error;
+            try
+            {
+                error = await ViewModel.ApplyUpdate();
+            }
+            finally
+            {
+                slowTimer.Stop();
+            }
             dialog.Hide();
 
             // Only one dialog can be open at once, so wait for this one to finish closing before
