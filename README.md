@@ -321,7 +321,16 @@ Silence all Windows notification and system sounds with one switch in **Settings
 If your volume stays above 85% for a long time, SoundBar can show a friendly warning to protect your ears. Turn it on in **Settings > Sound > Loudness warning**.
 
 ### Automatic updates
-SoundBar checks for a new version each time it starts. When one is available, an **Update Available** button appears at the top. Click it once and SoundBar updates itself. Your settings and wallpapers are kept.
+SoundBar checks for a new version each time it starts. When one is available, a green dot appears on the **⋯** button in the title bar. Open the menu and click **Update to vX.Y.Z** whenever you're ready, and SoundBar updates itself. Your settings and wallpapers are kept.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/update-available.png" width="300" alt="A green dot on the menu button" /><br/><sub>A green dot means there's an update</sub></td>
+    <td align="center"><img src="docs/images/update-menu.png" width="300" alt="The Update item in the menu" /><br/><sub>Click <b>Update</b> in the menu</sub></td>
+  </tr>
+</table>
+
+If you use the classic title bar, an **Update Available** button appears at the top instead. If an update ever takes more than a minute, SoundBar offers a link to download the new version from GitHub yourself.
 
 To see what changed, click the version number in the bottom corner or open **Settings > General > About SoundBar**.
 
