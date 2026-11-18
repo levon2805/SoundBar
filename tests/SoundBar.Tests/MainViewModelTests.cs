@@ -236,11 +236,15 @@ namespace SoundBar.Tests
         }
 
         [Fact]
-        public void MoreMenu_DisappearsOnlyWhenEverythingInItIsHidden()
+        public async Task MoreMenu_DisappearsOnlyWhenEverythingInItIsHidden()
         {
             var (viewModel, settings, path) = CreateViewModel();
             try
             {
+                // Debug builds always find an update, which would keep the menu up; this test is about its other items
+                await viewModel.UpdateCheck;
+                viewModel.UpdateAvailable = false;
+
                 viewModel.ShowPinButton = false;
                 viewModel.ShowCompanionButton = false;
                 Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MoreMenuVisibility);
@@ -284,6 +288,70 @@ namespace SoundBar.Tests
                 viewModel.ShowCompanionButton = false;
                 Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicCompanionButtonVisibility);
                 Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicPinButtonVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task Update_IsTuckedInTheMoreMenu_UnlessTheClassicTitleBarIsOn()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                await viewModel.UpdateCheck;
+                viewModel.UpdateAvailable = false;
+                viewModel.LatestVersion = "v9.9.9";
+
+                // No update: plain title, plain ⋯ button
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.AppTitleVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicUpdateButtonVisibility);
+                Assert.Equal("More", viewModel.MoreButtonToolTip);
+
+                // Update with the ⋯ menu: the title stays, the update is in the menu (with the green dot)
+                viewModel.UpdateAvailable = true;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.AppTitleVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.ClassicUpdateButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.UpdateBannerVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.UpdateMenuSeparatorVisibility);
+                Assert.Equal("Update to v9.9.9", viewModel.UpdateMenuText);
+                Assert.Equal("More (update available)", viewModel.MoreButtonToolTip);
+
+                // Even with every other item hidden, the menu stays so the update can be reached
+                viewModel.ShowPinButton = false;
+                viewModel.ShowCompanionButton = false;
+                viewModel.ShowBluetoothButton = false;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.MoreMenuVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.UpdateMenuSeparatorVisibility);
+
+                // Classic title bar: the big green button takes the title's place, as before
+                viewModel.UseClassicTitleBar = true;
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Visible, viewModel.ClassicUpdateButtonVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.AppTitleVisibility);
+                Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, viewModel.MoreMenuVisibility);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task UpdateDownloadPage_PointsAtTheNewVersionsRelease()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                await viewModel.UpdateCheck;   // so the real check can't change LatestVersion part-way through
+                viewModel.LatestVersion = "";
+                Assert.Equal("https://github.com/levon2805/SoundBar/releases/latest", viewModel.UpdateDownloadPageUrl);
+
+                viewModel.LatestVersion = "v4.4.0";
+                Assert.Equal("https://github.com/levon2805/SoundBar/releases/tag/v4.4.0", viewModel.UpdateDownloadPageUrl);
             }
             finally
             {
