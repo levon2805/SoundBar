@@ -255,9 +255,75 @@ namespace SoundBar.Views
         }
 
         private bool _hasAppliedInitialPin = false;
+        private bool _hasStartedTaskbarInfo = false;
+
+        /// <summary>
+        /// Starts the taskbar info if it's turned on but not running. The first time anyone opens a version with
+        /// it (an update from any older version, or a fresh install), it's turned on and we say what's new, with
+        /// a one-click way to turn it off again.
+        /// </summary>
+        private async Task StartTaskbarInfoAsync()
+        {
+            try
+            {
+                var taskbar = ViewModel.TaskbarHelper;
+                if (!TaskbarHelperService.ShouldOfferTaskbarInfo(_settingsService.Settings.HasSeenTaskbarOffer, taskbar.IsAvailable))
+                {
+                    taskbar.EnsureRunningIfEnabled();
+                    return;
+                }
+
+                // Remember straight away, so a crash or closing the message can never show it twice
+                _settingsService.Settings.HasSeenTaskbarOffer = true;
+                _settingsService.SaveSettings();
+
+                ViewModel.ShowOnTaskbar = true;
+
+                var dialog = new ContentDialog
+                {
+                    Title = "New: your sound on the taskbar",
+                    Content = new TextBlock
+                    {
+                        Text = "Your volume and microphone now show next to the clock, even when SoundBar is closed.\n\n" +
+                               "Scroll over it to change the volume, or right-click it for more. " +
+                               "Don't want it? Choose Turn off, or later Hide from Taskbar.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Keep it",
+                    SecondaryButtonText = "Turn off",
+                    DefaultButton = ContentDialogButton.Primary,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                // Only the Turn off button turns it off. Pressing Esc just closes the message.
+                if (await dialog.ShowAsync() == ContentDialogResult.Secondary)
+                {
+                    ViewModel.ShowOnTaskbar = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Another message was already showing, for example. The taskbar info stays on either way.
+                System.Diagnostics.Debug.WriteLine($"Taskbar info start-up: {ex.Message}");
+            }
+        }
 
         private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
         {
+            if (args.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                // "Hide from Taskbar" on the taskbar itself may have turned it off while we were in the background
+                ViewModel.RefreshShowOnTaskbar();
+
+                if (!_hasStartedTaskbarInfo)
+                {
+                    _hasStartedTaskbarInfo = true;
+                    // Once the window has finished showing, so the "New" message has somewhere to appear
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = StartTaskbarInfoAsync());
+                }
+            }
+
             if (!_hasAppliedInitialPin)
             {
                 _hasAppliedInitialPin = true;

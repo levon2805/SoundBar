@@ -9,6 +9,7 @@ using Xunit;
 
 namespace SoundBar.Tests
 {
+    [Collection("StartupFolder")]
     public class MainViewModelTests : System.IDisposable
     {
         // Opening SoundBar checks its startup shortcut, so give every test its own Startup folder rather than the real one

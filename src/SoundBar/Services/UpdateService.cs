@@ -21,7 +21,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.4.0";
+        public const string CurrentVersion = "v4.5.0";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -191,41 +191,12 @@ namespace SoundBar.Services
             string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
-            string EscapeForBatch(string path) 
-            {
-                string p = path.EndsWith("\\") ? path + "\\" : path;
-                return "\"" + p.Replace("\"", "\"\"") + "\"";
-            }
+            // The taskbar helper runs from this folder too, and Windows won't let files in use be replaced.
+            // Ask it to close now, and the script below starts it again once the new files are in.
+            bool helperWasRunning = TaskbarHelperService.FindHostWindow() != IntPtr.Zero;
+            if (helperWasRunning) TaskbarHelperService.CloseRunningHelper();
 
-            string batContent = $$"""
-@echo off
-echo Updating SoundBar... Please wait.
-
-:waitloop
-tasklist /FI "IMAGENAME eq SoundBar.exe" 2>NUL | find /I /N "SoundBar.exe">NUL
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
-
-:: Mirror the update into the app directory (copies new files, overwrites changed files, deletes orphaned files).
-:: /MIR = mirror, /XF = exclude files, /XD = exclude directories.
-:: We exclude config/user data that lives alongside the exe, and the update batch itself.
-robocopy {{EscapeForBatch(sourceDir)}} {{EscapeForBatch(currentAppDir)}} /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
-
-:: Robocopy exit codes 0-7 are success; 8+ are errors. Reset to 0 so the batch continues.
-if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
-
-:: Clean up the temp directory
-rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
-
-:: Restart the application
-start "" {{EscapeForBatch(currentExePath)}}
-
-:: Delete this batch file
-del "%~f0"
-""";
-            File.WriteAllText(batPath, batContent);
+            File.WriteAllText(batPath, BuildUpdateScript(sourceDir, currentAppDir, tempUpdateDir, currentExePath, helperWasRunning));
 
             // Fire and forget the batch script
             var processInfo = new ProcessStartInfo
@@ -241,6 +212,72 @@ del "%~f0"
             // Use Application.Current.Exit() for a clean shutdown so Dispose chains run
             // (keyboard hooks, companion server sockets, settings flush, etc.)
             Microsoft.UI.Xaml.Application.Current.Exit();
+        }
+
+        /// <summary>
+        /// The script that installs an update once SoundBar has closed. It waits for SoundBar and the taskbar
+        /// helper to close (the helper is forced closed after 15 seconds if it hasn't gone by itself), copies
+        /// the new files over, then starts SoundBar again, and the helper too if it was running.
+        /// </summary>
+        internal static string BuildUpdateScript(string sourceDir, string appDir, string tempUpdateDir, string exePath, bool restartTaskbarHelper)
+        {
+            static string EscapeForBatch(string path)
+            {
+                string p = path.EndsWith("\\") ? path + "\\" : path;
+                return "\"" + p.Replace("\"", "\"\"") + "\"";
+            }
+
+            string helperImage = Shared.TaskbarHelperInfo.ImageName;
+            string helperPath = Path.Combine(appDir, Shared.TaskbarHelperInfo.ExeName);
+            string restartHelper = restartTaskbarHelper
+                ? $"if exist {EscapeForBatch(helperPath)} start \"\" {EscapeForBatch(helperPath)}"
+                : ":: (The taskbar helper wasn't running, so it isn't started)";
+
+            return $$"""
+@echo off
+echo Updating SoundBar... Please wait.
+
+:waitloop
+tasklist /FI "IMAGENAME eq SoundBar.exe" 2>NUL | find /I /N "SoundBar.exe">NUL
+if "%ERRORLEVEL%"=="0" (
+    timeout /t 1 /nobreak >nul
+    goto waitloop
+)
+
+:: The taskbar helper was asked to close. Give it up to 15 seconds, then make sure.
+set /a helperwait=0
+:waithelper
+tasklist /FI "IMAGENAME eq {{helperImage}}" 2>NUL | find /I /N "{{helperImage}}">NUL
+if "%ERRORLEVEL%"=="0" (
+    if %helperwait% GEQ 15 (
+        taskkill /F /IM {{helperImage}} >NUL 2>&1
+        timeout /t 1 /nobreak >nul
+        goto helperclosed
+    )
+    set /a helperwait+=1
+    timeout /t 1 /nobreak >nul
+    goto waithelper
+)
+:helperclosed
+
+:: Mirror the update into the app directory (copies new files, overwrites changed files, deletes orphaned files).
+:: /MIR = mirror, /XF = exclude files, /XD = exclude directories.
+:: We exclude config/user data that lives alongside the exe, and the update batch itself.
+robocopy {{EscapeForBatch(sourceDir)}} {{EscapeForBatch(appDir)}} /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+
+:: Robocopy exit codes 0-7 are success; 8+ are errors. Reset to 0 so the batch continues.
+if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
+
+:: Clean up the temp directory
+rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
+
+:: Restart the application, and the taskbar helper if it was running
+start "" {{EscapeForBatch(exePath)}}
+{{restartHelper}}
+
+:: Delete this batch file
+del "%~f0"
+""";
         }
 
         // --- Helper classes just to read the GitHub API JSON ---

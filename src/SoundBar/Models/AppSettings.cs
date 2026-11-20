@@ -73,6 +73,12 @@ namespace SoundBar.Models
         public bool HasCreatedDesktopShortcut { get; set; } = false;
 
         /// <summary>
+        /// Whether we've already turned on the taskbar info and told the user about it (new in v4.5.0). Settings
+        /// files from older versions don't have this, so everyone sees it once, whichever version they came from.
+        /// </summary>
+        public bool HasSeenTaskbarOffer { get; set; } = false;
+
+        /// <summary>
         /// Whether to show a visual highlight outline around the currently focused application.
         /// </summary>
         public bool EnableFocusHighlight { get; set; } = true;

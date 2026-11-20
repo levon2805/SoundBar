@@ -1361,6 +1361,21 @@
                                           IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}"/>
                         </Grid>
 
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="taskbar volume microphone mic percentage tray clock show hide indicator">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Show on taskbar" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Your volume and microphone next to the clock, even when SoundBar is closed." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Show on taskbar"
+                                          IsEnabled="{x:Bind ViewModel.CanShowOnTaskbar}"
+                                          IsOn="{x:Bind ViewModel.ShowOnTaskbar, Mode=TwoWay}"/>
+                        </Grid>
+
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="desktop shortcut icon">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
