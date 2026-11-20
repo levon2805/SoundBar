@@ -16,7 +16,7 @@ using HelperSettings = taskbar::SoundBarTaskbar.HelperSettings;
 
 namespace SoundBar.Tests
 {
-    /// <summary>Where the indicator sits on the taskbar. Layouts are taken from real Windows 11 taskbars.</summary>
+    /// <summary>Where the indicator sits on the taskbar. Windows 11 layouts are taken from real taskbars. Windows 10 ones are modelled on how its taskbar is built (its window classes), not captured.</summary>
     public class TaskbarLayoutTests
     {
         private const int Width = 100;
@@ -125,6 +125,76 @@ namespace SoundBar.Tests
         public void VerticalTaskbarsAreNotSupported()
         {
             Assert.Null(Layout.FindSlot(48, 1032, new List<Element>(), 0, Width, Margin, out _));
+        }
+
+        /// <summary>
+        /// A 1920 wide Windows 10 main taskbar, 40 high: Start, the search box, Task View, then the app list
+        /// (a window that spans to the tray, with the buttons inside it), then the tray from x=1600.
+        /// </summary>
+        private static List<Element> Windows10Taskbar(int apps, string buttonClass)
+        {
+            var list = new List<Element>
+            {
+                new(new Rect(0, 0, 48, 40), "Start", ""),
+                new(new Rect(48, 0, 392, 40), "TrayDummySearchControl", ""),
+                new(new Rect(392, 0, 440, 40), "TrayButton", ""), // Task View: a "tray" class, but on the left
+                new(new Rect(444, 0, 1600, 40), "ReBarWindow32", ""),
+                new(new Rect(444, 0, 1600, 40), "MSTaskSwWClass", ""),
+                new(new Rect(444, 0, 1600, 40), "MSTaskListWClass", ""),
+                new(new Rect(1600, 0, 1920, 40), "TrayNotifyWnd", ""),
+                new(new Rect(1606, 0, 1646, 40), "TrayButton", ""), // Touch keyboard
+                new(new Rect(1650, 0, 1750, 40), "ToolbarWindow32", ""),
+                new(new Rect(1650, 0, 1674, 40), "", ""),
+                new(new Rect(1800, 0, 1880, 40), "TrayClockWClass", ""),
+                new(new Rect(1915, 0, 1920, 40), "TrayShowDesktopButtonWClass", ""),
+            };
+            for (int i = 0; i < apps; i++) list.Add(new(new Rect(444 + i * 48, 0, 492 + i * 48, 40), buttonClass, ""));
+            return list;
+        }
+
+        [Theory]
+        [InlineData("")]                 // App buttons with no class of their own
+        [InlineData("MSTaskListWClass")] // App buttons reporting the class of the window that holds them
+        public void OnWindows10_SitsJustLeftOfTheTray(string buttonClass)
+        {
+            int? x = Layout.FindSlot(1920, 40, Windows10Taskbar(8, buttonClass), 1600, Width, Margin, out int spare);
+
+            Assert.Equal(1600 - Margin - Width, x);
+            Assert.True(spare > 600);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("MSTaskListWClass")]
+        public void OnWindows10_HidesRatherThanCoveringAppButtons(string buttonClass)
+        {
+            // 23 buttons reach x=1548, leaving 52 pixels before the tray: not enough for 100
+            Assert.Null(Layout.FindSlot(1920, 40, Windows10Taskbar(23, buttonClass), 1600, Width, Margin, out _));
+        }
+
+        [Fact]
+        public void OnWindows10_KeepsClearOfToolbarsBesideTheTray()
+        {
+            // A Links toolbar the user added, just left of the tray
+            var elements = Windows10Taskbar(3, "");
+            elements.Add(new(new Rect(1500, 0, 1596, 40), "ToolbarWindow32", ""));
+
+            Assert.Equal(1500 - Margin - Width, Layout.FindSlot(1920, 40, elements, 1600, Width, Margin, out _));
+        }
+
+        [Fact]
+        public void OnAWindows10SecondTaskbar_SitsLeftOfTheClock()
+        {
+            var elements = new List<Element>
+            {
+                new(new Rect(0, 0, 48, 40), "Start", ""),
+                new(new Rect(48, 0, 1880, 40), "WorkerW", ""),
+                new(new Rect(48, 0, 1880, 40), "MSTaskListWClass", ""),
+                new(new Rect(48, 0, 96, 40), "", ""),
+                new(new Rect(1800, 0, 1880, 40), "ClockButton", ""),
+            };
+
+            Assert.Equal(1800 - Margin - Width, Layout.FindSlot(1920, 40, elements, 0, Width, Margin, out _));
         }
     }
 

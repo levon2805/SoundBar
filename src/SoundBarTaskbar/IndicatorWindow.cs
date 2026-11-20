@@ -38,6 +38,7 @@ namespace SoundBarTaskbar
         private const string GlyphVolume1 = "\uE993";
         private const string GlyphVolume2 = "\uE994";
         private const string GlyphVolume3 = "\uE995";
+        private const string GlyphVolume = "\uE767"; // For older Windows 10 icon fonts without the levels above
         private const string GlyphMic = "\uE720";
         private const string GlyphMicOffFluent = "\uF12E"; // The one SoundBar uses
         private const string GlyphMicOffMdl2 = "\uEC54";
@@ -63,6 +64,7 @@ namespace SoundBarTaskbar
         private uint _dpi;
         private IntPtr _iconFont, _textFont;
         private string _micOffGlyph = GlyphMicOffFluent;
+        private bool _hasVolumeLevels = true;
         private bool _lightTheme;
         private bool _hover, _pressed;
         private int _wheelRemainder;
@@ -378,7 +380,10 @@ namespace SoundBarTaskbar
             FreeFonts();
             _iconFont = CreateFont(16, Native.FW_NORMAL, "Segoe Fluent Icons", "Segoe MDL2 Assets");
             _textFont = CreateFont(14, Native.FW_NORMAL, "Segoe UI Variable Text", "Segoe UI");
-            _micOffGlyph = HasGlyph(_iconFont, GlyphMicOffFluent) ? GlyphMicOffFluent : GlyphMicOffMdl2;
+            // Windows 10 has Segoe MDL2 Assets instead of Segoe Fluent Icons, and early versions of it lack a few icons
+            _micOffGlyph = HasGlyph(_iconFont, GlyphMicOffFluent) ? GlyphMicOffFluent
+                : HasGlyph(_iconFont, GlyphMicOffMdl2) ? GlyphMicOffMdl2 : GlyphMic; // Still shown in red when muted
+            _hasVolumeLevels = HasGlyph(_iconFont, GlyphVolume0) && HasGlyph(_iconFont, GlyphVolume3);
 
             Compose();
             _placement = default; // Re-place at the new size
@@ -450,6 +455,7 @@ namespace SoundBarTaskbar
             else
             {
                 v.OutputGlyph = state.IsHeadphones ? GlyphHeadphones
+                    : !_hasVolumeLevels ? GlyphVolume
                     : state.Volume == 0 ? GlyphVolume0 : state.Volume < 34 ? GlyphVolume1 : state.Volume < 67 ? GlyphVolume2 : GlyphVolume3;
                 v.OutputGlyphColor = Foreground;
                 v.Text = $"{state.Volume}%";

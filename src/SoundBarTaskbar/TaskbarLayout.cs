@@ -21,9 +21,11 @@ namespace SoundBarTaskbar
         };
 
         // The tray on the right: the ^ button, tray icons, network and volume, the clock and Show Desktop.
+        // ClockButton is the clock on Windows 10's taskbars on other monitors.
         private static readonly HashSet<string> TrayClasses = new(StringComparer.Ordinal)
         {
             "TrayNotifyWnd", "TrayClockWClass", "TrayShowDesktopButtonWClass", "TrayButton", "TrayInputIndicatorWClass",
+            "ClockButton",
         };
 
         // Start, Search, Task View and the app buttons. Nothing is placed to the left of these.
@@ -32,11 +34,26 @@ namespace SoundBarTaskbar
             "StartButton", "SearchButton", "TaskViewButton",
         };
 
-        private static bool IsTray(TaskbarElement e) =>
-            e.AutomationId == "SystemTrayIcon" || TrayClasses.Contains(e.ClassName);
+        // On Windows 10 the app buttons (and buttons on toolbars like Links) can report the class of the window
+        // that holds them. So these two only count as containers when they're far wider than any one button.
+        private static readonly HashSet<string> ButtonHostClasses = new(StringComparer.Ordinal)
+        {
+            "MSTaskListWClass", "ToolbarWindow32",
+        };
 
-        private static bool IsCore(TaskbarElement e) =>
-            CoreAutomationIds.Contains(e.AutomationId) || e.ClassName.Contains("TaskListButton", StringComparison.Ordinal);
+        private static bool IsContainer(TaskbarElement e, int taskbarHeight) =>
+            ContainerClasses.Contains(e.ClassName)
+            && (!ButtonHostClasses.Contains(e.ClassName) || e.Rect.Width >= taskbarHeight * 6);
+
+        // Windows 10 also uses TrayButton for Task View, Cortana and the Search icon, which sit on the left next to
+        // Start. The tray is always on the right, so only things in the right half of the taskbar count as tray.
+        private static bool IsTray(TaskbarElement e, int taskbarWidth) =>
+            (e.AutomationId == "SystemTrayIcon" || TrayClasses.Contains(e.ClassName)) && e.Rect.Left >= taskbarWidth / 2;
+
+        private static bool IsCore(TaskbarElement e, int taskbarWidth) =>
+            CoreAutomationIds.Contains(e.AutomationId) || e.ClassName.Contains("TaskListButton", StringComparison.Ordinal)
+            || e.ClassName == "Start" // Windows 10's Start button
+            || (TrayClasses.Contains(e.ClassName) && !IsTray(e, taskbarWidth));
 
         /// <summary>
         /// The x position (relative to the taskbar) for an indicator <paramref name="width"/> pixels wide, or null
@@ -60,7 +77,7 @@ namespace SoundBarTaskbar
             int trayLeft = int.MaxValue;
             foreach (var e in elements)
             {
-                if (Usable(e) && IsTray(e) && e.Rect.Left > 0)
+                if (Usable(e) && IsTray(e, taskbarWidth) && e.Rect.Left > 0)
                     trayLeft = Math.Min(trayLeft, e.Rect.Left);
             }
             if (trayLeft == int.MaxValue)
@@ -69,7 +86,7 @@ namespace SoundBarTaskbar
             int coreRight = 0;
             foreach (var e in elements)
             {
-                if (Usable(e) && IsCore(e) && e.Rect.Right <= trayLeft)
+                if (Usable(e) && IsCore(e, taskbarWidth) && e.Rect.Right <= trayLeft)
                     coreRight = Math.Max(coreRight, e.Rect.Right);
             }
 
@@ -77,7 +94,7 @@ namespace SoundBarTaskbar
             var obstacles = new List<Native.RECT>();
             foreach (var e in elements)
             {
-                if (!Usable(e) || IsTray(e) || IsCore(e) || ContainerClasses.Contains(e.ClassName)) continue;
+                if (!Usable(e) || IsTray(e, taskbarWidth) || IsCore(e, taskbarWidth) || IsContainer(e, taskbarHeight)) continue;
                 if (e.Rect.Width >= taskbarWidth / 2) continue;
                 if (e.Rect.Right <= coreRight || e.Rect.Left >= trayLeft) continue;
                 obstacles.Add(e.Rect);
