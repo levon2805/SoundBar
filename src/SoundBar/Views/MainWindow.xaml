@@ -1427,9 +1427,11 @@
 
             <!-- Footer (hidden while Settings is open: the About card shows the version there, and this would sit over the cards) -->
             <StackPanel x:Name="FooterPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
-                <!-- App Version (Global) - click to open this version's release notes -->
-                <HyperlinkButton Content="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
-                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                <!-- App Version (Global) - click to open this version's release notes.
+                     Just the number in a quiet colour, so it stays out of the way and clears the media buttons on narrow windows. -->
+                <HyperlinkButton Content="{x:Bind ViewModel.AppVersionShortText, Mode=OneWay}"
+                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                 AutomationProperties.Name="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
                                  FontSize="10"
                                  Padding="4,2"
                                  MinHeight="0" MinWidth="0"

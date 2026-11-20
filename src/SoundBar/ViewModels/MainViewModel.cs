@@ -159,6 +159,7 @@ namespace SoundBar.ViewModels
             : $"https://github.com/levon2805/SoundBar/releases/tag/{LatestVersion}";
 
         public string AppVersionText => $"SoundBar {UpdateService.CurrentVersion}";
+        public string AppVersionShortText => UpdateService.CurrentVersion;
 
         // Background Image Property
         private string? _backgroundImage;
