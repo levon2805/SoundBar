@@ -67,7 +67,7 @@ This is the main SoundBar window. Each number is explained next to it.
         <li><b>Microphone:</b> Choose which microphone to use.</li>
         <li><b>Master volume:</b> The volume for your whole PC.</li>
         <li><b>Hide:</b> Remove an app you don't need from the list.</li>
-        <li><b>App name:</b> Shown above the app's slider. Click it to give the app a nickname.</li>
+        <li><b>App name:</b> Shown above the app's slider (or only when you hover over its icon, if you prefer). Click it to give the app a nickname.</li>
         <li><b>App volume:</b> Every app gets its own slider. Click the app's icon beside it to mute it.</li>
         <li><b>Music player:</b> Switch to a big view of the song that's playing.</li>
         <li><b>Media buttons:</b> Previous, play/pause, next and mute everything.</li>
@@ -87,9 +87,10 @@ Every app that's playing sound gets its own slider, so you can balance a game, a
 
 - **Drag a slider** to change that app's volume.
 - **Click an app's icon** (beside its slider) to mute or unmute it.
-- **Click an app's name** (above its slider) to rename it to something friendlier (handy for apps with confusing names).
+- **Click an app's name** (above its slider), or **right-click its icon**, to rename it to something friendlier (handy for apps with confusing names).
 - **Click the eye** to hide an app you never want to see. You can bring it back at any time from **Settings > Apps > Hidden Apps**.
 - **Missing an app?** Apps only appear once they start playing sound. Click the refresh arrow next to **Active Apps** to check again.
+- **Want more apps to fit?** Set **App names** to **On hover** in **Settings > Main page**. Each app then takes one line, and its name shows when you hover over its icon. See [Only show what you use](#only-show-what-you-use).
 
 <table>
   <tr>
@@ -296,11 +297,16 @@ Want to see what's behind SoundBar? Drag the **Window opacity** slider in **Sett
 ### Only show what you use
 Don't use a microphone? Never switch speakers? Untick any part of the main window in **Settings > Main page**. Hidden parts still work with [keyboard shortcuts](#keyboard-shortcuts).
 
+Want more apps to fit in the window? Set **App names** to **On hover**. Each app then takes one line instead of two, and its name shows when you hover over its icon. Right-click an icon to rename the app.
+
 The same group lets you choose what's in the **⋯** menu. If you'd rather have a separate button for each one at the top of the window, like older versions of SoundBar, tick **Separate buttons (classic title bar)**.
 
-<p align="center">
-  <img src="docs/images/layout-settings.png" width="300" alt="The Main page settings" />
-</p>
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/layout-settings.png" width="300" alt="The Main page settings" /><br/><sub>Choose what shows on the main page</sub></td>
+    <td align="center"><img src="docs/images/app-names-hover.png" width="300" alt="The app list with names shown on hover" /><br/><sub>With <b>App names</b> set to <b>On hover</b>, each app takes one line</sub></td>
+  </tr>
+</table>
 
 <sub>[Back to top](#readme-top)</sub>
 

@@ -706,6 +706,38 @@ namespace SoundBar.ViewModels
         }
         public Microsoft.UI.Xaml.Visibility MasterVolumeVisibility => ShowMasterVolume ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+        /// <summary>
+        /// Whether each app's name shows above its slider, or only when hovering over its icon.
+        /// </summary>
+        public bool ShowAppNames
+        {
+            get => _settingsService.Settings.ShowAppNames;
+            set
+            {
+                if (_settingsService.Settings.ShowAppNames != value)
+                {
+                    _settingsService.Settings.ShowAppNames = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(AppNamesModeIndex));
+                    _settingsService.SaveSettings();
+                    ApplyAppNames();
+                }
+            }
+        }
+
+        /// <summary>The "App names" drop-down in Settings: 0 is "Above the slider", 1 is "On hover only".</summary>
+        public int AppNamesModeIndex
+        {
+            get => ShowAppNames ? 0 : 1;
+            set { if (value >= 0) ShowAppNames = value == 0; }
+        }
+
+        private void ApplyAppNames()
+        {
+            bool show = _settingsService.Settings.ShowAppNames;
+            foreach (var app in Apps) app.ShowName = show;
+        }
+
         public bool ShowActiveApps
         {
             get => _settingsService.Settings.ShowActiveApps;
@@ -1261,6 +1293,8 @@ namespace SoundBar.ViewModels
                     app.AliasChanged += HandleAliasChanged;
                 }
             }
+
+            ApplyAppNames();
 
             // Everything else is read straight from the settings, so just tell the screen to look again
             OnPropertyChanged(string.Empty);
@@ -1873,6 +1907,7 @@ namespace SoundBar.ViewModels
                     // doesn't trigger a save to config.json for every app
                     newApp.Name = aliasName;
                     newApp.AliasChanged = HandleAliasChanged;
+                    newApp.ShowName = _settingsService.Settings.ShowAppNames;
 
                     // Set volume/mute via backing fields to avoid triggering OS write-back
                     newApp.SyncVolumeFromOS(sessionData.Volume);

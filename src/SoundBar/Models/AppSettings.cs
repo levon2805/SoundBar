@@ -137,6 +137,12 @@ namespace SoundBar.Models
         public bool ShowActiveApps { get; set; } = true;
 
         /// <summary>
+        /// Whether each app's name shows above its slider (true), or only when you hover over its icon (false),
+        /// which fits more apps in the window.
+        /// </summary>
+        public bool ShowAppNames { get; set; } = true;
+
+        /// <summary>
         /// Whether Always on Top is offered in the title bar's ⋯ menu.
         /// (It was its own title bar button before v4.3.0, hence the name.)
         /// </summary>

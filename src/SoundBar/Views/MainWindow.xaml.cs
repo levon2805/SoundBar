@@ -1325,6 +1325,55 @@ namespace SoundBar.Views
             ViewModel.SeekToScrubPosition();
         }
 
+        // ------------------------------------------------------------------
+        // Renaming an app from its icon (right-click). Works whichever way names are shown.
+        // ------------------------------------------------------------------
+
+        private AudioAppModel? _renameTarget;
+        private Flyout? _renameFlyout;
+        private bool _renameCancelled;
+
+        private static TextBox? RenameBoxOf(Flyout flyout) =>
+            (flyout.Content as Panel)?.Children.OfType<TextBox>().FirstOrDefault();
+
+        private void RenameFlyout_Opening(object sender, object e)
+        {
+            if (sender is not Flyout flyout || RenameBoxOf(flyout) is not TextBox box) return;
+            _renameTarget = (flyout.Target as FrameworkElement)?.DataContext as AudioAppModel;
+            _renameFlyout = flyout;
+            _renameCancelled = false;
+            box.Text = _renameTarget?.Name ?? "";
+        }
+
+        private void RenameFlyout_Opened(object sender, object e)
+        {
+            if (sender is Flyout flyout && RenameBoxOf(flyout) is TextBox box)
+            {
+                box.Focus(FocusState.Programmatic);
+                box.SelectAll();
+            }
+        }
+
+        private void RenameFlyout_Closed(object sender, object e)
+        {
+            var app = _renameTarget;
+            _renameTarget = null;
+            _renameFlyout = null;
+            if (app == null || _renameCancelled || sender is not Flyout flyout || RenameBoxOf(flyout) is not TextBox box) return;
+
+            // Empty goes back to the app's own name (the view model handles that)
+            string name = box.Text.Trim();
+            if (name != app.Name) app.Name = name;
+        }
+
+        private void RenameBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter && e.Key != Windows.System.VirtualKey.Escape) return;
+            _renameCancelled = e.Key == Windows.System.VirtualKey.Escape;
+            e.Handled = true;
+            _renameFlyout?.Hide(); // Enter saves (in Closed), Escape doesn't
+        }
+
         private void TextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
             if (e.Key == Windows.System.VirtualKey.Enter)

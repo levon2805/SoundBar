@@ -215,6 +215,23 @@ namespace SoundBar.Models
             }
         }
 
+        private bool _showName = true;
+        /// <summary>
+        /// Whether the name line above the slider is shown. Follows the "App names" setting.
+        /// </summary>
+        public bool ShowName
+        {
+            get => _showName;
+            set
+            {
+                if (_showName != value)
+                {
+                    _showName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _isHighlightVisible;
         /// <summary>
         /// True if this app is focused AND the user has the highlight setting enabled.

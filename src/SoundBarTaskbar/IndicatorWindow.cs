@@ -70,6 +70,7 @@ namespace SoundBarTaskbar
         private int _wheelRemainder;
         private Visual _visual;
         private string _tooltipText = "";
+        private bool _tooltipHidden; // While scrolling, so it doesn't cover the percentage
 
         // Where we are, so nothing is redone unless it changed
         private (int X, int Width, int Height, bool Visible) _placement;
@@ -568,6 +569,7 @@ namespace SoundBarTaskbar
         private void AddTooltip()
         {
             if (_tooltip == IntPtr.Zero || _child == IntPtr.Zero) return;
+            ShowTooltipAgain(); // A new indicator window starts with the tooltip working
             IntPtr text = Marshal.StringToHGlobalUni(_tooltipText);
             try
             {
@@ -578,6 +580,25 @@ namespace SoundBarTaskbar
             {
                 Marshal.FreeHGlobal(text);
             }
+        }
+
+        /// <summary>
+        /// Hides the tooltip while the volume is being scrolled, since it would sit over the percentage.
+        /// It comes back once the mouse leaves the indicator.
+        /// </summary>
+        private void HideTooltipWhileScrolling()
+        {
+            if (_tooltipHidden || _tooltip == IntPtr.Zero) return;
+            _tooltipHidden = true;
+            Native.SendMessageW(_tooltip, (uint)Native.TTM_POP, IntPtr.Zero, IntPtr.Zero);
+            Native.SendMessageW(_tooltip, (uint)Native.TTM_ACTIVATE, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        private void ShowTooltipAgain()
+        {
+            if (!_tooltipHidden || _tooltip == IntPtr.Zero) return;
+            _tooltipHidden = false;
+            Native.SendMessageW(_tooltip, (uint)Native.TTM_ACTIVATE, new IntPtr(1), IntPtr.Zero);
         }
 
         private void RemoveTooltip()
@@ -856,6 +877,7 @@ namespace SoundBarTaskbar
 
                     case Native.WM_MOUSELEAVE:
                         _hover = _pressed = false;
+                        ShowTooltipAgain();
                         Render();
                         return IntPtr.Zero;
 
@@ -878,6 +900,7 @@ namespace SoundBarTaskbar
                         return IntPtr.Zero;
 
                     case Native.WM_MOUSEWHEEL:
+                        HideTooltipWhileScrolling();
                         // One notch = 2%, like scrolling on Windows' own volume slider
                         _wheelRemainder += Native.HiWord(wParam);
                         int notches = _wheelRemainder / 120;

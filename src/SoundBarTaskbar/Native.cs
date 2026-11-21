@@ -73,6 +73,7 @@ namespace SoundBarTaskbar
 
         // ---- Tooltips ----
         public const int TTM_ACTIVATE = WM_USER + 1;
+        public const int TTM_POP = WM_USER + 28;
         public const int TTM_SETMAXTIPWIDTH = WM_USER + 24;
         public const int TTM_ADDTOOLW = WM_USER + 50;
         public const int TTM_UPDATETIPTEXTW = WM_USER + 57;
