@@ -255,9 +255,75 @@ namespace SoundBar.Views
         }
 
         private bool _hasAppliedInitialPin = false;
+        private bool _hasStartedTaskbarInfo = false;
+
+        /// <summary>
+        /// Starts the taskbar info if it's turned on but not running. The first time anyone opens a version with
+        /// it (an update from any older version, or a fresh install), it's turned on and we say what's new, with
+        /// a one-click way to turn it off again.
+        /// </summary>
+        private async Task StartTaskbarInfoAsync()
+        {
+            try
+            {
+                var taskbar = ViewModel.TaskbarHelper;
+                if (!TaskbarHelperService.ShouldOfferTaskbarInfo(_settingsService.Settings.HasSeenTaskbarOffer, taskbar.IsAvailable))
+                {
+                    taskbar.EnsureRunningIfEnabled();
+                    return;
+                }
+
+                // Remember straight away, so a crash or closing the message can never show it twice
+                _settingsService.Settings.HasSeenTaskbarOffer = true;
+                _settingsService.SaveSettings();
+
+                ViewModel.ShowOnTaskbar = true;
+
+                var dialog = new ContentDialog
+                {
+                    Title = "New: your sound on the taskbar",
+                    Content = new TextBlock
+                    {
+                        Text = "Your volume and microphone now show next to the clock, even when SoundBar is closed.\n\n" +
+                               "Scroll over it to change the volume, or right-click it for more. " +
+                               "Don't want it? Choose Turn off, or later Hide from Taskbar.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Keep it",
+                    SecondaryButtonText = "Turn off",
+                    DefaultButton = ContentDialogButton.Primary,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                // Only the Turn off button turns it off. Pressing Esc just closes the message.
+                if (await dialog.ShowAsync() == ContentDialogResult.Secondary)
+                {
+                    ViewModel.ShowOnTaskbar = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Another message was already showing, for example. The taskbar info stays on either way.
+                System.Diagnostics.Debug.WriteLine($"Taskbar info start-up: {ex.Message}");
+            }
+        }
 
         private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
         {
+            if (args.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                // "Hide from Taskbar" on the taskbar itself may have turned it off while we were in the background
+                ViewModel.RefreshShowOnTaskbar();
+
+                if (!_hasStartedTaskbarInfo)
+                {
+                    _hasStartedTaskbarInfo = true;
+                    // Once the window has finished showing, so the "New" message has somewhere to appear
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = StartTaskbarInfoAsync());
+                }
+            }
+
             if (!_hasAppliedInitialPin)
             {
                 _hasAppliedInitialPin = true;
@@ -1257,6 +1323,55 @@ namespace SoundBar.Views
         {
             ViewModel.IsUserScrubbing = false;
             ViewModel.SeekToScrubPosition();
+        }
+
+        // ------------------------------------------------------------------
+        // Renaming an app from its icon (right-click). Works whichever way names are shown.
+        // ------------------------------------------------------------------
+
+        private AudioAppModel? _renameTarget;
+        private Flyout? _renameFlyout;
+        private bool _renameCancelled;
+
+        private static TextBox? RenameBoxOf(Flyout flyout) =>
+            (flyout.Content as Panel)?.Children.OfType<TextBox>().FirstOrDefault();
+
+        private void RenameFlyout_Opening(object sender, object e)
+        {
+            if (sender is not Flyout flyout || RenameBoxOf(flyout) is not TextBox box) return;
+            _renameTarget = (flyout.Target as FrameworkElement)?.DataContext as AudioAppModel;
+            _renameFlyout = flyout;
+            _renameCancelled = false;
+            box.Text = _renameTarget?.Name ?? "";
+        }
+
+        private void RenameFlyout_Opened(object sender, object e)
+        {
+            if (sender is Flyout flyout && RenameBoxOf(flyout) is TextBox box)
+            {
+                box.Focus(FocusState.Programmatic);
+                box.SelectAll();
+            }
+        }
+
+        private void RenameFlyout_Closed(object sender, object e)
+        {
+            var app = _renameTarget;
+            _renameTarget = null;
+            _renameFlyout = null;
+            if (app == null || _renameCancelled || sender is not Flyout flyout || RenameBoxOf(flyout) is not TextBox box) return;
+
+            // Empty goes back to the app's own name (the view model handles that)
+            string name = box.Text.Trim();
+            if (name != app.Name) app.Name = name;
+        }
+
+        private void RenameBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter && e.Key != Windows.System.VirtualKey.Escape) return;
+            _renameCancelled = e.Key == Windows.System.VirtualKey.Escape;
+            e.Handled = true;
+            _renameFlyout?.Hide(); // Enter saves (in Closed), Escape doesn't
         }
 
         private void TextBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)

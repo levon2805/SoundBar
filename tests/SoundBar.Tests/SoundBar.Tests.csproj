@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SoundBar\SoundBar.csproj" />
+    <!-- Aliased because both programs compile in the same shared files (src\Shared) -->
+    <ProjectReference Include="..\..\src\SoundBarTaskbar\SoundBarTaskbar.csproj" Aliases="taskbar" />
   </ItemGroup>
 
 </Project>

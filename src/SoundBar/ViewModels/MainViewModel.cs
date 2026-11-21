@@ -159,6 +159,7 @@ namespace SoundBar.ViewModels
             : $"https://github.com/levon2805/SoundBar/releases/tag/{LatestVersion}";
 
         public string AppVersionText => $"SoundBar {UpdateService.CurrentVersion}";
+        public string AppVersionShortText => UpdateService.CurrentVersion;
 
         // Background Image Property
         private string? _backgroundImage;
@@ -705,6 +706,38 @@ namespace SoundBar.ViewModels
         }
         public Microsoft.UI.Xaml.Visibility MasterVolumeVisibility => ShowMasterVolume ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+        /// <summary>
+        /// Whether each app's name shows above its slider, or only when hovering over its icon.
+        /// </summary>
+        public bool ShowAppNames
+        {
+            get => _settingsService.Settings.ShowAppNames;
+            set
+            {
+                if (_settingsService.Settings.ShowAppNames != value)
+                {
+                    _settingsService.Settings.ShowAppNames = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(AppNamesModeIndex));
+                    _settingsService.SaveSettings();
+                    ApplyAppNames();
+                }
+            }
+        }
+
+        /// <summary>The "App names" drop-down in Settings: 0 is "Above the slider", 1 is "On hover only".</summary>
+        public int AppNamesModeIndex
+        {
+            get => ShowAppNames ? 0 : 1;
+            set { if (value >= 0) ShowAppNames = value == 0; }
+        }
+
+        private void ApplyAppNames()
+        {
+            bool show = _settingsService.Settings.ShowAppNames;
+            foreach (var app in Apps) app.ShowName = show;
+        }
+
         public bool ShowActiveApps
         {
             get => _settingsService.Settings.ShowActiveApps;
@@ -823,6 +856,50 @@ namespace SoundBar.ViewModels
             OnPropertyChanged(nameof(ClassicPinButtonVisibility));
             OnPropertyChanged(nameof(ClassicCompanionButtonVisibility));
             OnPropertyChanged(nameof(ClassicBluetoothButtonVisibility));
+        }
+
+        // --- Taskbar info (the separate SoundBarTaskbar.exe helper) ---
+
+        /// <summary>Turns the taskbar info on and off.</summary>
+        internal TaskbarHelperService TaskbarHelper { get; }
+
+        private bool? _showOnTaskbar;
+
+        /// <summary>
+        /// Whether the volume and microphone show on the taskbar. It's read from the helper's startup shortcut,
+        /// which the helper itself removes when you choose Hide from Taskbar, so see <see cref="RefreshShowOnTaskbar"/>.
+        /// </summary>
+        public bool ShowOnTaskbar
+        {
+            get => _showOnTaskbar ??= TaskbarHelper.IsEnabled;
+            set
+            {
+                if (_showOnTaskbar == value) return;
+                if (value)
+                {
+                    if (!TaskbarHelper.Enable()) value = false; // The helper is missing from this copy
+                }
+                else
+                {
+                    TaskbarHelper.Disable();
+                }
+                _showOnTaskbar = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>False when this copy of SoundBar doesn't have the helper next to it, so the switch is greyed out.</summary>
+        public bool CanShowOnTaskbar => TaskbarHelper.IsAvailable;
+
+        /// <summary>Reads the switch's state again, in case it was changed from the taskbar.</summary>
+        public void RefreshShowOnTaskbar()
+        {
+            bool enabled = TaskbarHelper.IsEnabled;
+            if (_showOnTaskbar != enabled)
+            {
+                _showOnTaskbar = enabled;
+                OnPropertyChanged(nameof(ShowOnTaskbar));
+            }
         }
 
         // Run At Startup Property
@@ -1060,9 +1137,11 @@ namespace SoundBar.ViewModels
         private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
         // Constructor for DI / Testing
-        internal MainViewModel(SettingsService settingsService, IAudioMixerService audioService, UpdateService? updateService = null, MediaInfoService? mediaInfoService = null, HotkeyService? hotkeyService = null)
+        internal MainViewModel(SettingsService settingsService, IAudioMixerService audioService, UpdateService? updateService = null, MediaInfoService? mediaInfoService = null, HotkeyService? hotkeyService = null, TaskbarHelperService? taskbarHelper = null)
         {
             _settingsService = settingsService;
+            // Uses the same Startup folder as our own shortcut, so tests never touch the real one
+            TaskbarHelper = taskbarHelper ?? new TaskbarHelperService(startupFolder: StartupFolderOverride);
             _updateService = updateService ?? new UpdateService();
             _mediaInfoService = mediaInfoService ?? new MediaInfoService();
             _hotkeyService = hotkeyService ?? new HotkeyService();
@@ -1214,6 +1293,8 @@ namespace SoundBar.ViewModels
                     app.AliasChanged += HandleAliasChanged;
                 }
             }
+
+            ApplyAppNames();
 
             // Everything else is read straight from the settings, so just tell the screen to look again
             OnPropertyChanged(string.Empty);
@@ -1826,6 +1907,7 @@ namespace SoundBar.ViewModels
                     // doesn't trigger a save to config.json for every app
                     newApp.Name = aliasName;
                     newApp.AliasChanged = HandleAliasChanged;
+                    newApp.ShowName = _settingsService.Settings.ShowAppNames;
 
                     // Set volume/mute via backing fields to avoid triggering OS write-back
                     newApp.SyncVolumeFromOS(sessionData.Volume);

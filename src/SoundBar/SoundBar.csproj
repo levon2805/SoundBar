@@ -36,6 +36,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The taskbar helper (SoundBarTaskbar.exe). Referencing it puts its program files next to SoundBar.exe in
+      every build and publish, where it uses the same .NET runtime files as SoundBar.
+    -->
+    <ProjectReference Include="..\SoundBarTaskbar\SoundBarTaskbar.csproj" />
+    <Compile Include="..\Shared\TaskbarHelperInfo.cs" Link="Shared\TaskbarHelperInfo.cs" />
+    <Compile Include="..\Shared\ShortcutFile.cs" Link="Shared\ShortcutFile.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
     <PackageReference Include="CSCore" Version="1.2.1.2" />

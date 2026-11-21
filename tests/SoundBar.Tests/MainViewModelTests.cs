@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
@@ -9,6 +10,7 @@ using Xunit;
 
 namespace SoundBar.Tests
 {
+    [Collection("StartupFolder")]
     public class MainViewModelTests : System.IDisposable
     {
         // Opening SoundBar checks its startup shortcut, so give every test its own Startup folder rather than the real one
@@ -489,6 +491,57 @@ namespace SoundBar.Tests
                 Assert.Empty(viewModel.SystemBackgroundApps);
                 Assert.Equal("Background Apps (0)", viewModel.BackgroundAppsTitle);
                 Assert.Contains(viewModel.AppsSnapshot, a => a.RawProcessName == "game");
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        // --- v4.5.0: app names above the slider, or on hover only ---
+
+        [Fact]
+        public async Task AppNames_ShowAboveByDefault_AndOnHoverHidesThemForEveryApp()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"test_vm_{System.Guid.NewGuid()}.json");
+            var settings = new SettingsService(path);
+
+            var game = new AudioSessionData { ProcessId = 201, DisplayName = "Game", RawProcessName = "game" };
+            var sessions = new List<AudioSessionData> { game };
+
+            var mockAudioService = new Mock<IAudioMixerService>();
+            mockAudioService.Setup(s => s.GetAudioDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetActiveAudioSessions()).Returns(() => new List<AudioSessionData>(Volatile.Read(ref sessions)));
+
+            var viewModel = new MainViewModel(settings, mockAudioService.Object);
+            try
+            {
+                await WaitUntilAsync(() => viewModel.AppsSnapshot.Any(a => a.RawProcessName == "game"));
+                var gameApp = viewModel.AppsSnapshot.First(a => a.RawProcessName == "game");
+
+                // Names above the slider, as before
+                Assert.True(viewModel.ShowAppNames);
+                Assert.Equal(0, viewModel.AppNamesModeIndex);
+                Assert.True(gameApp.ShowName);
+
+                // "On hover" hides the name line for apps already in the list, and is saved
+                viewModel.AppNamesModeIndex = 1;
+                Assert.False(viewModel.ShowAppNames);
+                Assert.False(gameApp.ShowName);
+                Assert.False(new SettingsService(path).Settings.ShowAppNames);
+
+                // Apps that start playing later follow the setting too
+                var music = new AudioSessionData { ProcessId = 202, DisplayName = "Music", RawProcessName = "music" };
+                Volatile.Write(ref sessions, new List<AudioSessionData> { game, music });
+                await WaitUntilAsync(() => viewModel.AppsSnapshot.Any(a => a.RawProcessName == "music"));
+                Assert.False(viewModel.AppsSnapshot.First(a => a.RawProcessName == "music").ShowName);
+
+                // Editing config.json by hand switches them back
+                viewModel.ApplySettingsEditedByHand(new AppSettings { ShowAppNames = true });
+                Assert.All(viewModel.AppsSnapshot, a => Assert.True(a.ShowName));
+                Assert.Equal(0, viewModel.AppNamesModeIndex);
             }
             finally
             {
