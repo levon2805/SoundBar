@@ -448,12 +448,15 @@
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                             <Setter Property="Padding" Value="0"/>
                             <Setter Property="Margin" Value="0"/>
+                            <!-- List rows are at least 40px tall by default, which would undo the space saved by hiding names -->
+                            <Setter Property="MinHeight" Value="0"/>
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                             <DataTemplate>
                                 <!-- Name on a thin line above, icon + slider + % below, so the slider gets
-                                     nearly the full width even at the default window size -->
+                                     nearly the full width even at the default window size. With "App names" set to
+                                     "On hover", the name line is hidden and shows in the icon's tooltip instead. -->
                                 <Grid Margin="0,0,0,6" Background="{Binding IsHighlightVisible, Converter={StaticResource FocusedToBrushConverter}}" CornerRadius="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="30"/>
@@ -488,20 +491,41 @@
                                              Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                              Background="Transparent"
                                              BorderThickness="0"
-                                             FontSize="13"
+                                             FontSize="12"
                                              HorizontalAlignment="Left"
                                              VerticalAlignment="Center"
                                              MinHeight="0"
                                              MinWidth="0"
                                              Padding="0"
-                                             Margin="0,2,0,0"
+                                             Margin="0"
+                                             Visibility="{Binding ShowName, Converter={StaticResource BoolToVisibilityConverter}}"
                                              KeyDown="TextBox_KeyDown"
                                              ToolTipService.ToolTip="Click to rename"/>
 
                                     <Image Grid.Row="1" Grid.Column="1"
                                            Source="{Binding AppIcon}" Width="20" Height="20" Stretch="Uniform"
                                            VerticalAlignment="Center"
-                                           Tapped="AppIcon_Tapped" ToolTipService.ToolTip="Click to Mute"/>
+                                           Tapped="AppIcon_Tapped"
+                                           AutomationProperties.Name="{Binding Name}">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="Click to mute or unmute. Right-click to rename."/>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                        <!-- Rename from here too, so it still works when names only show on hover -->
+                                        <Image.ContextFlyout>
+                                            <Flyout Opening="RenameFlyout_Opening" Opened="RenameFlyout_Opened" Closed="RenameFlyout_Closed">
+                                                <StackPanel Spacing="6" Width="220">
+                                                    <TextBlock Text="Rename" Style="{StaticResource SettingsTitleStyle}"/>
+                                                    <TextBox KeyDown="RenameBox_KeyDown" PlaceholderText="Empty for the original name"
+                                                             AutomationProperties.Name="App name"/>
+                                                </StackPanel>
+                                            </Flyout>
+                                        </Image.ContextFlyout>
+                                    </Image>
 
                                     <!-- Negative top/bottom margin trims the slider's built-in padding so the row stays short -->
                                     <Slider Grid.Row="1" Grid.Column="2"
@@ -1175,6 +1199,25 @@
                             </StackPanel>
                         </Grid>
 
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="app names labels compact hover rename nickname space smaller list">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="App names" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="On hover fits more apps in the window." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="1"
+                                      VerticalAlignment="Center"
+                                      MinWidth="110"
+                                      SelectedIndex="{x:Bind ViewModel.AppNamesModeIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="App names">
+                                <ComboBoxItem Content="Above slider"/>
+                                <ComboBoxItem Content="On hover"/>
+                            </ComboBox>
+                        </Grid>
+
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="title bar buttons classic menu always on top pin mobile companion phone bluetooth">
                             <StackPanel>
                                 <TextBlock Text="Title bar" Style="{StaticResource SettingsTitleStyle}"/>
@@ -1361,6 +1404,21 @@
                                           IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}"/>
                         </Grid>
 
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="taskbar volume microphone mic percentage tray clock show hide indicator">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Show on taskbar" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Your volume and microphone next to the clock, even when SoundBar is closed." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Show on taskbar"
+                                          IsEnabled="{x:Bind ViewModel.CanShowOnTaskbar}"
+                                          IsOn="{x:Bind ViewModel.ShowOnTaskbar, Mode=TwoWay}"/>
+                        </Grid>
+
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="desktop shortcut icon">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -1412,9 +1470,11 @@
 
             <!-- Footer (hidden while Settings is open: the About card shows the version there, and this would sit over the cards) -->
             <StackPanel x:Name="FooterPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
-                <!-- App Version (Global) - click to open this version's release notes -->
-                <HyperlinkButton Content="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
-                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                <!-- App Version (Global) - click to open this version's release notes.
+                     Just the number in a quiet colour, so it stays out of the way and clears the media buttons on narrow windows. -->
+                <HyperlinkButton Content="{x:Bind ViewModel.AppVersionShortText, Mode=OneWay}"
+                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                 AutomationProperties.Name="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
                                  FontSize="10"
                                  Padding="4,2"
                                  MinHeight="0" MinWidth="0"

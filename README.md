@@ -16,6 +16,7 @@
   <a href="#how-to-install"><b>Download</b></a> &nbsp;·&nbsp;
   <a href="#a-quick-tour">Quick tour</a> &nbsp;·&nbsp;
   <a href="#control-every-apps-volume">Features</a> &nbsp;·&nbsp;
+  <a href="#your-sound-on-the-taskbar">Taskbar</a> &nbsp;·&nbsp;
   <a href="#bluetooth">Bluetooth</a> &nbsp;·&nbsp;
   <a href="#control-it-from-your-phone">Phone remote</a> &nbsp;·&nbsp;
   <a href="#keyboard-shortcuts">Shortcuts</a> &nbsp;·&nbsp;
@@ -37,6 +38,7 @@
 - [A quick tour](#a-quick-tour)
 - [Control every app's volume](#control-every-apps-volume)
 - [Speakers, headphones and microphones](#speakers-headphones-and-microphones)
+- [Your sound on the taskbar](#your-sound-on-the-taskbar)
 - [Bluetooth](#bluetooth)
 - [Music player](#music-player)
 - [Control it from your phone](#control-it-from-your-phone)
@@ -65,7 +67,7 @@ This is the main SoundBar window. Each number is explained next to it.
         <li><b>Microphone:</b> Choose which microphone to use.</li>
         <li><b>Master volume:</b> The volume for your whole PC.</li>
         <li><b>Hide:</b> Remove an app you don't need from the list.</li>
-        <li><b>App name:</b> Shown above the app's slider. Click it to give the app a nickname.</li>
+        <li><b>App name:</b> Shown above the app's slider (or only when you hover over its icon, if you prefer). Click it to give the app a nickname.</li>
         <li><b>App volume:</b> Every app gets its own slider. Click the app's icon beside it to mute it.</li>
         <li><b>Music player:</b> Switch to a big view of the song that's playing.</li>
         <li><b>Media buttons:</b> Previous, play/pause, next and mute everything.</li>
@@ -85,9 +87,10 @@ Every app that's playing sound gets its own slider, so you can balance a game, a
 
 - **Drag a slider** to change that app's volume.
 - **Click an app's icon** (beside its slider) to mute or unmute it.
-- **Click an app's name** (above its slider) to rename it to something friendlier (handy for apps with confusing names).
+- **Click an app's name** (above its slider), or **right-click its icon**, to rename it to something friendlier (handy for apps with confusing names).
 - **Click the eye** to hide an app you never want to see. You can bring it back at any time from **Settings > Apps > Hidden Apps**.
 - **Missing an app?** Apps only appear once they start playing sound. Click the refresh arrow next to **Active Apps** to check again.
+- **Want more apps to fit?** Set **App names** to **On hover** in **Settings > Main page**. Each app then takes one line, and its name shows when you hover over its icon. See [Only show what you use](#only-show-what-you-use).
 
 <table>
   <tr>
@@ -117,6 +120,36 @@ Switch where your sound plays, or which microphone you use, straight from the to
 </table>
 
 Using Bluetooth headphones or speakers? You can connect them from SoundBar too. See [Bluetooth](#bluetooth).
+
+<sub>[Back to top](#readme-top)</sub>
+
+---
+
+## Your sound on the taskbar
+
+See your volume and whether your microphone is muted at a glance, right next to the clock. It stays there even when SoundBar is closed, and starts by itself when you sign in.
+
+<p align="center">
+  <img src="docs/images/taskbar-info.png" width="420" alt="The volume and microphone shown on the taskbar, next to the clock" />
+</p>
+
+- **Scroll** over it to turn the volume up or down.
+- **Click** it to open SoundBar.
+- **Hover** over it to see which speakers and microphone are in use.
+- **Right-click** it for more: **Mute Sound**, **Mute Mic**, **Open SoundBar**, **Hide from Taskbar** and, if you have more than one monitor, **Move to Other Monitor**.
+
+The icon shows headphones when you're using headphones, and turns red when your sound or microphone is muted. It follows Windows' light or dark mode by itself.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/taskbar-menu.png" width="300" alt="The right-click menu on the taskbar" /><br/><sub>Right-click it for more options</sub></td>
+    <td align="center"><img src="docs/images/taskbar-setting.png" width="240" alt="The Show on taskbar switch in Settings" /><br/><sub>Turn it on or off in <b>Settings > General</b></sub></td>
+  </tr>
+</table>
+
+Don't want it? Right-click it and choose **Hide from Taskbar**, or turn off **Show on taskbar** in **Settings > General**. You can turn it back on there any time.
+
+> **It's tiny:** it runs as its own small program (`SoundBarTaskbar.exe`, next to SoundBar), so it works without SoundBar open and uses about 10 MB of memory. It only redraws when your sound changes, so it barely touches your processor.
 
 <sub>[Back to top](#readme-top)</sub>
 
@@ -264,11 +297,16 @@ Want to see what's behind SoundBar? Drag the **Window opacity** slider in **Sett
 ### Only show what you use
 Don't use a microphone? Never switch speakers? Untick any part of the main window in **Settings > Main page**. Hidden parts still work with [keyboard shortcuts](#keyboard-shortcuts).
 
+Want more apps to fit in the window? Set **App names** to **On hover**. Each app then takes one line instead of two, and its name shows when you hover over its icon. Right-click an icon to rename the app.
+
 The same group lets you choose what's in the **⋯** menu. If you'd rather have a separate button for each one at the top of the window, like older versions of SoundBar, tick **Separate buttons (classic title bar)**.
 
-<p align="center">
-  <img src="docs/images/layout-settings.png" width="300" alt="The Main page settings" />
-</p>
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/layout-settings.png" width="300" alt="The Main page settings" /><br/><sub>Choose what shows on the main page</sub></td>
+    <td align="center"><img src="docs/images/app-names-hover.png" width="300" alt="The app list with names shown on hover" /><br/><sub>With <b>App names</b> set to <b>On hover</b>, each app takes one line</sub></td>
+  </tr>
+</table>
 
 <sub>[Back to top](#readme-top)</sub>
 
@@ -393,14 +431,30 @@ Apps only appear once they're actually playing sound. Start playing something, t
 <details>
 <summary><b>Where are my settings saved?</b></summary>
 
-In `%AppData%\SoundBar`. Paste that into the File Explorer address bar to open it. Your wallpapers are in the `Backgrounds` folder inside it. Updating SoundBar never touches this folder.
+In `%AppData%\SoundBar`. Paste that into the File Explorer address bar to open it. Your wallpapers are in the `Backgrounds` folder inside it, and `taskbar.json` remembers which monitor the [taskbar info](#your-sound-on-the-taskbar) is on. Updating SoundBar never touches this folder.
+</details>
+
+<details>
+<summary><b>The volume isn't showing on my taskbar</b></summary>
+
+- Check **Show on taskbar** is on in **Settings > General**.
+- If your taskbar is full of app buttons, it hides rather than cover them. It comes back as soon as there's room.
+- It only works on a taskbar that runs across the screen, not one down the side (Windows 10 allows that).
+</details>
+
+<details>
+<summary><b>Move to Other Monitor is missing</b></summary>
+
+It only appears when you have a taskbar on more than one monitor. To get one, turn on **Show my taskbar on all displays** in **Windows Settings > Personalization > Taskbar > Taskbar behaviors**.
 </details>
 
 <details>
 <summary><b>How do I uninstall SoundBar?</b></summary>
 
+First turn off **Run at startup** and **Show on taskbar** in **Settings > General**, so nothing tries to start SoundBar after it's gone. Then:
+
 - **Installed with Winget:** run `winget uninstall levon2805.SoundBar` in Terminal.
-- **Downloaded zip:** turn off **Run at startup** in **Settings > General**, close SoundBar, then delete the folder.
+- **Downloaded zip:** close SoundBar, then delete the folder.
 </details>
 
 <details>
@@ -421,6 +475,8 @@ SoundBar is built natively with the Windows App SDK (WinUI 3) on .NET 8.
 
 **Project layout:**
 * `src/SoundBar/` contains the main WinUI 3 application (the phone remote's web app is in `src/SoundBar/wwwroot/`).
+* `src/SoundBarTaskbar/` contains the taskbar helper (`SoundBarTaskbar.exe`). It's plain Win32 with no WinUI so it stays small, and it's built into the same folder as SoundBar.exe, sharing its .NET runtime.
+* `src/Shared/` contains the few files compiled into both programs.
 * `tests/SoundBar.Tests/` contains the xUnit automated tests.
 * `ReleaseTools/` contains internal release and update-signing utilities.
 * `docs/images/` contains the screenshots used in this README.
