@@ -111,11 +111,11 @@ Switch where your sound plays, or which microphone you use, straight from the to
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/output-devices.png" width="340" alt="Choosing speakers or a headset" /><br/><sub>Click the speaker box to choose where sound plays</sub></td>
+    <td align="center"><img src="docs/images/output-devices.png" width="315" alt="Choosing speakers or a headset" /><br/><sub>Click the speaker box to choose where sound plays</sub></td>
     <td align="center"><img src="docs/images/mic-mute.png" width="300" alt="The microphone mute button turned red" /><br/><sub>Click the microphone button to mute it. It turns red so you always know.</sub></td>
   </tr>
   <tr>
-    <td align="center" colspan="2"><img src="docs/images/input-devices.png" width="540" alt="Choosing a microphone" /><br/><sub>Click the microphone box to choose a microphone</sub></td>
+    <td align="center" colspan="2"><img src="docs/images/input-devices.png" width="520" alt="Choosing a microphone" /><br/><sub>Click the microphone box to choose a microphone</sub></td>
   </tr>
 </table>
 
