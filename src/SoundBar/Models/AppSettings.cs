@@ -143,6 +143,12 @@ namespace SoundBar.Models
         public bool ShowAppNames { get; set; } = true;
 
         /// <summary>
+        /// Lightweight mode: checks for changes less often, and turns off the background picture, see-through
+        /// window and active app highlight, to save battery. Those settings are kept and come back when it's off.
+        /// </summary>
+        public bool LightweightMode { get; set; } = false;
+
+        /// <summary>
         /// Whether Always on Top is offered in the title bar's ⋯ menu.
         /// (It was its own title bar button before v4.3.0, hence the name.)
         /// </summary>

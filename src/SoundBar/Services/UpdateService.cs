@@ -2,9 +2,11 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -21,7 +23,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.5.0";
+        public const string CurrentVersion = "v4.5.1";
         
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
@@ -83,14 +85,16 @@ namespace SoundBar.Services
                     {
                         if (latest > current)
                         {
-                            var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                            var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
-                            
+                            var files = (releaseInfo.Assets ?? Array.Empty<GithubAsset>())
+                                .Where(a => !string.IsNullOrEmpty(a.Name) && !string.IsNullOrEmpty(a.BrowserDownloadUrl))
+                                .Select(a => (a.Name!, a.BrowserDownloadUrl!));
+                            var (zipUrl, sigUrl) = PickUpdateFiles(files, RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant());
+
                             // We strictly need both the update and its signature to proceed safely.
-                            if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
+                            if (zipUrl != null && sigUrl != null)
                             {
-                                DownloadUrl = zipAsset.BrowserDownloadUrl;
-                                SignatureUrl = sigAsset.BrowserDownloadUrl;
+                                DownloadUrl = zipUrl;
+                                SignatureUrl = sigUrl;
                                 return true;
                             }
                         }
@@ -103,6 +107,35 @@ namespace SoundBar.Services
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Picks this copy's download, and the signature that goes with it, from a release's files. A release can
+        /// also hold builds for other systems or processors, so it doesn't just take the first .zip and .sig.
+        /// </summary>
+        /// <param name="files">Each file's name and download link.</param>
+        /// <param name="architecture">The processor this copy is built for, like "x64" or "arm64".</param>
+        internal static (string? ZipUrl, string? SigUrl) PickUpdateFiles(IEnumerable<(string Name, string Url)> files, string architecture)
+        {
+            var list = files.ToList();
+            static bool HasSystemInName(string name) =>
+                name.Contains("-windows-", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("-linux-", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("-macos-", StringComparison.OrdinalIgnoreCase);
+
+            // Since v4.6.0 the name says which system and processor it's for: SoundBar-v4.6.0-windows-x64.zip
+            var zip = list.FirstOrDefault(f => f.Name.EndsWith($"-windows-{architecture}.zip", StringComparison.OrdinalIgnoreCase));
+
+            // Before that it was just SoundBar.zip, and only ever for Windows x64
+            if (zip.Name == null && architecture == "x64")
+                zip = list.FirstOrDefault(f => f.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && !HasSystemInName(f.Name));
+
+            if (zip.Name == null) return (null, null);
+
+            // Its signature has the same name, ending .sig instead of .zip
+            string sigName = zip.Name.Substring(0, zip.Name.Length - ".zip".Length) + ".sig";
+            var sig = list.FirstOrDefault(f => f.Name.Equals(sigName, StringComparison.OrdinalIgnoreCase));
+            return (zip.Url, sig.Name == null ? null : sig.Url);
         }
 
         /// <summary>

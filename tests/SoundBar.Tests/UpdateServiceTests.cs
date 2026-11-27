@@ -162,5 +162,51 @@ namespace SoundBar.Tests
             // Act & Assert — verification must fail loudly, never silently
             await Assert.ThrowsAsync<UpdateFailedException>(() => service.DownloadAndApplyUpdateAsync());
         }
+
+        private static readonly (string Name, string Url)[] MixedRelease =
+        {
+            ("SoundBar-v4.6.0-linux-x64.tar.gz", "linux.tar.gz"),
+            ("SoundBar-v4.6.0-linux-x64.sig", "linux.sig"),
+            ("SoundBar-v4.6.0-linux-x64.zip", "linux.zip"),
+            ("SoundBar-v4.6.0-windows-arm64.zip", "win-arm64.zip"),
+            ("SoundBar-v4.6.0-windows-arm64.sig", "win-arm64.sig"),
+            ("SoundBar-v4.6.0-windows-x64.zip", "win-x64.zip"),
+            ("SoundBar-v4.6.0-windows-x64.sig", "win-x64.sig"),
+        };
+
+        [Theory]
+        [InlineData("x64", "win-x64.zip", "win-x64.sig")]
+        [InlineData("arm64", "win-arm64.zip", "win-arm64.sig")]
+        public void PickUpdateFiles_TakesThisSystemsBuild_FromAReleaseWithSeveral(string architecture, string zip, string sig)
+        {
+            var (zipUrl, sigUrl) = UpdateService.PickUpdateFiles(MixedRelease, architecture);
+            Assert.Equal(zip, zipUrl);
+            Assert.Equal(sig, sigUrl);
+        }
+
+        [Fact]
+        public void PickUpdateFiles_StillReadsOlderReleases_NamedJustSoundBarZip()
+        {
+            var old = new[] { ("SoundBar.sig", "old.sig"), ("SoundBar.zip", "old.zip") };
+            Assert.Equal(("old.zip", "old.sig"), UpdateService.PickUpdateFiles(old, "x64"));
+
+            // Those were only ever for Windows x64
+            Assert.Equal(((string?)null, (string?)null), UpdateService.PickUpdateFiles(old, "arm64"));
+        }
+
+        [Fact]
+        public void PickUpdateFiles_NeedsTheMatchingSignature_NotJustAnySig()
+        {
+            // Another build's signature would fail the check anyway, so treat it as no update rather than a failed one
+            var files = new[] { ("SoundBar-v4.6.0-linux-x64.sig", "linux.sig"), ("SoundBar-v4.6.0-windows-x64.zip", "win-x64.zip") };
+            Assert.Equal(("win-x64.zip", (string?)null), UpdateService.PickUpdateFiles(files, "x64"));
+        }
+
+        [Fact]
+        public void PickUpdateFiles_IgnoresBuildsForOtherSystems()
+        {
+            var linuxOnly = new[] { ("SoundBar-v4.6.0-linux-x64.zip", "linux.zip"), ("SoundBar-v4.6.0-linux-x64.sig", "linux.sig") };
+            Assert.Equal(((string?)null, (string?)null), UpdateService.PickUpdateFiles(linuxOnly, "x64"));
+        }
     }
 }

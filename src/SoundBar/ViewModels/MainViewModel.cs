@@ -261,11 +261,12 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.EnableFocusHighlight = value;
                     OnPropertyChanged();
                     _settingsService.SaveSettings();
-                    
+
                     // Update all apps immediately so the UI reflects the toggle
+                    bool highlight = value && !LightweightMode;
                     foreach (var app in Apps)
                     {
-                        app.IsHighlightVisible = app.IsFocused && value;
+                        app.IsHighlightVisible = app.IsFocused && highlight;
                     }
                 }
             }
@@ -285,6 +286,7 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.WindowOpacity = clamped;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(WindowOpacityText));
+                    OnPropertyChanged(nameof(EffectiveWindowOpacity));
                     ScheduleSettingsSave();
                 }
             }
@@ -491,7 +493,11 @@ namespace SoundBar.ViewModels
             );
 
             _companionServer = server;
-            server.StateChanged += () => RunOnUIThread(RaiseCompanionStateChanged);
+            server.StateChanged += () =>
+            {
+                WakePolling(); // A phone that's just connected should get the live state, even while minimised
+                RunOnUIThread(RaiseCompanionStateChanged);
+            };
 
             // Only actually waits if Windows needs admin permission, and then it waits without freezing the window
             IsCompanionStarting = true;
@@ -736,6 +742,93 @@ namespace SoundBar.ViewModels
         {
             bool show = _settingsService.Settings.ShowAppNames;
             foreach (var app in Apps) app.ShowName = show;
+        }
+
+        /// <summary>
+        /// Lightweight mode: checks for changes every few seconds instead of every second, and turns off the
+        /// background picture, see-through window and active app highlight. Their own settings are left alone,
+        /// so turning it off brings them straight back.
+        /// </summary>
+        public bool LightweightMode
+        {
+            get => _settingsService.Settings.LightweightMode;
+            set
+            {
+                if (_settingsService.Settings.LightweightMode != value)
+                {
+                    _settingsService.Settings.LightweightMode = value;
+                    _settingsService.SaveSettings();
+                    ApplyLightweightMode();
+                }
+            }
+        }
+
+        /// <summary>The background picture and see-through window settings can't be changed while it's on.</summary>
+        public bool CanChangeLookEffects => !LightweightMode;
+
+        /// <summary>How see-through the window actually is: Lightweight mode keeps it solid.</summary>
+        public double EffectiveWindowOpacity => LightweightMode ? 100 : WindowOpacity;
+
+        private void ApplyLightweightMode()
+        {
+            OnPropertyChanged(nameof(LightweightMode));
+            OnPropertyChanged(nameof(CanChangeLookEffects));
+            OnPropertyChanged(nameof(EffectiveWindowOpacity));
+
+            bool highlight = EnableFocusHighlight && !LightweightMode;
+            foreach (var app in Apps) app.IsHighlightVisible = app.IsFocused && highlight;
+
+            _ = LoadBackgroundImageAsync();
+            UpdateProgressTimer();
+            WakePolling(); // Go to the new speed straight away rather than after the current wait
+        }
+
+        // How often SoundBar checks Windows for changes (apps starting and stopping, volume and devices changed
+        // elsewhere). Waking up less often is what saves battery: the work itself is small, but every wake-up
+        // stops the processor resting. While minimised nothing's on screen, so it can wait longer.
+        internal const int RefreshIntervalMs = 1000;
+        internal const int LightweightRefreshIntervalMs = 3000;
+        internal const int MinimisedRefreshIntervalMs = 5000;
+        internal const int LightweightMinimisedRefreshIntervalMs = 10000;
+
+        private volatile bool _isWindowMinimised;
+
+        /// <summary>Set by the window, so the checks slow down while it's minimised and catch up when it's back.</summary>
+        public bool IsWindowMinimised
+        {
+            get => _isWindowMinimised;
+            set
+            {
+                if (_isWindowMinimised == value) return;
+                _isWindowMinimised = value;
+                if (!value) WakePolling(); // Up to date the moment it's back on screen
+                UpdateProgressTimer();
+            }
+        }
+
+        /// <summary>How long the loop waits before checking again.</summary>
+        internal int RefreshIntervalNowMs
+        {
+            get
+            {
+                bool lightweight = _settingsService.Settings.LightweightMode;
+
+                // A phone using the companion shows the live state, so it counts as being on screen
+                bool phoneConnected = (_companionServer?.ConnectedClientCount ?? 0) > 0;
+
+                if (_isWindowMinimised && !phoneConnected)
+                    return lightweight ? LightweightMinimisedRefreshIntervalMs : MinimisedRefreshIntervalMs;
+                return lightweight ? LightweightRefreshIntervalMs : RefreshIntervalMs;
+            }
+        }
+
+        // Released to cut the loop's wait short. It holds at most one, so several wake-ups only cause one check.
+        private readonly SemaphoreSlim _pollingWake = new(0, 1);
+
+        private void WakePolling()
+        {
+            try { _pollingWake.Release(); }
+            catch (SemaphoreFullException) { } // Already due to wake
         }
 
         public bool ShowActiveApps
@@ -1295,12 +1388,14 @@ namespace SoundBar.ViewModels
             }
 
             ApplyAppNames();
+            if (old.LightweightMode != fresh.LightweightMode) ApplyLightweightMode();
 
             // Everything else is read straight from the settings, so just tell the screen to look again
             OnPropertyChanged(string.Empty);
 
             // The window listens for these by name
             OnPropertyChanged(nameof(WindowOpacity));
+            OnPropertyChanged(nameof(EffectiveWindowOpacity));
             OnPropertyChanged(nameof(ShowOutputDevice));
             OnPropertyChanged(nameof(ShowInputDevice));
             if (old.Theme != fresh.Theme) ThemeChanged?.Invoke(this, fresh.Theme);
@@ -1356,9 +1451,23 @@ namespace SoundBar.ViewModels
             bool isMute = pressedString == MuteHotkey;
             if (!isVolumeUp && !isVolumeDown && !isMute) return; // Almost every keystroke stops here
 
+            // Look up the app in front now, rather than trusting the last check: that can be a few
+            // seconds old while SoundBar is minimised or in Lightweight mode
+            uint activePid = Helpers.WindowHelper.GetForegroundProcessId();
+            string activeName = "";
+            try
+            {
+                if (activePid > 0)
+                {
+                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                    activeName = proc.ProcessName;
+                }
+            }
+            catch { }
+
             foreach (var activeApp in Apps)
             {
-                if (!activeApp.IsFocused) continue;
+                if (!BelongsToProcess(activeApp, activePid, activeName)) continue;
 
                 if (isVolumeUp)
                     activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
@@ -1369,6 +1478,9 @@ namespace SoundBar.ViewModels
 
                 e.Handled = true;
             }
+
+            // The app may have only just started playing, so check now rather than waiting for the next look
+            if (!e.Handled) WakePolling();
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -1531,6 +1643,13 @@ namespace SoundBar.ViewModels
         {
             try
             {
+                // Lightweight mode leaves the picture out, which saves the memory it takes up
+                if (LightweightMode)
+                {
+                    RunOnUIThread(() => BackgroundImage = null);
+                    return;
+                }
+
                 string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                 string folder = System.IO.Path.Combine(appData, "SoundBar", "Backgrounds");
 
@@ -1553,7 +1672,8 @@ namespace SoundBar.ViewModels
                                                      f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
                 });
 
-                RunOnUIThread(() => BackgroundImage = imagePath);
+                // Lightweight mode may have come on while we were looking
+                RunOnUIThread(() => BackgroundImage = LightweightMode ? null : imagePath);
             }
             catch
             {
@@ -1748,29 +1868,12 @@ namespace SoundBar.ViewModels
                             }
 
                             // Update Focus Outline (support multi-process apps like Discord)
+                            bool highlight = EnableFocusHighlight && !LightweightMode;
                             foreach (var app in Apps)
                             {
-                                bool isMatch = false;
-                                if (activePid > 0)
-                                {
-                                    if (app.ProcessId == activePid)
-                                    {
-                                        isMatch = true;
-                                    }
-                                    else if (!string.IsNullOrEmpty(activeProcessName) && !string.IsNullOrEmpty(app.RawProcessName))
-                                    {
-                                        string rawNoExt = app.RawProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) 
-                                            ? app.RawProcessName.Substring(0, app.RawProcessName.Length - 4) 
-                                            : app.RawProcessName;
-                                            
-                                        if (rawNoExt.Equals(activeProcessName, StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            isMatch = true;
-                                        }
-                                    }
-                                }
+                                bool isMatch = BelongsToProcess(app, activePid, activeProcessName);
                                 app.IsFocused = isMatch;
-                                app.IsHighlightVisible = isMatch && EnableFocusHighlight;
+                                app.IsHighlightVisible = isMatch && highlight;
                             }
                         });
                     }
@@ -1781,14 +1884,32 @@ namespace SoundBar.ViewModels
 
                     try
                     {
-                        await Task.Delay(1000, token);
+                        // Wait until the next check is due, or until something needs it sooner
+                        // (the window coming back from minimised, a phone connecting, a setting changing)
+                        await _pollingWake.WaitAsync(RefreshIntervalNowMs, token);
                     }
-                    catch (TaskCanceledException)
+                    catch (OperationCanceledException)
                     {
                         break;
                     }
                 }
             });
+        }
+
+        /// <summary>
+        /// Whether a listed app belongs to the given process. Apps like Discord play sound from a helper
+        /// process, so a matching name counts as well as the same process ID.
+        /// </summary>
+        internal static bool BelongsToProcess(AudioAppModel app, uint processId, string processName)
+        {
+            if (processId == 0) return false;
+            if (app.ProcessId == processId) return true;
+            if (string.IsNullOrEmpty(processName) || string.IsNullOrEmpty(app.RawProcessName)) return false;
+
+            string rawNoExt = app.RawProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? app.RawProcessName.Substring(0, app.RawProcessName.Length - 4)
+                : app.RawProcessName;
+            return rawNoExt.Equals(processName, StringComparison.OrdinalIgnoreCase);
         }
 
         private void HandleAliasChanged(string rawProcessName, string newAlias)
@@ -2313,11 +2434,32 @@ namespace SoundBar.ViewModels
                     CurrentSongPositionSeconds = e.Position.TotalSeconds;
                 }
 
-                if (_isPlaying && (_progressTimer?.IsEnabled == false))
-                    _progressTimer?.Start();
-                else if (!_isPlaying && (_progressTimer?.IsEnabled == true))
-                    _progressTimer?.Stop();
+                UpdateProgressTimer();
             });
+        }
+
+        /// <summary>
+        /// Moves the song's position bar along while music plays. Nobody can see it while the window is
+        /// minimised, so it stops then (and jumps to the right place when it's back). Lightweight mode moves
+        /// it once a second instead of twice.
+        /// </summary>
+        private void UpdateProgressTimer()
+        {
+            if (_progressTimer == null) return;
+
+            var interval = TimeSpan.FromMilliseconds(LightweightMode ? 1000 : 500);
+            if (_progressTimer.Interval != interval) _progressTimer.Interval = interval;
+
+            bool shouldRun = _isPlaying && !_isWindowMinimised;
+            if (shouldRun && !_progressTimer.IsEnabled)
+            {
+                ProgressTimer_Tick(null, EventArgs.Empty); // Catch up straight away rather than on the next tick
+                _progressTimer.Start();
+            }
+            else if (!shouldRun && _progressTimer.IsEnabled)
+            {
+                _progressTimer.Stop();
+            }
         }
 
         private void ProgressTimer_Tick(object? sender, object e)

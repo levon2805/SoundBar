@@ -94,7 +94,7 @@ namespace SoundBar.Views
 
             this.Activated += MainWindow_Activated;
             RestoreWindowPosition();
-            ApplyWindowOpacity(ViewModel.WindowOpacity);
+            ApplyWindowOpacity(ViewModel.EffectiveWindowOpacity);
 
             // Reload the background at a bigger size if the window outgrows it (see LoadBackgroundAsync)
             _backgroundResizeTimer = DispatcherQueue.CreateTimer();
@@ -242,6 +242,9 @@ namespace SoundBar.Views
 
         private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
         {
+            // SoundBar checks for changes less often while it's minimised
+            ViewModel.IsWindowMinimised = _appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
             if (!args.DidSizeChange || string.IsNullOrEmpty(ViewModel.BackgroundImage)) return;
 
             // Only bother reloading once the window outgrows the picture we've got. Waiting for the resize
@@ -316,6 +319,9 @@ namespace SoundBar.Views
                 // "Hide from Taskbar" on the taskbar itself may have turned it off while we were in the background
                 ViewModel.RefreshShowOnTaskbar();
 
+                // In case restoring didn't report a change, so the checks speed back up
+                ViewModel.IsWindowMinimised = _appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
                 if (!_hasStartedTaskbarInfo)
                 {
                     _hasStartedTaskbarInfo = true;
@@ -362,9 +368,10 @@ namespace SoundBar.Views
                 // The page stays built while hidden, so don't leave a half-typed PIN in it for next time
                 BluetoothPinBox.Text = string.Empty;
             }
-            if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
+            // Raised whenever the opacity setting or Lightweight mode changes
+            if (e.PropertyName == nameof(MainViewModel.EffectiveWindowOpacity))
             {
-                ApplyWindowOpacity(ViewModel.WindowOpacity);
+                ApplyWindowOpacity(ViewModel.EffectiveWindowOpacity);
             }
             if (e.PropertyName == nameof(MainViewModel.BackgroundImage))
             {

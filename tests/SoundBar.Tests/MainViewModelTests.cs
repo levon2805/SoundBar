@@ -550,6 +550,122 @@ namespace SoundBar.Tests
             }
         }
 
+        [Fact]
+        public void RefreshInterval_SlowsDownWhenMinimisedAndInLightweightMode()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                Assert.Equal(MainViewModel.RefreshIntervalMs, viewModel.RefreshIntervalNowMs);
+
+                viewModel.IsWindowMinimised = true;
+                Assert.Equal(MainViewModel.MinimisedRefreshIntervalMs, viewModel.RefreshIntervalNowMs);
+
+                viewModel.LightweightMode = true;
+                Assert.Equal(MainViewModel.LightweightMinimisedRefreshIntervalMs, viewModel.RefreshIntervalNowMs);
+
+                viewModel.IsWindowMinimised = false;
+                Assert.Equal(MainViewModel.LightweightRefreshIntervalMs, viewModel.RefreshIntervalNowMs);
+
+                // Each step really is slower than the one before
+                Assert.True(MainViewModel.RefreshIntervalMs < MainViewModel.LightweightRefreshIntervalMs);
+                Assert.True(MainViewModel.LightweightRefreshIntervalMs <= MainViewModel.MinimisedRefreshIntervalMs);
+                Assert.True(MainViewModel.MinimisedRefreshIntervalMs < MainViewModel.LightweightMinimisedRefreshIntervalMs);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void LightweightMode_TurnsOffTheLookEffects_AndBringsThemBackWhenOff()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                viewModel.WindowOpacity = 65;
+                Assert.Equal(65, viewModel.EffectiveWindowOpacity);
+                Assert.True(viewModel.CanChangeLookEffects);
+
+                viewModel.LightweightMode = true;
+                Assert.Equal(100, viewModel.EffectiveWindowOpacity);
+                Assert.False(viewModel.CanChangeLookEffects);
+                Assert.True(new SettingsService(path).Settings.LightweightMode);
+
+                // The user's own choices are kept, not overwritten
+                Assert.Equal(65, viewModel.WindowOpacity);
+                Assert.Equal(65, new SettingsService(path).Settings.WindowOpacity);
+                Assert.True(viewModel.EnableFocusHighlight);
+
+                viewModel.LightweightMode = false;
+                Assert.Equal(65, viewModel.EffectiveWindowOpacity);
+                Assert.True(viewModel.CanChangeLookEffects);
+
+                // Editing config.json by hand switches it too
+                viewModel.ApplySettingsEditedByHand(new AppSettings { LightweightMode = true, WindowOpacity = 65 });
+                Assert.True(viewModel.LightweightMode);
+                Assert.Equal(100, viewModel.EffectiveWindowOpacity);
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task WhileMinimised_ChecksLessOften_AndCatchesUpTheMomentItsBack()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"test_vm_{System.Guid.NewGuid()}.json");
+            var settings = new SettingsService(path);
+            var sessions = new List<AudioSessionData>();
+
+            var mockAudioService = new Mock<IAudioMixerService>();
+            mockAudioService.Setup(s => s.GetAudioDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetInputDevices()).Returns(new List<AudioDeviceModel>());
+            mockAudioService.Setup(s => s.GetActiveAudioSessions()).Returns(() => new List<AudioSessionData>(Volatile.Read(ref sessions)));
+
+            var viewModel = new MainViewModel(settings, mockAudioService.Object);
+            try
+            {
+                viewModel.IsWindowMinimised = true;
+
+                // Let the check that was already waiting finish, so the loop is now in its long minimised wait
+                await Task.Delay(MainViewModel.RefreshIntervalMs + 300);
+
+                var music = new AudioSessionData { ProcessId = 301, DisplayName = "Music", RawProcessName = "music" };
+                Volatile.Write(ref sessions, new List<AudioSessionData> { music });
+
+                // A second later it still hasn't looked, which an open window would have
+                await Task.Delay(MainViewModel.RefreshIntervalMs + 300);
+                Assert.DoesNotContain(viewModel.AppsSnapshot, a => a.RawProcessName == "music");
+
+                // Back on screen: it looks straight away rather than finishing the wait
+                viewModel.IsWindowMinimised = false;
+                await WaitUntilAsync(() => viewModel.AppsSnapshot.Any(a => a.RawProcessName == "music"), timeoutMs: 1500);
+                Assert.Contains(viewModel.AppsSnapshot, a => a.RawProcessName == "music");
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(500, "discord", 500, "", true)]          // Same process
+        [InlineData(500, "discord", 501, "Discord", true)]   // A helper process with the same name
+        [InlineData(500, "discord.exe", 501, "discord", true)]
+        [InlineData(500, "discord", 501, "chrome", false)]
+        [InlineData(500, "discord", 0, "discord", false)]    // Nothing in front
+        public void BelongsToProcess_MatchesByIdOrName(int appPid, string rawName, int activePid, string activeName, bool expected)
+        {
+            var app = new AudioAppModel(new Mock<IAudioMixerService>().Object) { ProcessId = appPid, RawProcessName = rawName };
+            Assert.Equal(expected, MainViewModel.BelongsToProcess(app, (uint)activePid, activeName));
+        }
+
         private const string InstalledExe = @"C:\SoundBar\win-x64\SoundBar.exe";
         private const string OtherCopyExe = @"C:\Users\Someone\Downloads\SoundBar\SoundBar.exe";
 

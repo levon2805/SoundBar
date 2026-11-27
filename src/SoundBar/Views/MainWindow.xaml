@@ -1113,6 +1113,8 @@
                             <StackPanel>
                                 <TextBlock Text="Window opacity" Style="{StaticResource SettingsTitleStyle}"/>
                                 <TextBlock Text="Make SoundBar see-through so you can still see what's behind it." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <TextBlock Text="Off while Lightweight mode is on." Style="{StaticResource SettingsDescriptionStyle}"
+                                           Visibility="{x:Bind ViewModel.LightweightMode, Mode=OneWay}"/>
                                 <Grid Margin="0,4,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -1124,6 +1126,7 @@
                                             IsThumbToolTipEnabled="False"
                                             VerticalAlignment="Center"
                                             AutomationProperties.Name="Window opacity"
+                                            IsEnabled="{x:Bind ViewModel.CanChangeLookEffects, Mode=OneWay}"
                                             Value="{x:Bind ViewModel.WindowOpacity, Mode=TwoWay}"/>
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind ViewModel.WindowOpacityText, Mode=OneWay}"
@@ -1138,6 +1141,7 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             VerticalAlignment="Center" Margin="5,0,0,0"
                                             Click="ResetOpacity_Click"
+                                            IsEnabled="{x:Bind ViewModel.CanChangeLookEffects, Mode=OneWay}"
                                             ToolTipService.ToolTip="Reset to 100%"
                                             AutomationProperties.Name="Reset opacity to 100%"/>
                                 </Grid>
@@ -1152,9 +1156,12 @@
                             <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="Active app highlight" Style="{StaticResource SettingsTitleStyle}"/>
                                 <TextBlock Text="Highlights the app your volume hotkeys are controlling." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <TextBlock Text="Off while Lightweight mode is on." Style="{StaticResource SettingsDescriptionStyle}"
+                                           Visibility="{x:Bind ViewModel.LightweightMode, Mode=OneWay}"/>
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
                                           AutomationProperties.Name="Active app highlight"
+                                          IsEnabled="{x:Bind ViewModel.CanChangeLookEffects, Mode=OneWay}"
                                           IsOn="{Binding EnableFocusHighlight, Mode=TwoWay}"/>
                         </Grid>
 
@@ -1162,13 +1169,16 @@
                             <StackPanel>
                                 <TextBlock Text="Custom background" Style="{StaticResource SettingsTitleStyle}"/>
                                 <TextBlock Text="Put a .jpg or .png in the backgrounds folder to personalise SoundBar." Style="{StaticResource SettingsDescriptionStyle}"/>
+                                <TextBlock Text="Off while Lightweight mode is on." Style="{StaticResource SettingsDescriptionStyle}"
+                                           Visibility="{x:Bind ViewModel.LightweightMode, Mode=OneWay}"/>
                                 <Grid Margin="0,8,0,0" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Button Grid.Column="0" Content="Open Folder" HorizontalAlignment="Stretch" Click="OpenBackgroundFolder_Click"/>
-                                    <Button Grid.Column="1" Content="Reload" HorizontalAlignment="Stretch" Click="ReloadBackground_Click"/>
+                                    <Button Grid.Column="1" Content="Reload" HorizontalAlignment="Stretch" Click="ReloadBackground_Click"
+                                            IsEnabled="{x:Bind ViewModel.CanChangeLookEffects, Mode=OneWay}"/>
                                 </Grid>
                             </StackPanel>
                         </Grid>
@@ -1417,6 +1427,20 @@
                                           AutomationProperties.Name="Show on taskbar"
                                           IsEnabled="{x:Bind ViewModel.CanShowOnTaskbar}"
                                           IsOn="{x:Bind ViewModel.ShowOnTaskbar, Mode=TwoWay}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource SettingsCardStyle}" Tag="lightweight mode battery power saving saver performance memory cpu low resources laptop">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Lightweight mode" Style="{StaticResource SettingsTitleStyle}"/>
+                                <TextBlock Text="Saves battery by checking for changes less often. Also turns off the background picture, see-through window and active app highlight." Style="{StaticResource SettingsDescriptionStyle}"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" MinWidth="0" OnContent="" OffContent="" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                          AutomationProperties.Name="Lightweight mode"
+                                          IsOn="{x:Bind ViewModel.LightweightMode, Mode=TwoWay}"/>
                         </Grid>
 
                         <Grid Style="{StaticResource SettingsCardStyle}" Tag="desktop shortcut icon">
