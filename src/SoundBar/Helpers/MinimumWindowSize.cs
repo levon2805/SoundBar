@@ -13,8 +13,12 @@ namespace SoundBar.Helpers
     /// </remarks>
     public sealed class MinimumWindowSize : IDisposable
     {
-        /// <summary>The narrowest the window can go, at 100% display scaling.</summary>
-        public const int MinWidth = 300;
+        /// <summary>
+        /// The narrowest the window can go, at 100% display scaling. Windows counts its invisible 7 px resize border
+        /// on each side, so the window you see is 330 wide. Any narrower and the mute button (just right of the
+        /// centred play button) runs into the version number in the corner.
+        /// </summary>
+        public const int MinWidth = 344;
 
         private const uint WM_GETMINMAXINFO = 0x0024;
         private static readonly UIntPtr SubclassId = (UIntPtr)0x53424D57; // "SBMW"

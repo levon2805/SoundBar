@@ -93,10 +93,10 @@ namespace SoundBar.Tests
         }
 
         [Theory]
-        [InlineData(96u, 300)]
-        [InlineData(144u, 450)]
-        [InlineData(120u, 375)]
-        [InlineData(0u, 300)]
+        [InlineData(96u, 344)]
+        [InlineData(144u, 516)]
+        [InlineData(120u, 430)]
+        [InlineData(0u, 344)]
         public void TheMinimumWidth_ScalesWithTheDisplay(uint dpi, int pixels)
         {
             Assert.Equal(pixels, MinimumWindowSize.MinWidthInPixels(dpi));

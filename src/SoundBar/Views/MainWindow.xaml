@@ -1032,31 +1032,43 @@
                     <!-- The three layouts (Settings > Main page > Media controls). Only one shows at a time.
                          The icons are in both Segoe MDL2 Assets (Windows 10) and Segoe Fluent Icons (Windows 11). -->
 
-                    <!-- Simple (default): one clear play button, mute set apart -->
+                    <!-- Simple (default): one clear play button, mute set apart.
+                         Three columns, so the play button sits exactly in the middle of the window and mute doesn't pull it aside. -->
                     <Grid Visibility="{x:Bind ViewModel.SimpleMediaBarVisibility, Mode=OneWay}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <Button Style="{StaticResource MediaIconButtonStyle}" HorizontalAlignment="Left" Content="&#xE8D6;" FontSize="18"
                                 Click="ToggleMusicPlayerMode_Click"
                                 ToolTipService.ToolTip="Music player" AutomationProperties.Name="Music player"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                             <Button Style="{StaticResource MediaIconButtonStyle}" Content="&#xE892;" Click="MediaPrevious_Click"
                                     ToolTipService.ToolTip="Previous track" AutomationProperties.Name="Previous track"/>
                             <Button Style="{StaticResource MediaPlayButtonStyle}" Content="{x:Bind ViewModel.PlayPauseGlyph, Mode=OneWay}" Click="MediaPlayPause_Click"
                                     ToolTipService.ToolTip="{x:Bind ViewModel.PlayPauseLabel, Mode=OneWay}" AutomationProperties.Name="{x:Bind ViewModel.PlayPauseLabel, Mode=OneWay}"/>
                             <Button Style="{StaticResource MediaIconButtonStyle}" Content="&#xE893;" Click="MediaNext_Click"
                                     ToolTipService.ToolTip="Next track" AutomationProperties.Name="Next track"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0">
                             <Border Width="1" Height="18" Margin="4,0" VerticalAlignment="Center" Background="{ThemeResource ControlStrokeColorDefaultBrush}"/>
                             <Button Style="{StaticResource MediaIconButtonStyle}" Content="&#xE74F;" Click="MediaMute_Click"
                                     ToolTipService.ToolTip="Mute system" AutomationProperties.Name="Mute system"/>
                         </StackPanel>
                     </Grid>
 
-                    <!-- Grouped: the track controls share one pill -->
+                    <!-- Grouped: the track controls share one pill, in the middle of the window -->
                     <Grid Visibility="{x:Bind ViewModel.GroupedMediaBarVisibility, Mode=OneWay}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <Button Style="{StaticResource MediaIconButtonStyle}" HorizontalAlignment="Left" Content="&#xE8D6;" FontSize="18"
                                 Click="ToggleMusicPlayerMode_Click"
                                 ToolTipService.ToolTip="Music player" AutomationProperties.Name="Music player"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
-                            <Border CornerRadius="19" Padding="2" VerticalAlignment="Center"
+                            <Border Grid.Column="1" CornerRadius="19" Padding="2" VerticalAlignment="Center"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="1">
                                 <StackPanel Orientation="Horizontal" Spacing="2">
@@ -1069,9 +1081,9 @@
                                             ToolTipService.ToolTip="Next track" AutomationProperties.Name="Next track"/>
                                 </StackPanel>
                             </Border>
-                            <Button Style="{StaticResource MediaIconButtonStyle}" Content="&#xE74F;" Click="MediaMute_Click"
+                            <Button Grid.Column="2" Style="{StaticResource MediaIconButtonStyle}" HorizontalAlignment="Left" Margin="6,0,0,0"
+                                    Content="&#xE74F;" Click="MediaMute_Click"
                                     ToolTipService.ToolTip="Mute system" AutomationProperties.Name="Mute system"/>
-                        </StackPanel>
                     </Grid>
 
                     <!-- Now playing: the song on the left (click it for the music player), controls on the right.
