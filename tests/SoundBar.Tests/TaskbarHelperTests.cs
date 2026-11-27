@@ -415,6 +415,19 @@ namespace SoundBar.Tests
             @"C:\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Temp\SoundBarUpdate", @"C:\SoundBar\SoundBar.exe", helperRunning);
 
         [Fact]
+        public void SwitchesToUtf8_BeforeUsingAnyPath()
+        {
+            // The update unpacks under the user's Temp folder, so a name like Zoë ends up in the paths.
+            // Command Prompt starts in the old code page and wouldn't find those folders without this.
+            string script = UpdateService.BuildUpdateScript(
+                @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate",
+                @"C:\SoundBar\SoundBar.exe", restartTaskbarHelper: false);
+
+            int utf8 = script.IndexOf("chcp 65001", StringComparison.Ordinal);
+            Assert.True(utf8 > 0 && utf8 < script.IndexOf("Zoë", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void WaitsForTheHelperToClose_BeforeCopyingFiles()
         {
             string script = Script(helperRunning: true);

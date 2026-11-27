@@ -763,6 +763,55 @@ namespace SoundBar.ViewModels
             }
         }
 
+        /// <summary>
+        /// Settings > Main page > Media controls: 0 is Simple, 1 is Grouped, 2 is Now playing.
+        /// </summary>
+        public int MediaBarStyleIndex
+        {
+            get => Math.Clamp(_settingsService.Settings.MediaBarStyle, 0, 2); // A hand-edited config.json could say anything
+            set
+            {
+                if (value < 0) return; // The drop-down briefly reports -1 while it's being rebuilt
+                value = Math.Clamp(value, 0, 2);
+                if (_settingsService.Settings.MediaBarStyle == value) return;
+                _settingsService.Settings.MediaBarStyle = value;
+                _settingsService.SaveSettings();
+                RaiseMediaBarStyleChanged();
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility SimpleMediaBarVisibility => MediaBarStyleIndex == 0 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility GroupedMediaBarVisibility => MediaBarStyleIndex == 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility NowPlayingMediaBarVisibility => MediaBarStyleIndex == 2 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private void RaiseMediaBarStyleChanged()
+        {
+            OnPropertyChanged(nameof(MediaBarStyleIndex));
+            OnPropertyChanged(nameof(SimpleMediaBarVisibility));
+            OnPropertyChanged(nameof(GroupedMediaBarVisibility));
+            OnPropertyChanged(nameof(NowPlayingMediaBarVisibility));
+        }
+
+        private bool _isMediaPlaying;
+
+        /// <summary>Whether music is playing, so the play button can show play or pause rather than both.</summary>
+        public bool IsMediaPlaying
+        {
+            get => _isMediaPlaying;
+            private set
+            {
+                if (_isMediaPlaying == value) return;
+                _isMediaPlaying = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PlayPauseGlyph));
+                OnPropertyChanged(nameof(PlayPauseLabel));
+            }
+        }
+
+        // Play (E768) and Pause (E769) are in Segoe MDL2 Assets on Windows 10 as well as Segoe Fluent Icons on 11
+        public string PlayPauseGlyph => IsMediaPlaying ? "\uE769" : "\uE768";
+        public string PlayPauseLabel => IsMediaPlaying ? "Pause" : "Play";
+
         /// <summary>The background picture and see-through window settings can't be changed while it's on.</summary>
         public bool CanChangeLookEffects => !LightweightMode;
 
@@ -1389,6 +1438,7 @@ namespace SoundBar.ViewModels
 
             ApplyAppNames();
             if (old.LightweightMode != fresh.LightweightMode) ApplyLightweightMode();
+            if (old.MediaBarStyle != fresh.MediaBarStyle) RaiseMediaBarStyleChanged();
 
             // Everything else is read straight from the settings, so just tell the screen to look again
             OnPropertyChanged(string.Empty);
@@ -2426,6 +2476,7 @@ namespace SoundBar.ViewModels
                 _basePosition = e.Position;
                 _lastUpdatedTime = e.LastUpdatedTime;
                 _isPlaying = e.IsPlaying;
+                IsMediaPlaying = e.IsPlaying;
                 
                 CurrentSongDurationSeconds = e.EndTime.TotalSeconds;
                 
@@ -2510,6 +2561,7 @@ namespace SoundBar.ViewModels
 
             CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
             CurrentSongArtist = e.Artist;
+            if (string.IsNullOrEmpty(e.Title)) IsMediaPlaying = false; // The player closed, so there's nothing to pause
 
             byte[]? bytes = e.Thumbnail;
             if (bytes == null)

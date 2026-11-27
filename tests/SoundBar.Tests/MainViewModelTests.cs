@@ -654,6 +654,45 @@ namespace SoundBar.Tests
             }
         }
 
+        [Fact]
+        public void MediaControlsStyle_SimpleByDefault_AndShowsOnlyTheChosenLayout()
+        {
+            var (viewModel, settings, path) = CreateViewModel();
+            try
+            {
+                var visible = Microsoft.UI.Xaml.Visibility.Visible;
+                var collapsed = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+                Assert.Equal(0, viewModel.MediaBarStyleIndex);
+                Assert.Equal(visible, viewModel.SimpleMediaBarVisibility);
+                Assert.Equal(collapsed, viewModel.GroupedMediaBarVisibility);
+                Assert.Equal(collapsed, viewModel.NowPlayingMediaBarVisibility);
+
+                viewModel.MediaBarStyleIndex = 2;
+                Assert.Equal(collapsed, viewModel.SimpleMediaBarVisibility);
+                Assert.Equal(visible, viewModel.NowPlayingMediaBarVisibility);
+                Assert.Equal(2, new SettingsService(path).Settings.MediaBarStyle);
+
+                // The drop-down reports -1 while it's rebuilt, which mustn't change anything
+                viewModel.MediaBarStyleIndex = -1;
+                Assert.Equal(2, viewModel.MediaBarStyleIndex);
+
+                // A nonsense value typed into config.json still shows one of the three
+                viewModel.ApplySettingsEditedByHand(new AppSettings { MediaBarStyle = 7 });
+                Assert.Equal(2, viewModel.MediaBarStyleIndex);
+                Assert.Equal(visible, viewModel.NowPlayingMediaBarVisibility);
+
+                // The button shows one icon for the real state (it reads this PC's own media, so either can be true)
+                Assert.Equal(viewModel.IsMediaPlaying ? "Pause" : "Play", viewModel.PlayPauseLabel);
+                Assert.Equal(viewModel.IsMediaPlaying ? (char)0xE769 : (char)0xE768, viewModel.PlayPauseGlyph.Single());
+            }
+            finally
+            {
+                viewModel.Dispose();
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
         [Theory]
         [InlineData(500, "discord", 500, "", true)]          // Same process
         [InlineData(500, "discord", 501, "Discord", true)]   // A helper process with the same name

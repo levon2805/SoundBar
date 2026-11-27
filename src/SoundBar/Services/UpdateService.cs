@@ -268,6 +268,9 @@ namespace SoundBar.Services
 
             return $$"""
 @echo off
+:: The script is saved as UTF-8. Without this, Command Prompt reads it in the old code page and
+:: can't find folders with accented or non-English letters (the update unpacks under the user's name).
+chcp 65001 >nul
 echo Updating SoundBar... Please wait.
 
 :waitloop

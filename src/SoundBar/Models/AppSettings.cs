@@ -149,6 +149,12 @@ namespace SoundBar.Models
         public bool LightweightMode { get; set; } = false;
 
         /// <summary>
+        /// How the media controls at the bottom look: 0 is Simple (one clear play button), 1 is Grouped
+        /// (the track buttons share a pill), 2 is Now playing (the song's artwork and title, then the buttons).
+        /// </summary>
+        public int MediaBarStyle { get; set; } = 0;
+
+        /// <summary>
         /// Whether Always on Top is offered in the title bar's ⋯ menu.
         /// (It was its own title bar button before v4.3.0, hence the name.)
         /// </summary>
