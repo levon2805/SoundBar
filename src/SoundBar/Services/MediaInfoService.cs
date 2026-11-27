@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Control;
@@ -32,6 +34,13 @@ namespace SoundBar.Services
         private volatile GlobalSystemMediaTransportControlsSession? _currentSession;
         private readonly object _sessionLock = new object();
 
+        // Every open player, so we notice one starting to play even when Windows doesn't make it "current"
+        private readonly List<GlobalSystemMediaTransportControlsSession> _watchedSessions = new();
+
+        // When each player last started playing, by its app ID
+        private readonly Dictionary<string, DateTime> _lastStartedPlaying = new();
+        private readonly Dictionary<string, bool> _wasPlaying = new();
+
         public event EventHandler<MediaInfoEventArgs>? MediaInfoChanged;
         public event EventHandler<TimelineInfoEventArgs>? TimelineInfoChanged;
 
@@ -40,11 +49,12 @@ namespace SoundBar.Services
             try
             {
                 _sessionManager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-                
+
                 if (_sessionManager != null)
                 {
                     _sessionManager.CurrentSessionChanged += SessionManager_CurrentSessionChanged;
-                    UpdateSession();
+                    _sessionManager.SessionsChanged += SessionManager_SessionsChanged;
+                    UpdateSession(rescan: true);
                 }
             }
             catch (Exception ex)
@@ -55,43 +65,136 @@ namespace SoundBar.Services
 
         public void Refresh()
         {
-            UpdateSession();
+            UpdateSession(rescan: true, announce: true);
         }
 
         private void SessionManager_CurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
         {
-            UpdateSession();
+            UpdateSession(rescan: false);
         }
 
-        private void UpdateSession()
+        private void SessionManager_SessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args)
+        {
+            UpdateSession(rescan: true);
+        }
+
+        private void AnySession_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
+        {
+            // A player started or stopped: that can change which one we should be showing
+            UpdateSession(rescan: false);
+        }
+
+        private static string IdOf(GlobalSystemMediaTransportControlsSession session)
+        {
+            try { return session.SourceAppUserModelId ?? ""; } catch { return ""; }
+        }
+
+        private static bool IsPlaying(GlobalSystemMediaTransportControlsSession session)
+        {
+            try { return session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing; }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Works out which player to follow (see <see cref="MediaSessionPicker"/>) and switches to it if it changed.
+        /// </summary>
+        /// <param name="rescan">Re-read the list of players, after one opened or closed.</param>
+        /// <param name="announce">Report the song details even if we're still following the same player.</param>
+        private void UpdateSession(bool rescan, bool announce = false)
         {
             lock (_sessionLock)
             {
-                if (_currentSession != null)
+                var manager = _sessionManager;
+                if (manager == null) return;
+
+                if (rescan)
                 {
-                    _currentSession.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
-                    _currentSession.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
-                    _currentSession.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
+                    foreach (var old in _watchedSessions)
+                    {
+                        try { old.PlaybackInfoChanged -= AnySession_PlaybackInfoChanged; } catch { }
+                    }
+                    _watchedSessions.Clear();
+                    try
+                    {
+                        foreach (var session in manager.GetSessions())
+                        {
+                            session.PlaybackInfoChanged += AnySession_PlaybackInfoChanged;
+                            _watchedSessions.Add(session);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Couldn't list media players: {ex.Message}");
+                    }
                 }
 
-                if (_sessionManager != null)
+                // Note when each player starts playing
+                var now = DateTime.UtcNow;
+                var candidates = new List<MediaSessionCandidate>();
+                foreach (var session in _watchedSessions)
                 {
-                    _currentSession = _sessionManager.GetCurrentSession();
-                    
-                    if (_currentSession != null)
+                    string id = IdOf(session);
+                    if (id.Length == 0 || candidates.Any(c => c.Id == id)) continue;
+                    bool playing = IsPlaying(session);
+                    if (playing && !(_wasPlaying.TryGetValue(id, out bool was) && was)) _lastStartedPlaying[id] = now;
+                    _wasPlaying[id] = playing;
+                    candidates.Add(new MediaSessionCandidate(id, playing, _lastStartedPlaying.TryGetValue(id, out var t) ? t : null));
+                }
+
+                GlobalSystemMediaTransportControlsSession? windowsCurrent = null;
+                try { windowsCurrent = manager.GetCurrentSession(); } catch { }
+                if (candidates.Count == 0 && windowsCurrent != null)
+                {
+                    // Not in the list yet (it can lag behind), so go with Windows' pick
+                    candidates.Add(new MediaSessionCandidate(IdOf(windowsCurrent), IsPlaying(windowsCurrent), null));
+                }
+
+                var followed = _currentSession;
+                string? pickedId = MediaSessionPicker.Pick(candidates, followed == null ? null : IdOf(followed), windowsCurrent == null ? null : IdOf(windowsCurrent));
+
+                var picked = pickedId == null ? null
+                    : _watchedSessions.FirstOrDefault(s => IdOf(s) == pickedId)
+                      ?? (windowsCurrent != null && IdOf(windowsCurrent) == pickedId ? windowsCurrent : null);
+
+                // Still the same player. After the list was re-read, though, it may have closed and opened again
+                // under the same name, leaving our old copy of it dead: then take the new one below.
+                bool samePlayer = followed != null && pickedId != null && IdOf(followed) == pickedId;
+                if (samePlayer && (!rescan || picked == null || ReferenceEquals(picked, followed)))
+                {
+                    if (announce)
                     {
-                        _currentSession.MediaPropertiesChanged += CurrentSession_MediaPropertiesChanged;
-                        _currentSession.TimelinePropertiesChanged += CurrentSession_TimelinePropertiesChanged;
-                        _currentSession.PlaybackInfoChanged += CurrentSession_PlaybackInfoChanged;
                         UpdateMediaProperties();
                         UpdateTimelineProperties();
                     }
-                    else
+                    return;
+                }
+
+                if (followed != null)
+                {
+                    try
                     {
-                        // No session active
-                        MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs());
-                        TimelineInfoChanged?.Invoke(this, new TimelineInfoEventArgs());
+                        followed.MediaPropertiesChanged -= CurrentSession_MediaPropertiesChanged;
+                        followed.TimelinePropertiesChanged -= CurrentSession_TimelinePropertiesChanged;
+                        followed.PlaybackInfoChanged -= CurrentSession_PlaybackInfoChanged;
                     }
+                    catch { }
+                }
+
+                _currentSession = picked;
+
+                if (picked != null)
+                {
+                    picked.MediaPropertiesChanged += CurrentSession_MediaPropertiesChanged;
+                    picked.TimelinePropertiesChanged += CurrentSession_TimelinePropertiesChanged;
+                    picked.PlaybackInfoChanged += CurrentSession_PlaybackInfoChanged;
+                    UpdateMediaProperties();
+                    UpdateTimelineProperties();
+                }
+                else
+                {
+                    // No session active
+                    MediaInfoChanged?.Invoke(this, new MediaInfoEventArgs());
+                    TimelineInfoChanged?.Invoke(this, new TimelineInfoEventArgs());
                 }
             }
         }
@@ -109,6 +212,56 @@ namespace SoundBar.Services
         private void CurrentSession_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
         {
             UpdateTimelineProperties();
+        }
+
+        // --- Controlling the player ---
+        // Each command goes straight to the player SoundBar is showing. Some players (Stremio, for one) ignore
+        // the keyboard's media keys entirely, and with several players open the keys go to whichever one
+        // Windows picks. Only if there's no player, or it says no, do we fall back to pressing the media key.
+
+        /// <summary>Plays or pauses the player SoundBar is showing.</summary>
+        public Task PlayPauseAsync() => SendAsync(async session =>
+        {
+            if (await session.TryTogglePlayPauseAsync()) return true;
+            // Some players only take a separate play or pause
+            return IsPlaying(session) ? await session.TryPauseAsync() : await session.TryPlayAsync();
+        }, Helpers.MediaHelper.PlayPause);
+
+        /// <summary>Skips to the next track in the player SoundBar is showing.</summary>
+        public Task NextAsync() => SendAsync(async session => await session.TrySkipNextAsync(), Helpers.MediaHelper.NextTrack);
+
+        /// <summary>Goes back a track in the player SoundBar is showing.</summary>
+        public Task PreviousAsync() => SendAsync(async session => await session.TrySkipPreviousAsync(), Helpers.MediaHelper.PreviousTrack);
+
+        private async Task SendAsync(Func<GlobalSystemMediaTransportControlsSession, Task<bool>> command, Action mediaKey)
+        {
+            var session = _currentSession;
+            bool worked = false;
+            if (session != null)
+            {
+                try
+                {
+                    worked = await command(session);
+                }
+                catch (Exception ex)
+                {
+                    // The player may have just closed
+                    System.Diagnostics.Debug.WriteLine($"Media command failed: {ex.Message}");
+                }
+            }
+
+            string? windowsCurrentId = null;
+            try
+            {
+                var current = _sessionManager?.GetCurrentSession();
+                if (current != null) windowsCurrentId = IdOf(current);
+            }
+            catch { }
+
+            if (MediaSessionPicker.ShouldPressMediaKey(session == null ? null : IdOf(session), windowsCurrentId, worked))
+            {
+                mediaKey();
+            }
         }
 
         private void UpdateTimelineProperties()
@@ -247,9 +400,16 @@ namespace SoundBar.Services
                     _currentSession = null;
                 }
 
+                foreach (var session in _watchedSessions)
+                {
+                    try { session.PlaybackInfoChanged -= AnySession_PlaybackInfoChanged; } catch { }
+                }
+                _watchedSessions.Clear();
+
                 if (_sessionManager != null)
                 {
                     _sessionManager.CurrentSessionChanged -= SessionManager_CurrentSessionChanged;
+                    _sessionManager.SessionsChanged -= SessionManager_SessionsChanged;
                     _sessionManager = null;
                 }
             }

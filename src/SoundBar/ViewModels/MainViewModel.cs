@@ -66,12 +66,18 @@ namespace SoundBar.ViewModels
 
                     if (_selectedAudioDevice != null && !_isUpdatingDeviceFromSystem)
                     {
-                        _audioService.SetDefaultAudioDevice(_selectedAudioDevice.Id);
+                        if (!_audioService.SetDefaultAudioDevice(_selectedAudioDevice.Id))
+                            DeviceSwitchFailed?.Invoke(this, _selectedAudioDevice.Name ?? "that device");
                     }
                 }
             }
         }
         private bool _isUpdatingDeviceFromSystem = false;
+
+        /// <summary>
+        /// Windows didn't accept a new default device. Carries the device's name, so the window can say so.
+        /// </summary>
+        public event EventHandler<string>? DeviceSwitchFailed;
 
 
 
@@ -261,11 +267,12 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.EnableFocusHighlight = value;
                     OnPropertyChanged();
                     _settingsService.SaveSettings();
-                    
+
                     // Update all apps immediately so the UI reflects the toggle
+                    bool highlight = value && !LightweightMode;
                     foreach (var app in Apps)
                     {
-                        app.IsHighlightVisible = app.IsFocused && value;
+                        app.IsHighlightVisible = app.IsFocused && highlight;
                     }
                 }
             }
@@ -285,6 +292,7 @@ namespace SoundBar.ViewModels
                     _settingsService.Settings.WindowOpacity = clamped;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(WindowOpacityText));
+                    OnPropertyChanged(nameof(EffectiveWindowOpacity));
                     ScheduleSettingsSave();
                 }
             }
@@ -491,7 +499,11 @@ namespace SoundBar.ViewModels
             );
 
             _companionServer = server;
-            server.StateChanged += () => RunOnUIThread(RaiseCompanionStateChanged);
+            server.StateChanged += () =>
+            {
+                WakePolling(); // A phone that's just connected should get the live state, even while minimised
+                RunOnUIThread(RaiseCompanionStateChanged);
+            };
 
             // Only actually waits if Windows needs admin permission, and then it waits without freezing the window
             IsCompanionStarting = true;
@@ -593,7 +605,8 @@ namespace SoundBar.ViewModels
 
                     if (_selectedInputDevice != null && !_isUpdatingInputDeviceFromSystem)
                     {
-                        _audioService.SetDefaultInputDevice(_selectedInputDevice.Id);
+                        if (!_audioService.SetDefaultInputDevice(_selectedInputDevice.Id))
+                            DeviceSwitchFailed?.Invoke(this, _selectedInputDevice.Name ?? "that device");
                     }
                 }
             }
@@ -736,6 +749,164 @@ namespace SoundBar.ViewModels
         {
             bool show = _settingsService.Settings.ShowAppNames;
             foreach (var app in Apps) app.ShowName = show;
+        }
+
+        /// <summary>
+        /// Lightweight mode: checks for changes every few seconds instead of every second, and turns off the
+        /// background picture, see-through window and active app highlight. Their own settings are left alone,
+        /// so turning it off brings them straight back.
+        /// </summary>
+        public bool LightweightMode
+        {
+            get => _settingsService.Settings.LightweightMode;
+            set
+            {
+                if (_settingsService.Settings.LightweightMode != value)
+                {
+                    _settingsService.Settings.LightweightMode = value;
+                    _settingsService.SaveSettings();
+                    ApplyLightweightMode();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Settings > Main page > Media controls: 0 is Simple, 1 is Grouped, 2 is Now playing.
+        /// </summary>
+        public int MediaBarStyleIndex
+        {
+            get => Math.Clamp(_settingsService.Settings.MediaBarStyle, 0, 2); // A hand-edited config.json could say anything
+            set
+            {
+                if (value < 0) return; // The drop-down briefly reports -1 while it's being rebuilt
+                value = Math.Clamp(value, 0, 2);
+                if (_settingsService.Settings.MediaBarStyle == value) return;
+                _settingsService.Settings.MediaBarStyle = value;
+                _settingsService.SaveSettings();
+                RaiseMediaBarStyleChanged();
+            }
+        }
+
+        public Microsoft.UI.Xaml.Visibility SimpleMediaBarVisibility => MediaBarStyleIndex == 0 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility GroupedMediaBarVisibility => MediaBarStyleIndex == 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        public Microsoft.UI.Xaml.Visibility NowPlayingMediaBarVisibility => MediaBarStyleIndex == 2 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private void RaiseMediaBarStyleChanged()
+        {
+            OnPropertyChanged(nameof(MediaBarStyleIndex));
+            OnPropertyChanged(nameof(SimpleMediaBarVisibility));
+            OnPropertyChanged(nameof(GroupedMediaBarVisibility));
+            OnPropertyChanged(nameof(NowPlayingMediaBarVisibility));
+        }
+
+        private bool _isMediaPlaying;
+
+        /// <summary>Whether music is playing, so the play button can show play or pause rather than both.</summary>
+        public bool IsMediaPlaying
+        {
+            get => _isMediaPlaying;
+            private set
+            {
+                if (_isMediaPlaying == value) return;
+                _isMediaPlaying = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PlayPauseGlyph));
+                OnPropertyChanged(nameof(PlayPauseLabel));
+            }
+        }
+
+        // Play (E768) and Pause (E769) are in Segoe MDL2 Assets on Windows 10 as well as Segoe Fluent Icons on 11
+        public string PlayPauseGlyph => IsMediaPlaying ? "\uE769" : "\uE768";
+        public string PlayPauseLabel => IsMediaPlaying ? "Pause" : "Play";
+
+        /// <summary>The background picture and see-through window settings can't be changed while it's on.</summary>
+        public bool CanChangeLookEffects => !LightweightMode;
+
+        /// <summary>How see-through the window actually is: Lightweight mode keeps it solid.</summary>
+        public double EffectiveWindowOpacity => LightweightMode ? 100 : WindowOpacity;
+
+        private void ApplyLightweightMode()
+        {
+            OnPropertyChanged(nameof(LightweightMode));
+            OnPropertyChanged(nameof(CanChangeLookEffects));
+            OnPropertyChanged(nameof(EffectiveWindowOpacity));
+
+            bool highlight = EnableFocusHighlight && !LightweightMode;
+            foreach (var app in Apps) app.IsHighlightVisible = app.IsFocused && highlight;
+
+            _ = LoadBackgroundImageAsync();
+            UpdateProgressTimer();
+            WakePolling(); // Go to the new speed straight away rather than after the current wait
+        }
+
+        // How often SoundBar checks Windows for changes (apps starting and stopping, volume and devices changed
+        // elsewhere). Waking up less often is what saves battery: the work itself is small, but every wake-up
+        // stops the processor resting. While minimised nothing's on screen, so it can wait longer.
+        internal const int RefreshIntervalMs = 1000;
+        internal const int LightweightRefreshIntervalMs = 3000;
+        internal const int MinimisedRefreshIntervalMs = 5000;
+        internal const int LightweightMinimisedRefreshIntervalMs = 10000;
+
+        // When Windows is telling us about changes (see AudioChangeWatcher), the regular check is only a safety
+        // net for what it doesn't announce, like another mixer changing one app's volume, so it can be slower
+        internal const int WatchedRefreshIntervalMs = 3000;
+        internal const int WatchedLightweightRefreshIntervalMs = 5000;
+        internal const int WatchedMinimisedRefreshIntervalMs = 15000;
+        internal const int WatchedLightweightMinimisedRefreshIntervalMs = 30000;
+
+        /// <summary>
+        /// The shortest gap between two checks. Dragging the master volume sends Windows' change notification many
+        /// times a second, and each would otherwise start a full check.
+        /// </summary>
+        internal const int MinimumCheckGapMs = 250;
+
+        private AudioChangeWatcher? _changeWatcher;
+
+        private volatile bool _isWindowMinimised;
+
+        /// <summary>Set by the window, so the checks slow down while it's minimised and catch up when it's back.</summary>
+        public bool IsWindowMinimised
+        {
+            get => _isWindowMinimised;
+            set
+            {
+                if (_isWindowMinimised == value) return;
+                _isWindowMinimised = value;
+                if (!value) WakePolling(); // Up to date the moment it's back on screen
+                UpdateProgressTimer();
+            }
+        }
+
+        /// <summary>How long the loop waits before checking again.</summary>
+        internal int RefreshIntervalNowMs
+        {
+            get
+            {
+                bool lightweight = _settingsService.Settings.LightweightMode;
+
+                // A phone using the companion shows the live state, so it counts as being on screen
+                bool phoneConnected = (_companionServer?.ConnectedClientCount ?? 0) > 0;
+
+                bool minimised = _isWindowMinimised && !phoneConnected;
+                if (_changeWatcher != null)
+                {
+                    if (minimised) return lightweight ? WatchedLightweightMinimisedRefreshIntervalMs : WatchedMinimisedRefreshIntervalMs;
+                    return lightweight ? WatchedLightweightRefreshIntervalMs : WatchedRefreshIntervalMs;
+                }
+
+                if (minimised)
+                    return lightweight ? LightweightMinimisedRefreshIntervalMs : MinimisedRefreshIntervalMs;
+                return lightweight ? LightweightRefreshIntervalMs : RefreshIntervalMs;
+            }
+        }
+
+        // Released to cut the loop's wait short. It holds at most one, so several wake-ups only cause one check.
+        private readonly SemaphoreSlim _pollingWake = new(0, 1);
+
+        private void WakePolling()
+        {
+            try { _pollingWake.Release(); }
+            catch (SemaphoreFullException) { } // Already due to wake
         }
 
         public bool ShowActiveApps
@@ -1080,6 +1251,8 @@ namespace SoundBar.ViewModels
 
         // Master Volume Property
         private float _masterVolume;
+        private readonly object _masterVolumeSendLock = new();
+
         public float MasterVolume
         {
             get => _masterVolume;
@@ -1107,9 +1280,14 @@ namespace SoundBar.ViewModels
                         try
                         {
                             await System.Threading.Tasks.Task.Delay(50, token);
-                            if (!token.IsCancellationRequested)
+
+                            // Checked and sent together, so an older volume can't be sent after a newer one
+                            lock (_masterVolumeSendLock)
                             {
-                                _audioService.SetMasterVolume(capturedVolume);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    _audioService.SetMasterVolume(capturedVolume);
+                                }
                             }
                         }
                         catch (System.Threading.Tasks.TaskCanceledException) { }
@@ -1209,15 +1387,39 @@ namespace SoundBar.ViewModels
             // Make sure the startup shortcut is there if it should be (also cleans up old registry keys)
             RepairStartupShortcut();
 
+            // Hear about changes as Windows makes them (only with the real audio service, not in tests)
+            if (_audioService is WindowsAudioMixerService)
+            {
+                try { _changeWatcher = new AudioChangeWatcher(WakePolling); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"No change notifications: {ex.Message}"); }
+            }
+
             // Start the monitoring loop
             StartPolling();
 
             // Load Custom Background Image
             _ = LoadBackgroundImageAsync();
 
-            // Check for updates
+            // Check for updates, now and then once a day: most people leave SoundBar running for weeks.
+            // The timer looks every hour, so a PC that slept through the 24 hours checks soon after it wakes.
             UpdateCheck = CheckForUpdatesAsync();
+            _updateCheckTimer = new System.Threading.Timer(_ =>
+            {
+                if (!UpdateAvailable && IsUpdateCheckDue(_lastUpdateCheck, DateTime.UtcNow)) _ = CheckForUpdatesAsync();
+            }, null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+
+            // Tidy away app icons that haven't been needed for a while, in the background
+            _ = Task.Run(() => AudioAppModel.TidyIconFolder(DateTime.UtcNow));
         }
+
+        private System.Threading.Timer? _updateCheckTimer;
+        private DateTime _lastUpdateCheck = DateTime.MinValue;
+
+        /// <summary>How often to look for a new version while SoundBar keeps running.</summary>
+        internal static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(24);
+
+        /// <summary>Whether it's time to look for a new version again.</summary>
+        internal static bool IsUpdateCheckDue(DateTime lastCheck, DateTime now) => now - lastCheck >= UpdateCheckInterval;
 
         /// <summary>The startup update check, so tests can wait for it to finish.</summary>
         internal Task UpdateCheck { get; private set; } = Task.CompletedTask;
@@ -1295,12 +1497,15 @@ namespace SoundBar.ViewModels
             }
 
             ApplyAppNames();
+            if (old.LightweightMode != fresh.LightweightMode) ApplyLightweightMode();
+            if (old.MediaBarStyle != fresh.MediaBarStyle) RaiseMediaBarStyleChanged();
 
             // Everything else is read straight from the settings, so just tell the screen to look again
             OnPropertyChanged(string.Empty);
 
             // The window listens for these by name
             OnPropertyChanged(nameof(WindowOpacity));
+            OnPropertyChanged(nameof(EffectiveWindowOpacity));
             OnPropertyChanged(nameof(ShowOutputDevice));
             OnPropertyChanged(nameof(ShowInputDevice));
             if (old.Theme != fresh.Theme) ThemeChanged?.Invoke(this, fresh.Theme);
@@ -1324,13 +1529,10 @@ namespace SoundBar.ViewModels
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
         {
-            // The keyboard hook calls us on the UI thread, once for every key pressed anywhere in Windows.
-            // Handling it right here (rather than queueing it for later) is what lets e.Handled actually
-            // stop the hotkey reaching the app you're in, and keeps ordinary typing cheap.
-            if (_dispatcherQueue == null || _dispatcherQueue.HasThreadAccess)
-                HandleHotkey(e);
-            else
-                RunOnUIThread(() => HandleHotkey(e));
+            // Called on the keyboard hook's own thread, once for every key pressed anywhere in Windows.
+            // Decide here, straight away, whether the key is ours (that's what lets e.Handled stop it reaching
+            // the app you're in), but leave the actual change to the window's thread.
+            HandleHotkey(e);
         }
 
         private void HandleHotkey(HotkeyEventArgs e)
@@ -1340,13 +1542,16 @@ namespace SoundBar.ViewModels
             if (IsRecordingHotkey)
             {
                 // Deliberately not marked as handled, so Escape still closes the recording dialog
-                RecordedHotkeyString = pressedString;
+                RunOnUIThread(() => RecordedHotkeyString = pressedString);
                 return;
             }
 
+            // Typing a character with AltGr, or a Windows shortcut, isn't meant for us
+            if (e.IsNotForHotkeys) return;
+
             if (pressedString == InputMuteHotkey)
             {
-                ToggleInputMute();
+                RunOnUIThread(ToggleInputMute);
                 e.Handled = true;
                 return;
             }
@@ -1356,19 +1561,42 @@ namespace SoundBar.ViewModels
             bool isMute = pressedString == MuteHotkey;
             if (!isVolumeUp && !isVolumeDown && !isMute) return; // Almost every keystroke stops here
 
-            foreach (var activeApp in Apps)
+            // Look up the app in front now, rather than trusting the last check: that can be a few
+            // seconds old while SoundBar is minimised or in Lightweight mode
+            uint activePid = Helpers.WindowHelper.GetForegroundProcessId();
+            string activeName = "";
+            try
             {
-                if (!activeApp.IsFocused) continue;
-
-                if (isVolumeUp)
-                    activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
-                else if (isVolumeDown)
-                    activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
-                else
-                    activeApp.IsMuted = !activeApp.IsMuted;
-
-                e.Handled = true;
+                if (activePid > 0)
+                {
+                    using var proc = System.Diagnostics.Process.GetProcessById((int)activePid);
+                    activeName = proc.ProcessName;
+                }
             }
+            catch { }
+
+            // The snapshot is a plain copy of the list, so it's safe to read from this thread
+            var matches = AppsSnapshot.Where(app => BelongsToProcess(app, activePid, activeName)).ToArray();
+            if (matches.Length == 0)
+            {
+                // The app may have only just started playing, so check now rather than waiting for the next look
+                WakePolling();
+                return;
+            }
+
+            e.Handled = true;
+            RunOnUIThread(() =>
+            {
+                foreach (var activeApp in matches)
+                {
+                    if (isVolumeUp)
+                        activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
+                    else if (isVolumeDown)
+                        activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
+                    else
+                        activeApp.IsMuted = !activeApp.IsMuted;
+                }
+            });
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -1448,7 +1676,8 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private bool _isRecordingHotkey;
+        // Read by the keyboard hook's thread too
+        private volatile bool _isRecordingHotkey;
         public bool IsRecordingHotkey
         {
             get => _isRecordingHotkey;
@@ -1473,12 +1702,28 @@ namespace SoundBar.ViewModels
                 {
                     _recordedHotkeyString = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSaveRecordedHotkey));
+                    OnPropertyChanged(nameof(RecordedHotkeyHint));
                 }
             }
         }
 
+        /// <summary>
+        /// Whether the keys just pressed in the hotkey dialog can be saved (they need Ctrl or Alt).
+        /// </summary>
+        public bool CanSaveRecordedHotkey => IsRecordingHotkey && RecordedHotkeyString != "Listening..." && HotkeyRules.IsAllowed(RecordedHotkeyString);
+
+        /// <summary>
+        /// Shown under the keys in the hotkey dialog when they can't be saved.
+        /// </summary>
+        public string RecordedHotkeyHint =>
+            RecordedHotkeyString == "Listening..." || CanSaveRecordedHotkey
+                ? ""
+                : "Add Ctrl or Alt, so the key still types normally in your apps.";
+
         private async Task CheckForUpdatesAsync()
         {
+            _lastUpdateCheck = DateTime.UtcNow;
             bool hasUpdate = await _updateService.CheckForUpdatesAsync();
 #if DEBUG
             hasUpdate = true;
@@ -1496,15 +1741,22 @@ namespace SoundBar.ViewModels
         /// <summary>
         /// Downloads and installs the update. If it works, the app closes and restarts itself.
         /// </summary>
-        /// <returns>Null on success, otherwise a friendly message explaining what went wrong.</returns>
-        public async Task<string?> ApplyUpdate()
+        /// <param name="progress">Told how much has downloaded, from 0 to 1.</param>
+        /// <param name="cancellationToken">Cancels the download.</param>
+        /// <returns>Null on success or if it was cancelled, otherwise a friendly message explaining what went wrong.</returns>
+        public async Task<string?> ApplyUpdate(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             if (IsUpdating) return null;
 
             IsUpdating = true;
             try
             {
-                await _updateService.DownloadAndApplyUpdateAsync();
+                await _updateService.DownloadAndApplyUpdateAsync(progress, cancellationToken);
+                return null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The user cancelled, so there's nothing to tell them
                 return null;
             }
             catch (UpdateFailedException ex)
@@ -1531,6 +1783,13 @@ namespace SoundBar.ViewModels
         {
             try
             {
+                // Lightweight mode leaves the picture out, which saves the memory it takes up
+                if (LightweightMode)
+                {
+                    RunOnUIThread(() => BackgroundImage = null);
+                    return;
+                }
+
                 string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                 string folder = System.IO.Path.Combine(appData, "SoundBar", "Backgrounds");
 
@@ -1553,7 +1812,8 @@ namespace SoundBar.ViewModels
                                                      f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
                 });
 
-                RunOnUIThread(() => BackgroundImage = imagePath);
+                // Lightweight mode may have come on while we were looking
+                RunOnUIThread(() => BackgroundImage = LightweightMode ? null : imagePath);
             }
             catch
             {
@@ -1748,29 +2008,12 @@ namespace SoundBar.ViewModels
                             }
 
                             // Update Focus Outline (support multi-process apps like Discord)
+                            bool highlight = EnableFocusHighlight && !LightweightMode;
                             foreach (var app in Apps)
                             {
-                                bool isMatch = false;
-                                if (activePid > 0)
-                                {
-                                    if (app.ProcessId == activePid)
-                                    {
-                                        isMatch = true;
-                                    }
-                                    else if (!string.IsNullOrEmpty(activeProcessName) && !string.IsNullOrEmpty(app.RawProcessName))
-                                    {
-                                        string rawNoExt = app.RawProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) 
-                                            ? app.RawProcessName.Substring(0, app.RawProcessName.Length - 4) 
-                                            : app.RawProcessName;
-                                            
-                                        if (rawNoExt.Equals(activeProcessName, StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            isMatch = true;
-                                        }
-                                    }
-                                }
+                                bool isMatch = BelongsToProcess(app, activePid, activeProcessName);
                                 app.IsFocused = isMatch;
-                                app.IsHighlightVisible = isMatch && EnableFocusHighlight;
+                                app.IsHighlightVisible = isMatch && highlight;
                             }
                         });
                     }
@@ -1781,14 +2024,38 @@ namespace SoundBar.ViewModels
 
                     try
                     {
-                        await Task.Delay(1000, token);
+                        // Wait until the next check is due, or until something needs it sooner
+                        // (Windows announcing a change, the window coming back from minimised, a phone connecting,
+                        // a setting changing). Several wake-ups close together only cause one check.
+                        long checkedAt = Environment.TickCount64;
+                        if (await _pollingWake.WaitAsync(RefreshIntervalNowMs, token))
+                        {
+                            long sinceLast = Environment.TickCount64 - checkedAt;
+                            if (sinceLast < MinimumCheckGapMs) await Task.Delay((int)(MinimumCheckGapMs - sinceLast), token);
+                        }
                     }
-                    catch (TaskCanceledException)
+                    catch (OperationCanceledException)
                     {
                         break;
                     }
                 }
             });
+        }
+
+        /// <summary>
+        /// Whether a listed app belongs to the given process. Apps like Discord play sound from a helper
+        /// process, so a matching name counts as well as the same process ID.
+        /// </summary>
+        internal static bool BelongsToProcess(AudioAppModel app, uint processId, string processName)
+        {
+            if (processId == 0) return false;
+            if (app.ProcessId == processId) return true;
+            if (string.IsNullOrEmpty(processName) || string.IsNullOrEmpty(app.RawProcessName)) return false;
+
+            string rawNoExt = app.RawProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? app.RawProcessName.Substring(0, app.RawProcessName.Length - 4)
+                : app.RawProcessName;
+            return rawNoExt.Equals(processName, StringComparison.OrdinalIgnoreCase);
         }
 
         private void HandleAliasChanged(string rawProcessName, string newAlias)
@@ -1983,6 +2250,7 @@ namespace SoundBar.ViewModels
                 appToRemove.AliasChanged -= HandleAliasChanged;
                 Apps.Remove(appToRemove);
                 appToRemove.Dispose();
+                AppsSnapshot = Apps.ToArray(); // So the hotkeys stop acting on it straight away
             }
         }
 
@@ -2255,6 +2523,11 @@ namespace SoundBar.ViewModels
             }
         }
 
+        /// <summary>
+        /// Whether the song position bar can be moved. Live streams report no length, so there's nowhere to move to.
+        /// </summary>
+        public bool CanSeek => _currentSongDurationSeconds > 0;
+
         private double _currentSongDurationSeconds = 1;
         public double CurrentSongDurationSeconds
         {
@@ -2265,6 +2538,7 @@ namespace SoundBar.ViewModels
                 {
                     _currentSongDurationSeconds = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSeek));
                     CurrentSongDurationText = Helpers.TimeSpanConverter.Format(value);
                 }
             }
@@ -2305,6 +2579,7 @@ namespace SoundBar.ViewModels
                 _basePosition = e.Position;
                 _lastUpdatedTime = e.LastUpdatedTime;
                 _isPlaying = e.IsPlaying;
+                IsMediaPlaying = e.IsPlaying;
                 
                 CurrentSongDurationSeconds = e.EndTime.TotalSeconds;
                 
@@ -2313,11 +2588,32 @@ namespace SoundBar.ViewModels
                     CurrentSongPositionSeconds = e.Position.TotalSeconds;
                 }
 
-                if (_isPlaying && (_progressTimer?.IsEnabled == false))
-                    _progressTimer?.Start();
-                else if (!_isPlaying && (_progressTimer?.IsEnabled == true))
-                    _progressTimer?.Stop();
+                UpdateProgressTimer();
             });
+        }
+
+        /// <summary>
+        /// Moves the song's position bar along while music plays. Nobody can see it while the window is
+        /// minimised, so it stops then (and jumps to the right place when it's back). Lightweight mode moves
+        /// it once a second instead of twice.
+        /// </summary>
+        private void UpdateProgressTimer()
+        {
+            if (_progressTimer == null) return;
+
+            var interval = TimeSpan.FromMilliseconds(LightweightMode ? 1000 : 500);
+            if (_progressTimer.Interval != interval) _progressTimer.Interval = interval;
+
+            bool shouldRun = _isPlaying && !_isWindowMinimised;
+            if (shouldRun && !_progressTimer.IsEnabled)
+            {
+                ProgressTimer_Tick(null, EventArgs.Empty); // Catch up straight away rather than on the next tick
+                _progressTimer.Start();
+            }
+            else if (!shouldRun && _progressTimer.IsEnabled)
+            {
+                _progressTimer.Stop();
+            }
         }
 
         private void ProgressTimer_Tick(object? sender, object e)
@@ -2357,6 +2653,15 @@ namespace SoundBar.ViewModels
         private int _thumbnailVersion;
         private byte[]? _currentThumbnailBytes;
 
+        /// <summary>Plays or pauses the player shown in the music player (or the media key, if there's none).</summary>
+        public void MediaPlayPause() => _ = _mediaInfoService.PlayPauseAsync();
+
+        /// <summary>Next track in the player shown in the music player.</summary>
+        public void MediaNext() => _ = _mediaInfoService.NextAsync();
+
+        /// <summary>Previous track in the player shown in the music player.</summary>
+        public void MediaPrevious() => _ = _mediaInfoService.PreviousAsync();
+
         private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {
             RunOnUIThread(() => _ = UpdateNowPlayingAsync(e));
@@ -2368,6 +2673,7 @@ namespace SoundBar.ViewModels
 
             CurrentSongTitle = string.IsNullOrEmpty(e.Title) ? "Not Playing" : e.Title;
             CurrentSongArtist = e.Artist;
+            if (string.IsNullOrEmpty(e.Title)) IsMediaPlaying = false; // The player closed, so there's nothing to pause
 
             byte[]? bytes = e.Thumbnail;
             if (bytes == null)
@@ -2604,6 +2910,12 @@ namespace SoundBar.ViewModels
         {
             if (_isDisposed) return;
             _isDisposed = true;
+
+            _updateCheckTimer?.Dispose();
+            _updateCheckTimer = null;
+
+            _changeWatcher?.Dispose();
+            _changeWatcher = null;
 
             // Don't lose a slider change that was still waiting to be saved
             if (_isSettingsSavePending)

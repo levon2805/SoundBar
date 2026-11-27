@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>SoundBar</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -20,14 +20,14 @@
     <NoWarn>NU1701</NoWarn>
     <ApplicationIcon>Assets\SoundBar.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- Program.cs has SoundBar's own Main, which hands a second launch to the running copy before anything starts -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- Keep the XAML resources file's old name. Newer Windows App SDKs call it SoundBar.pri, and unzipping a new
+         version over an old one would then leave a stale resources.pri next to it for WinUI to pick up -->
+    <ProjectPriFileName>resources.pri</ProjectPriFileName>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <WindowsSdkPackageVersion>10.0.19041.38</WindowsSdkPackageVersion>
-  </PropertyGroup>
 
-  <!-- Override the broken Windows App SDK target to silence the false VS error -->
-  <Target Name="WindowsAppSDKVerifyCsWinRtVersions" />
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
@@ -46,11 +46,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
+    <!-- Just the parts SoundBar uses (WinUI brings windowing and app start-up with it). The full
+         Microsoft.WindowsAppSDK package also adds AI, machine-learning and search parts: about 70 MB unused. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <PackageReference Include="CSCore" Version="1.2.1.2" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
-    <PackageReference Include="System.Drawing.Common" Version="8.0.12" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.15" />
   </ItemGroup>
 
 

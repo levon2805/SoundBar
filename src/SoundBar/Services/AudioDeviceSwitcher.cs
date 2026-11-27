@@ -76,43 +76,45 @@ namespace SoundBar.Services
         /// Tells Windows to instantly switch all its audio over to the specified device.
         /// </summary>
         /// <param name="deviceId">The unique ID of the device you want to switch to.</param>
-        public static void SetDefaultDevice(string deviceId)
+        /// <returns>
+        /// True if Windows accepted it. This uses an interface Windows doesn't officially document, which a future
+        /// Windows could change, so callers say so rather than the device picker silently doing nothing.
+        /// </returns>
+        public static bool SetDefaultDevice(string deviceId)
         {
             object? pcc = null;
             try
             {
                 pcc = new PolicyConfigClient();
-                
+
+                // Each role: console (0), multimedia (1), communications (2). It worked if multimedia did,
+                // since that's the one SoundBar and most apps follow.
+                static bool Apply(Func<int, int> setForRole)
+                {
+                    setForRole(0);
+                    int multimedia = setForRole(1);
+                    setForRole(2);
+                    return multimedia >= 0;
+                }
+
                 // Try Windows 10/11 version
                 if (pcc is IPolicyConfig config)
-                {
-                    config.SetDefaultEndpoint(deviceId, 0); // eConsole
-                    config.SetDefaultEndpoint(deviceId, 1); // eMultimedia
-                    config.SetDefaultEndpoint(deviceId, 2); // eCommunications
-                    return;
-                }
+                    return Apply(role => config.SetDefaultEndpoint(deviceId, role));
 
                 // Try alternate Windows 11/Vista version
                 if (pcc is IPolicyConfigVista configVista)
-                {
-                    configVista.SetDefaultEndpoint(deviceId, 0);
-                    configVista.SetDefaultEndpoint(deviceId, 1);
-                    configVista.SetDefaultEndpoint(deviceId, 2);
-                    return;
-                }
+                    return Apply(role => configVista.SetDefaultEndpoint(deviceId, role));
 
                 // Try classic Windows 7/8 version
                 if (pcc is IPolicyConfigClassic configClassic)
-                {
-                    configClassic.SetDefaultEndpoint(deviceId, 0);
-                    configClassic.SetDefaultEndpoint(deviceId, 1);
-                    configClassic.SetDefaultEndpoint(deviceId, 2);
-                    return;
-                }
+                    return Apply(role => configClassic.SetDefaultEndpoint(deviceId, role));
+
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail if COM is unavailable on this system
+                System.Diagnostics.Debug.WriteLine($"Couldn't switch the default device: {ex.Message}");
+                return false;
             }
             finally
             {

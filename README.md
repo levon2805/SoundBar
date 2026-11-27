@@ -111,11 +111,11 @@ Switch where your sound plays, or which microphone you use, straight from the to
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/output-devices.png" width="340" alt="Choosing speakers or a headset" /><br/><sub>Click the speaker box to choose where sound plays</sub></td>
+    <td align="center"><img src="docs/images/output-devices.png" width="315" alt="Choosing speakers or a headset" /><br/><sub>Click the speaker box to choose where sound plays</sub></td>
     <td align="center"><img src="docs/images/mic-mute.png" width="300" alt="The microphone mute button turned red" /><br/><sub>Click the microphone button to mute it. It turns red so you always know.</sub></td>
   </tr>
   <tr>
-    <td align="center" colspan="2"><img src="docs/images/input-devices.png" width="540" alt="Choosing a microphone" /><br/><sub>Click the microphone box to choose a microphone</sub></td>
+    <td align="center" colspan="2"><img src="docs/images/input-devices.png" width="520" alt="Choosing a microphone" /><br/><sub>Click the microphone box to choose a microphone</sub></td>
   </tr>
 </table>
 
@@ -191,7 +191,11 @@ Connect your Bluetooth headphones, speakers and other devices without opening Wi
 
 Click the music note in the bottom corner to swap the app list for a big music player. It shows the album art, song name and artist, and has a timeline you can drag to skip to any part of the song.
 
-It works with anything that shows up in Windows' own media controls, such as Spotify, YouTube in your web browser, and most music and video apps.
+It works with anything that shows up in Windows' own media controls, such as Spotify, YouTube in your web browser, Stremio, and most music and video apps. If more than one is open, SoundBar shows the one that's playing, and the buttons control that one.
+
+Choose how the buttons at the bottom look in **Settings > Main page > Media controls**: **Simple**, **Grouped**, or **Now playing**, which also shows the album art and song. Click the song to open the music player.
+
+You can also skip through a song with the keyboard: select the timeline and use the arrow keys.
 
 <table>
   <tr>
@@ -323,7 +327,7 @@ Change the volume of the app you're using **without leaving it**. This is perfec
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd> | Mute or unmute the app you're using |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>I</kbd> | Mute or unmute your microphone |
 
-You can change any of these in **Settings > Sound > Global hotkeys**. SoundBar also highlights the app your shortcuts will control, so you always know what you're changing. You can turn this highlight on or off with **Active app highlight** in **Settings > Look**.
+You can change any of these in **Settings > Sound > Global hotkeys**. Each shortcut needs <kbd>Ctrl</kbd> or <kbd>Alt</kbd>, so the keys still type normally in your other apps. SoundBar also highlights the app your shortcuts will control, so you always know what you're changing. You can turn this highlight on or off with **Active app highlight** in **Settings > Look**.
 
 <table>
   <tr>
@@ -331,6 +335,9 @@ You can change any of these in **Settings > Sound > Global hotkeys**. SoundBar a
     <td align="center"><img src="docs/images/active-app-highlight.png" width="297" alt="The active app highlighted in the list" /><br/><sub>The app you're using is highlighted</sub></td>
   </tr>
 </table>
+
+### Without a mouse
+SoundBar works with the keyboard and with screen readers such as Narrator. Press <kbd>Tab</kbd> to move around. On an app's icon, <kbd>Space</kbd> mutes it and <kbd>Shift</kbd> + <kbd>F10</kbd> renames it. SoundBar also follows Windows' High Contrast themes.
 
 <sub>[Back to top](#readme-top)</sub>
 
@@ -355,11 +362,14 @@ Turn on **Run at startup** in **Settings > General** and SoundBar will be ready 
 ### Do Not Disturb
 Silence all Windows notification and system sounds with one switch in **Settings > Sound > Do Not Disturb**. Your music and games keep playing. To change which sounds Windows plays, click **Open** next to **System sounds**.
 
+### Lightweight mode
+On an older or busy PC, turn on **Lightweight mode** in **Settings > General**. SoundBar then checks for changes less often and turns off the wallpaper, the see-through window and the active app highlight. Turn it off again and they all come back as they were.
+
 ### Loudness warning
 If your volume stays above 85% for a long time, SoundBar can show a friendly warning to protect your ears. Turn it on in **Settings > Sound > Loudness warning**.
 
 ### Automatic updates
-SoundBar checks for a new version each time it starts. When one is available, a green dot appears on the **⋯** button in the title bar. Open the menu and click **Update to vX.Y.Z** whenever you're ready, and SoundBar updates itself. Your settings and wallpapers are kept.
+SoundBar checks for a new version when it starts, and once a day while it's running. When one is available, a green dot appears on the **⋯** button in the title bar. Open the menu and click **Update to vX.Y.Z** whenever you're ready, and SoundBar updates itself. You can watch its progress, and cancel the download if you change your mind. Your settings and wallpapers are kept.
 
 <table>
   <tr>
@@ -401,7 +411,7 @@ winget install levon2805.SoundBar
 SoundBar is a single folder. There's nothing else to install.
 
 1. Go to the [**Releases**](../../releases) page.
-2. Download the latest **`SoundBar.zip`**.
+2. Under the latest version, download the **`.zip`** file (for example `SoundBar-v4.5.1-windows-x64.zip`).
 3. Right-click the zip, choose **Extract All**, and put the folder anywhere you like.
 4. Open the folder and double-click **`SoundBar.exe`**.
 
@@ -471,7 +481,7 @@ A few extra options (such as the network port the phone remote uses) can be chan
 
 ## For developers
 
-SoundBar is built natively with the Windows App SDK (WinUI 3) on .NET 8.
+SoundBar is built natively with the Windows App SDK 2.7 (WinUI 3) on .NET 10. Releases are self-contained, so users don't need to install either.
 
 **Project layout:**
 * `src/SoundBar/` contains the main WinUI 3 application (the phone remote's web app is in `src/SoundBar/wwwroot/`).

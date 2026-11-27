@@ -30,6 +30,7 @@ namespace SoundBar.Views
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
         private IntPtr _hWnd;
+        private MinimumWindowSize? _minimumSize;
 
         /// <summary>
         /// What the user wants the pin to be. We track this ourselves rather than asking Windows,
@@ -64,6 +65,7 @@ namespace SoundBar.Views
             // Apply initial theme and listen for changes
             ApplyTheme(ViewModel.SelectedTheme);
             ViewModel.ThemeChanged += ViewModel_ThemeChanged;
+            ViewModel.DeviceSwitchFailed += ViewModel_DeviceSwitchFailed;
 
             // Handle layout changes for I/O strip
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -73,6 +75,7 @@ namespace SoundBar.Views
 
             IntPtr hWnd = WindowNative.GetWindowHandle(this);
             _hWnd = hWnd;
+            _minimumSize = new MinimumWindowSize(hWnd); // Too thin and the buttons pile on top of each other
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
             _appWindow = AppWindow.GetFromWindowId(wndId);
             
@@ -94,7 +97,7 @@ namespace SoundBar.Views
 
             this.Activated += MainWindow_Activated;
             RestoreWindowPosition();
-            ApplyWindowOpacity(ViewModel.WindowOpacity);
+            ApplyWindowOpacity(ViewModel.EffectiveWindowOpacity);
 
             // Reload the background at a bigger size if the window outgrows it (see LoadBackgroundAsync)
             _backgroundResizeTimer = DispatcherQueue.CreateTimer();
@@ -242,6 +245,9 @@ namespace SoundBar.Views
 
         private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
         {
+            // SoundBar checks for changes less often while it's minimised
+            ViewModel.IsWindowMinimised = _appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
             if (!args.DidSizeChange || string.IsNullOrEmpty(ViewModel.BackgroundImage)) return;
 
             // Only bother reloading once the window outgrows the picture we've got. Waiting for the resize
@@ -316,11 +322,18 @@ namespace SoundBar.Views
                 // "Hide from Taskbar" on the taskbar itself may have turned it off while we were in the background
                 ViewModel.RefreshShowOnTaskbar();
 
+                // In case restoring didn't report a change, so the checks speed back up
+                ViewModel.IsWindowMinimised = _appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
                 if (!_hasStartedTaskbarInfo)
                 {
                     _hasStartedTaskbarInfo = true;
                     // Once the window has finished showing, so the "New" message has somewhere to appear
-                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = StartTaskbarInfoAsync());
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
+                    {
+                        await StartTaskbarInfoAsync();
+                        await ShowUnfinishedUpdateMessageAsync();
+                    });
                 }
             }
 
@@ -362,9 +375,10 @@ namespace SoundBar.Views
                 // The page stays built while hidden, so don't leave a half-typed PIN in it for next time
                 BluetoothPinBox.Text = string.Empty;
             }
-            if (e.PropertyName == nameof(MainViewModel.WindowOpacity))
+            // Raised whenever the opacity setting or Lightweight mode changes
+            if (e.PropertyName == nameof(MainViewModel.EffectiveWindowOpacity))
             {
-                ApplyWindowOpacity(ViewModel.WindowOpacity);
+                ApplyWindowOpacity(ViewModel.EffectiveWindowOpacity);
             }
             if (e.PropertyName == nameof(MainViewModel.BackgroundImage))
             {
@@ -423,7 +437,8 @@ namespace SoundBar.Views
                 Title = title,
                 PrimaryButtonText = "Save",
                 CloseButtonText = "Cancel",
-                XamlRoot = this.Content.XamlRoot
+                XamlRoot = this.Content.XamlRoot,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
             };
 
             var stack = new StackPanel { Spacing = 10 };
@@ -443,6 +458,21 @@ namespace SoundBar.Views
             });
             
             stack.Children.Add(recordedText);
+
+            // Says why Save is greyed out, for keys without Ctrl or Alt
+            var hint = new TextBlock { TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center };
+            hint.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Path = new PropertyPath("RecordedHotkeyHint"),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+            });
+            stack.Children.Add(hint);
+            dialog.SetBinding(ContentDialog.IsPrimaryButtonEnabledProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Path = new PropertyPath("CanSaveRecordedHotkey"),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+            });
+
             dialog.Content = stack;
             dialog.DataContext = ViewModel;
 
@@ -465,19 +495,19 @@ namespace SoundBar.Views
 
             if (result == ContentDialogResult.Primary)
             {
-                if (ViewModel.RecordedHotkeyString != "Listening..." && !string.IsNullOrWhiteSpace(ViewModel.RecordedHotkeyString))
+                if (ViewModel.RecordedHotkeyString != "Listening..." && SoundBar.Services.HotkeyRules.IsAllowed(ViewModel.RecordedHotkeyString))
                 {
                     ViewModel.SetHotkey(propertyName, ViewModel.RecordedHotkeyString);
                 }
             }
         }
 
-        private void AppIcon_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        // Clicking an app's icon (or Space/Enter on it) mutes or unmutes it
+        private void AppIcon_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement elem && elem.DataContext is AudioAppModel app)
             {
                 app.IsMuted = !app.IsMuted;
-                e.Handled = true;
             }
         }
 
@@ -504,8 +534,42 @@ namespace SoundBar.Views
             this.Closed += MainWindow_Closed;
 
             SongPositionSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed), true);
+            // The slider handles the arrow keys itself, so listen for them even once it has
+            SongPositionSlider.AddHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(SongPositionSlider_KeyDown), true);
 
             CreateDesktopShortcut();
+        }
+
+        // Windows didn't accept the device picked in the list. Say so, rather than the list just doing nothing.
+        private void ViewModel_DeviceSwitchFailed(object? sender, string deviceName)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Couldn't switch device",
+                        Content = new TextBlock
+                        {
+                            Text = $"Windows didn't switch to {deviceName}. You can choose it in Windows' Sound settings instead.",
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        PrimaryButtonText = "Open Sound settings",
+                        CloseButtonText = "OK",
+                        DefaultButton = ContentDialogButton.Primary,
+                        RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:sound"));
+                }
+                catch (Exception ex)
+                {
+                    // Another message was already showing, for example
+                    System.Diagnostics.Debug.WriteLine($"Device switch message: {ex.Message}");
+                }
+            });
         }
 
         private void ViewModel_ThemeChanged(object? sender, AppTheme theme)
@@ -517,7 +581,12 @@ namespace SoundBar.Views
         {
             SaveWindowSettings();
 
+            _minimumSize?.Dispose();
+            _minimumSize = null;
+
             SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
+            SongPositionSlider.RemoveHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(SongPositionSlider_KeyDown));
+            _keyboardSeekTimer?.Stop();
 
             _appWindow.Changed -= AppWindow_Changed;
             if (_backgroundResizeTimer != null)
@@ -529,6 +598,7 @@ namespace SoundBar.Views
             if (ViewModel != null)
             {
                 ViewModel.ThemeChanged -= ViewModel_ThemeChanged;
+                ViewModel.DeviceSwitchFailed -= ViewModel_DeviceSwitchFailed;
                 ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 ViewModel.Dispose();
             }
@@ -551,20 +621,9 @@ namespace SoundBar.Views
 
                 if (!System.IO.File.Exists(lnkPath))
                 {
-                    string currentExePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "SoundBar.exe");
-                    string currentAppDir = System.IO.Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
-
-                    // Single quotes in paths (e.g. C:\Users\O'Brien) must be doubled for PowerShell
-                    static string Ps(string value) => value.Replace("'", "''");
-
-                    var processInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "powershell.exe",
-                        Arguments = $"-NoProfile -Command \"$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('{Ps(lnkPath)}'); $s.TargetPath = '{Ps(currentExePath)}'; $s.WorkingDirectory = '{Ps(currentAppDir)}'; $s.Save()\"",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-                    using var shortcutProcess = System.Diagnostics.Process.Start(processInfo);
+                    // Through Windows' own shortcut object, rather than a hidden PowerShell window
+                    // (antivirus tools are suspicious of apps that start one)
+                    ViewModel.CreateDesktopShortcut();
                 }
             }
             catch
@@ -645,7 +704,9 @@ namespace SoundBar.Views
                 }
                 else
                 {
-                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    // Back to the style's grey. The app-wide resources would give Windows' light/dark grey,
+                    // which is wrong when SoundBar is set to the other one.
+                    DndToggleButton.ClearValue(Control.ForegroundProperty);
                 }
             }
         }
@@ -892,15 +953,18 @@ namespace SoundBar.Views
         {
             var stack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 15, Padding = new Microsoft.UI.Xaml.Thickness(0, 10, 0, 0) };
             stack.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Downloading and installing the latest version. SoundBar will restart automatically in a few moments...", TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap });
-            stack.Children.Add(new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true });
+            var progressBar = new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true, Maximum = 100 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(progressBar, "Download progress");
+            stack.Children.Add(progressBar);
+            var percentText = new Microsoft.UI.Xaml.Controls.TextBlock { HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Collapsed };
+            stack.Children.Add(percentText);
 
             // Shown if the update takes much longer than usual, so nobody is left waiting on a stuck download
             var slowHelp = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 4, Visibility = Microsoft.UI.Xaml.Visibility.Collapsed };
             slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock
             {
                 Text = "This is taking longer than usual. If it doesn't finish soon, you can download the new version yourself from the GitHub release page instead.",
-                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
             });
             slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.HyperlinkButton
             {
@@ -914,8 +978,27 @@ namespace SoundBar.Views
             {
                 Title = "Updating SoundBar...",
                 Content = stack,
-                XamlRoot = this.Content.XamlRoot
+                CloseButtonText = "Cancel",
+                XamlRoot = this.Content.XamlRoot,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
             };
+
+            // Cancel (or Esc) closes the dialog, and closing it any way but by us stops the download
+            using var cancel = new System.Threading.CancellationTokenSource();
+            bool finished = false;
+            dialog.Closed += (_, _) =>
+            {
+                if (!finished) cancel.Cancel();
+            };
+
+            // Progress<T> reports back on this (the window's) thread
+            var progress = new Progress<double>(fraction =>
+            {
+                progressBar.IsIndeterminate = false;
+                progressBar.Value = fraction * 100;
+                percentText.Text = $"{(int)(fraction * 100)}%";
+                percentText.Visibility = Visibility.Visible;
+            });
 
             var slowTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             slowTimer.Tick += (_, _) =>
@@ -927,14 +1010,15 @@ namespace SoundBar.Views
 
             var progressDialogTask = dialog.ShowAsync();
 
-            // On success the app closes and restarts, so we only get past this if something went wrong
+            // On success the app closes and restarts, so we only get past this if something went wrong or it was cancelled
             string? error;
             try
             {
-                error = await ViewModel.ApplyUpdate();
+                error = await ViewModel.ApplyUpdate(progress, cancel.Token);
             }
             finally
             {
+                finished = true;
                 slowTimer.Stop();
             }
             dialog.Hide();
@@ -950,9 +1034,46 @@ namespace SoundBar.Views
                     Title = "Update didn't work",
                     Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = error, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap },
                     CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot
+                    XamlRoot = this.Content.XamlRoot,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
                 };
                 await errorDialog.ShowAsync();
+            }
+        }
+
+        /// <summary>
+        /// Says so if the last update couldn't copy its files (the update script leaves a note). The app may be
+        /// partly old and partly new, so it points to trying again or downloading it by hand.
+        /// </summary>
+        private async Task ShowUnfinishedUpdateMessageAsync()
+        {
+            if (!UpdateService.TakeUnfinishedUpdateNotice()) return;
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "The last update didn't finish",
+                    Content = new TextBlock
+                    {
+                        Text = "SoundBar couldn't replace some of its files, possibly because another program had them open. " +
+                               "If anything doesn't work properly, update again from the banner, or download the latest version from the release page.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Open release page",
+                    CloseButtonText = "OK",
+                    DefaultButton = ContentDialogButton.Close,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    await Windows.System.Launcher.LaunchUriAsync(new Uri(ViewModel.UpdateDownloadPageUrl));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Another message was already showing, for example
+                System.Diagnostics.Debug.WriteLine($"Unfinished update message: {ex.Message}");
             }
         }
 
@@ -1291,22 +1412,35 @@ namespace SoundBar.Views
 
         private void MediaPrevious_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.PreviousTrack();
+            ViewModel.MediaPrevious();
         }
 
         private void MediaPlayPause_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.PlayPause();
+            ViewModel.MediaPlayPause();
         }
 
         private void MediaNext_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.NextTrack();
+            ViewModel.MediaNext();
         }
 
         private void MediaMute_Click(object sender, RoutedEventArgs e)
         {
             MediaHelper.Mute();
+        }
+
+        /// <summary>
+        /// On a narrow window the song's title would shrink to a letter or two, so show just the album art instead.
+        /// The space it gets doesn't depend on the text, so hiding it can't make it flicker back.
+        /// </summary>
+        private void NowPlayingSong_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            const double artAndGap = 34 + 8;
+            const double minTextWidth = 48;
+            NowPlayingSongText.Visibility = e.NewSize.Width - artAndGap >= minTextWidth
+                ? Microsoft.UI.Xaml.Visibility.Visible
+                : Microsoft.UI.Xaml.Visibility.Collapsed;
         }
 
         private void ToggleMusicPlayerMode_Click(object sender, RoutedEventArgs e)
@@ -1323,6 +1457,42 @@ namespace SoundBar.Views
         {
             ViewModel.IsUserScrubbing = false;
             ViewModel.SeekToScrubPosition();
+        }
+
+        private DispatcherTimer? _keyboardSeekTimer;
+
+        // Moving the position bar with the keyboard seeks too. It waits until the keys have stopped for a moment,
+        // so holding an arrow key seeks once at the end rather than on every step.
+        private void SongPositionSlider_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Windows.System.VirtualKey.Left:
+                case Windows.System.VirtualKey.Right:
+                case Windows.System.VirtualKey.Up:
+                case Windows.System.VirtualKey.Down:
+                case Windows.System.VirtualKey.PageUp:
+                case Windows.System.VirtualKey.PageDown:
+                case Windows.System.VirtualKey.Home:
+                case Windows.System.VirtualKey.End:
+                    break;
+                default:
+                    return;
+            }
+
+            ViewModel.IsUserScrubbing = true; // Stops the playing song moving the bar back meanwhile
+            if (_keyboardSeekTimer == null)
+            {
+                _keyboardSeekTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                _keyboardSeekTimer.Tick += (_, _) =>
+                {
+                    _keyboardSeekTimer.Stop();
+                    ViewModel.IsUserScrubbing = false;
+                    ViewModel.SeekToScrubPosition();
+                };
+            }
+            _keyboardSeekTimer.Stop();
+            _keyboardSeekTimer.Start();
         }
 
         // ------------------------------------------------------------------

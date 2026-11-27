@@ -2,11 +2,14 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 
@@ -21,8 +24,8 @@ namespace SoundBar.Services
         /// <summary>
         /// The version of the app currently running. Remember to bump this before every release!
         /// </summary>
-        public const string CurrentVersion = "v4.5.0";
-        
+        public const string CurrentVersion = "v4.5.1";
+
         /// <summary>
         /// Our public key for verifying updates. This stops cheeky bad actors from hijacking the update process.
         /// </summary>
@@ -30,6 +33,17 @@ namespace SoundBar.Services
 
         private const string RepoUrl = "https://api.github.com/repos/levon2805/SoundBar/releases/latest";
         private static HttpClient _httpClient;
+
+        /// <summary>
+        /// The list of SoundBar's own files, kept in the app folder. The next update deletes only files named
+        /// in it, so it can never touch anything else that happens to share the folder.
+        /// </summary>
+        internal const string FileListName = "SoundBar.files";
+
+        /// <summary>
+        /// How long the download can go without receiving anything before we give up on it.
+        /// </summary>
+        internal static TimeSpan StallTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
         /// <summary>
         /// The version string of the newest release found on GitHub.
@@ -63,6 +77,33 @@ namespace SoundBar.Services
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SoundBar", "1.0"));
         }
 
+        private static string SettingsFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SoundBar");
+
+        /// <summary>Where the update script writes what went wrong, if it couldn't install the new files.</summary>
+        internal static string UpdateLogPath => Path.Combine(SettingsFolder, "update.log");
+
+        /// <summary>Left by the update script when it couldn't install the new files, so SoundBar can say so.</summary>
+        internal static string UnfinishedUpdateMarkerPath => Path.Combine(SettingsFolder, "update-unfinished.txt");
+
+        /// <summary>
+        /// True once, after an update couldn't copy its files. Clears the note so the message shows only once.
+        /// </summary>
+        public static bool TakeUnfinishedUpdateNotice() => TakeUnfinishedUpdateNotice(UnfinishedUpdateMarkerPath);
+
+        internal static bool TakeUnfinishedUpdateNotice(string markerPath)
+        {
+            try
+            {
+                if (!File.Exists(markerPath)) return false;
+                File.Delete(markerPath);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// Checks GitHub to see if we're running an old version.
         /// </summary>
@@ -83,14 +124,16 @@ namespace SoundBar.Services
                     {
                         if (latest > current)
                         {
-                            var zipAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-                            var sigAsset = releaseInfo.Assets?.FirstOrDefault(a => a.Name != null && a.Name.EndsWith(".sig", StringComparison.OrdinalIgnoreCase));
-                            
+                            var files = (releaseInfo.Assets ?? Array.Empty<GithubAsset>())
+                                .Where(a => !string.IsNullOrEmpty(a.Name) && !string.IsNullOrEmpty(a.BrowserDownloadUrl))
+                                .Select(a => (a.Name!, a.BrowserDownloadUrl!));
+                            var (zipUrl, sigUrl) = PickUpdateFiles(files, RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant());
+
                             // We strictly need both the update and its signature to proceed safely.
-                            if (zipAsset != null && zipAsset.BrowserDownloadUrl != null && sigAsset != null && sigAsset.BrowserDownloadUrl != null)
+                            if (zipUrl != null && sigUrl != null)
                             {
-                                DownloadUrl = zipAsset.BrowserDownloadUrl;
-                                SignatureUrl = sigAsset.BrowserDownloadUrl;
+                                DownloadUrl = zipUrl;
+                                SignatureUrl = sigUrl;
                                 return true;
                             }
                         }
@@ -106,10 +149,42 @@ namespace SoundBar.Services
         }
 
         /// <summary>
+        /// Picks this copy's download, and the signature that goes with it, from a release's files. A release can
+        /// also hold builds for other systems or processors, so it doesn't just take the first .zip and .sig.
+        /// </summary>
+        /// <param name="files">Each file's name and download link.</param>
+        /// <param name="architecture">The processor this copy is built for, like "x64" or "arm64".</param>
+        internal static (string? ZipUrl, string? SigUrl) PickUpdateFiles(IEnumerable<(string Name, string Url)> files, string architecture)
+        {
+            var list = files.ToList();
+            static bool HasSystemInName(string name) =>
+                name.Contains("-windows-", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("-linux-", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("-macos-", StringComparison.OrdinalIgnoreCase);
+
+            // Since v4.6.0 the name says which system and processor it's for: SoundBar-v4.6.0-windows-x64.zip
+            var zip = list.FirstOrDefault(f => f.Name.EndsWith($"-windows-{architecture}.zip", StringComparison.OrdinalIgnoreCase));
+
+            // Before that it was just SoundBar.zip, and only ever for Windows x64
+            if (zip.Name == null && architecture == "x64")
+                zip = list.FirstOrDefault(f => f.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && !HasSystemInName(f.Name));
+
+            if (zip.Name == null) return (null, null);
+
+            // Its signature has the same name, ending .sig instead of .zip
+            string sigName = zip.Name.Substring(0, zip.Name.Length - ".zip".Length) + ".sig";
+            var sig = list.FirstOrDefault(f => f.Name.Equals(sigName, StringComparison.OrdinalIgnoreCase));
+            return (zip.Url, sig.Name == null ? null : sig.Url);
+        }
+
+        /// <summary>
         /// Downloads the update, verifies its signature, extracts it, and triggers the clever batch script to overwrite the running app.
         /// </summary>
+        /// <param name="progress">Told how much has downloaded, from 0 to 1, when the size is known.</param>
+        /// <param name="cancellationToken">Cancels the download. Once the new files are ready to go in, it's too late to cancel.</param>
         /// <exception cref="UpdateFailedException">Thrown with a user-friendly message if anything goes wrong.</exception>
-        public async Task DownloadAndApplyUpdateAsync()
+        /// <exception cref="OperationCanceledException">Thrown if it was cancelled. Nothing is left behind.</exception>
+        public async Task DownloadAndApplyUpdateAsync(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(DownloadUrl) || string.IsNullOrEmpty(SignatureUrl))
                 throw new UpdateFailedException("There's no update ready to install. Please try again later.");
@@ -126,69 +201,81 @@ namespace SoundBar.Services
             }
             Directory.CreateDirectory(tempUpdateDir);
 
-            // Let's grab the ZIP file
-            using var response = await _httpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-
-            using (var fs = new FileStream(zipPath, FileMode.Create))
-            {
-                await response.Content.CopyToAsync(fs);
-            }
-
-            // Let's grab the signature file
-            using var sigResponse = await _httpClient.GetAsync(SignatureUrl, HttpCompletionOption.ResponseHeadersRead);
-            sigResponse.EnsureSuccessStatusCode();
-
-            using (var sigFs = new FileStream(sigPath, FileMode.Create))
-            {
-                await sigResponse.Content.CopyToAsync(sigFs);
-            }
-
-            // Now for the security check...
+            string sourceDir;
             try
             {
-                string publicKeyXml = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(PublicKeyBase64));
-                using RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
-                rsa.FromXmlString(publicKeyXml);
+                // Let's grab the ZIP file, then its signature
+                await DownloadToFileAsync(DownloadUrl, zipPath, progress, cancellationToken);
+                await DownloadToFileAsync(SignatureUrl, sigPath, null, cancellationToken);
 
-                byte[] sigBytes = Convert.FromBase64String(File.ReadAllText(sigPath));
-
-                using var sha256 = SHA256.Create();
-                using var zipFs = new FileStream(zipPath, FileMode.Open, FileAccess.Read);
-                byte[] hash = sha256.ComputeHash(zipFs);
-
-                RSAPKCS1SignatureDeformatter deformatter = new RSAPKCS1SignatureDeformatter(rsa);
-                deformatter.SetHashAlgorithm("SHA256");
-
-                if (!deformatter.VerifySignature(hash, sigBytes))
+                // Now for the security check...
+                try
                 {
-                    throw new Exception("Signature verification failed.");
+                    string publicKeyXml = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(PublicKeyBase64));
+                    using RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+                    rsa.FromXmlString(publicKeyXml);
+
+                    byte[] sigBytes = Convert.FromBase64String(File.ReadAllText(sigPath));
+
+                    using var sha256 = SHA256.Create();
+                    using var zipFs = new FileStream(zipPath, FileMode.Open, FileAccess.Read);
+                    byte[] hash = sha256.ComputeHash(zipFs);
+
+                    RSAPKCS1SignatureDeformatter deformatter = new RSAPKCS1SignatureDeformatter(rsa);
+                    deformatter.SetHashAlgorithm("SHA256");
+
+                    if (!deformatter.VerifySignature(hash, sigBytes))
+                    {
+                        throw new Exception("Signature verification failed.");
+                    }
                 }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Update verification failed: {ex.Message}");
+                    // Something smells fishy. Let's abort.
+                    throw new UpdateFailedException("The downloaded update couldn't be verified, so it wasn't installed. Your current version is untouched.", ex);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Everything is legit, so let's extract it
+                ZipFile.ExtractToDirectory(zipPath, extractPath);
+
+                // We need to find the actual exe because sometimes zip files have root folders and sometimes they don't.
+                // If there's no exe at all, the package is broken. Bail out rather than copying junk over the app.
+                var exeFiles = Directory.GetFiles(extractPath, "SoundBar.exe", SearchOption.AllDirectories);
+                if (!exeFiles.Any())
+                {
+                    throw new UpdateFailedException("The update package looks incomplete, so it wasn't installed. Your current version is untouched.");
+                }
+                sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
+
+                // The last chance to cancel: after this the taskbar helper is closed and the script takes over
+                cancellationToken.ThrowIfCancellationRequested();
             }
-            catch (Exception ex)
+            catch
             {
-                System.Diagnostics.Debug.WriteLine($"Update verification failed: {ex.Message}");
-                // Something smells fishy. Let's abort and clean up.
+                // Cancelled, a stalled download, or a bad package: leave nothing behind
                 try { Directory.Delete(tempUpdateDir, true); } catch { }
-                throw new UpdateFailedException("The downloaded update couldn't be verified, so it wasn't installed. Your current version is untouched.", ex);
+                throw;
             }
 
-            // Everything is legit, so let's extract it
-            ZipFile.ExtractToDirectory(zipPath, extractPath);
-
-            // We need to find the actual exe because sometimes zip files have root folders and sometimes they don't.
-            // If there's no exe at all, the package is broken. Bail out rather than mirroring junk over the app.
-            var exeFiles = Directory.GetFiles(extractPath, "SoundBar.exe", SearchOption.AllDirectories);
-            if (!exeFiles.Any())
+            // The real folder SoundBar's files are in. AppContext.BaseDirectory is where this app's own files
+            // were loaded from, even if it was started through a shortcut or link somewhere else.
+            string currentAppDir = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            string currentExePath = Path.Combine(currentAppDir, "SoundBar.exe");
+            if (!File.Exists(currentExePath) && Environment.ProcessPath is string processPath)
             {
-                try { Directory.Delete(tempUpdateDir, true); } catch { }
-                throw new UpdateFailedException("The update package looks incomplete, so it wasn't installed. Your current version is untouched.");
+                currentExePath = processPath;
+                currentAppDir = Path.GetDirectoryName(processPath) ?? currentAppDir;
             }
-            string sourceDir = Path.GetDirectoryName(exeFiles.First()) ?? extractPath;
 
-            // We write a sneaky batch script to the temp folder. This will run independently, wait for us to close, and copy the files over.
-            string currentExePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "SoundBar.exe");
-            string currentAppDir = Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
+            // Record which files are SoundBar's, so the next update can tidy them up safely. It's copied in with
+            // the rest. Then work out which of the old version's files the new one no longer has.
+            var newFiles = ListFiles(sourceDir).Where(f => !f.Equals(FileListName, StringComparison.OrdinalIgnoreCase)).ToList();
+            File.WriteAllLines(Path.Combine(sourceDir, FileListName), newFiles);
+            var staleFiles = FindStaleFiles(currentAppDir, newFiles);
+
             string batPath = Path.Combine(Path.GetTempPath(), "SoundBar_update.bat");
 
             // The taskbar helper runs from this folder too, and Windows won't let files in use be replaced.
@@ -196,9 +283,10 @@ namespace SoundBar.Services
             bool helperWasRunning = TaskbarHelperService.FindHostWindow() != IntPtr.Zero;
             if (helperWasRunning) TaskbarHelperService.CloseRunningHelper();
 
-            File.WriteAllText(batPath, BuildUpdateScript(sourceDir, currentAppDir, tempUpdateDir, currentExePath, helperWasRunning));
+            File.WriteAllText(batPath, BuildUpdateScript(sourceDir, currentAppDir, tempUpdateDir, currentExePath, helperWasRunning,
+                Environment.ProcessId, staleFiles, UpdateLogPath, UnfinishedUpdateMarkerPath));
 
-            // Fire and forget the batch script
+            // Fire and forget the batch script, handing it the folders as environment variables
             var processInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
@@ -206,6 +294,8 @@ namespace SoundBar.Services
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
+            foreach (var (name, value) in UpdateScriptVariables(sourceDir, currentAppDir, tempUpdateDir, currentExePath, UpdateLogPath, UnfinishedUpdateMarkerPath))
+                processInfo.Environment[name] = value;
             using (Process.Start(processInfo)) { }
 
             // Goodbye old version! The batch script will take it from here.
@@ -215,32 +305,148 @@ namespace SoundBar.Services
         }
 
         /// <summary>
-        /// The script that installs an update once SoundBar has closed. It waits for SoundBar and the taskbar
-        /// helper to close (the helper is forced closed after 15 seconds if it hasn't gone by itself), copies
-        /// the new files over, then starts SoundBar again, and the helper too if it was running.
+        /// Downloads one file. Gives up if nothing arrives for <see cref="StallTimeout"/>, so a dropped
+        /// connection can't leave the update waiting forever.
         /// </summary>
-        internal static string BuildUpdateScript(string sourceDir, string appDir, string tempUpdateDir, string exePath, bool restartTaskbarHelper)
+        private static async Task DownloadToFileAsync(string url, string path, IProgress<double>? progress, CancellationToken cancellationToken)
         {
-            static string EscapeForBatch(string path)
+            using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            stall.CancelAfter(StallTimeout);
+            try
             {
-                string p = path.EndsWith("\\") ? path + "\\" : path;
-                return "\"" + p.Replace("\"", "\"\"") + "\"";
-            }
+                using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stall.Token);
+                response.EnsureSuccessStatusCode();
+                long total = response.Content.Headers.ContentLength ?? 0;
 
+                await using var input = await response.Content.ReadAsStreamAsync(stall.Token);
+                await using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+
+                var buffer = new byte[81920];
+                long done = 0;
+                int lastPercent = -1;
+                int read;
+                while ((read = await input.ReadAsync(buffer, stall.Token)) > 0)
+                {
+                    stall.CancelAfter(StallTimeout); // Something arrived, so start the wait again
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    done += read;
+
+                    if (progress != null && total > 0)
+                    {
+                        int percent = (int)(done * 100 / total);
+                        if (percent != lastPercent)
+                        {
+                            lastPercent = percent;
+                            progress.Report(Math.Min(1.0, (double)done / total));
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new UpdateFailedException("The download stopped responding, so the update wasn't installed. Check your internet connection and try again. Your current version is untouched.");
+            }
+        }
+
+        /// <summary>
+        /// Every file in a folder and its subfolders, as paths relative to it.
+        /// </summary>
+        internal static List<string> ListFiles(string dir) =>
+            Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+                .Select(f => Path.GetRelativePath(dir, f))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        /// <summary>
+        /// The files the installed version listed as its own (in <see cref="FileListName"/>) that the new version
+        /// doesn't have, and that are still there. Only these are deleted, so anything else in the folder is safe.
+        /// With no list (anything installed before v4.5.1), nothing is deleted and old files are just left behind.
+        /// </summary>
+        internal static List<string> FindStaleFiles(string appDir, IReadOnlyCollection<string> newFiles)
+        {
+            var result = new List<string>();
+            try
+            {
+                string listPath = Path.Combine(appDir, FileListName);
+                if (!File.Exists(listPath)) return result;
+
+                string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(appDir)) + Path.DirectorySeparatorChar;
+                var keep = new HashSet<string>(newFiles, StringComparer.OrdinalIgnoreCase);
+
+                foreach (string raw in File.ReadAllLines(listPath))
+                {
+                    string name = raw.Trim();
+                    if (name.Length == 0 || keep.Contains(name)) continue;
+
+                    // Only plain paths inside the app folder, and never the user's own settings or pictures
+                    if (Path.IsPathRooted(name) || name.Contains(':') || name.Contains('%') || name.Split('\\', '/').Contains("..")) continue;
+                    if (name.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+                        name.StartsWith("Backgrounds\\", StringComparison.OrdinalIgnoreCase) ||
+                        name.StartsWith("Backgrounds/", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    string full = Path.GetFullPath(Path.Combine(appDir, name));
+                    if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (File.Exists(full)) result.Add(name);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Can't read the list: leaving a few old files behind is fine
+                System.Diagnostics.Debug.WriteLine($"Couldn't read the old file list: {ex.Message}");
+                result.Clear();
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// The script that installs an update once SoundBar has closed. It waits for this SoundBar and the taskbar
+        /// helper to close (the helper is forced closed after 15 seconds if it hasn't gone by itself), copies
+        /// the new files over, deletes only the old version's own files that the new one doesn't have, then starts
+        /// SoundBar again, and the helper too if it was running. If the copy keeps failing, it keeps the download,
+        /// notes what happened and starts SoundBar anyway, so it can say the update didn't finish.
+        /// </summary>
+        /// <param name="processId">This SoundBar's process, so another copy running elsewhere can't keep it waiting. 0 waits for any SoundBar.</param>
+        /// <param name="staleFiles">Files in the app folder to delete once the copy has worked, relative to it.</param>
+        internal static string BuildUpdateScript(string sourceDir, string appDir, string tempUpdateDir, string exePath, bool restartTaskbarHelper,
+            int processId = 0, IReadOnlyList<string>? staleFiles = null, string? logPath = null, string? unfinishedMarkerPath = null)
+        {
+            // The folders reach the script as environment variables (see UpdateScriptVariables), never written
+            // into it. A user name like Zoë or 测试 is in several of them, and Windows 10's Command Prompt doesn't
+            // reliably read non-English letters from a batch file, even after switching it to UTF-8. Values of
+            // variables are taken exactly as they are, % signs and all.
             string helperImage = Shared.TaskbarHelperInfo.ImageName;
-            string helperPath = Path.Combine(appDir, Shared.TaskbarHelperInfo.ExeName);
             string restartHelper = restartTaskbarHelper
-                ? $"if exist {EscapeForBatch(helperPath)} start \"\" {EscapeForBatch(helperPath)}"
+                ? "if exist \"%SB_HELPER%\" start \"\" \"%SB_HELPER%\""
                 : ":: (The taskbar helper wasn't running, so it isn't started)";
+
+            string waitFilter = processId > 0 ? $"PID eq {processId}" : "IMAGENAME eq SoundBar.exe";
+
+            var deletes = new System.Text.StringBuilder();
+            foreach (string name in staleFiles ?? Array.Empty<string>())
+            {
+                // The names come from SoundBar's own file list, and never hold a % (FindStaleFiles drops those)
+                string full = $"\"%SB_APP%\\{name}\"";
+                deletes.AppendLine($"if exist {full} del /f /q {full}");
+            }
+            if (deletes.Length == 0) deletes.AppendLine(":: (No old files to remove)");
 
             return $$"""
 @echo off
+:: Every folder comes from an environment variable (SB_...), so this file itself is plain English text.
+:: The UTF-8 switch is kept too, for the file names of the old files removed below.
+chcp 65001 >nul
 echo Updating SoundBar... Please wait.
 
+:: Pauses use ping rather than timeout: this script runs hidden with no keyboard, and timeout gives up at
+:: once without one, which turned every wait below into a busy loop.
+
+:: Wait for this copy of SoundBar to close. Only this one: another copy running from a different
+:: folder mustn't keep the update waiting forever.
 :waitloop
-tasklist /FI "IMAGENAME eq SoundBar.exe" 2>NUL | find /I /N "SoundBar.exe">NUL
+tasklist /FI "{{waitFilter}}" 2>NUL | find /I "SoundBar.exe">NUL
 if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
+    ping -n 2 127.0.0.1 >nul
     goto waitloop
 )
 
@@ -251,33 +457,86 @@ tasklist /FI "IMAGENAME eq {{helperImage}}" 2>NUL | find /I /N "{{helperImage}}"
 if "%ERRORLEVEL%"=="0" (
     if %helperwait% GEQ 15 (
         taskkill /F /IM {{helperImage}} >NUL 2>&1
-        timeout /t 1 /nobreak >nul
+        ping -n 2 127.0.0.1 >nul
         goto helperclosed
     )
     set /a helperwait+=1
-    timeout /t 1 /nobreak >nul
+    ping -n 2 127.0.0.1 >nul
     goto waithelper
 )
 :helperclosed
 
-:: Mirror the update into the app directory (copies new files, overwrites changed files, deletes orphaned files).
-:: /MIR = mirror, /XF = exclude files, /XD = exclude directories.
-:: We exclude config/user data that lives alongside the exe, and the update batch itself.
-robocopy {{EscapeForBatch(sourceDir)}} {{EscapeForBatch(appDir)}} /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+:: Copy the new files over the old ones. /E copies and overwrites but never deletes, so nothing else in the
+:: folder can be lost (it may not be a folder of its own, like Downloads). Old files are removed below, by name.
+:: We exclude config/user data that lives alongside the exe.
+:: A locked file (antivirus scanning it, say) makes robocopy fail, so try up to 3 times.
+set /a copytries=0
+:copyfiles
+robocopy "%SB_SOURCE%" "%SB_APP%" /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+set copyresult=%ERRORLEVEL%
+:: Robocopy exit codes 0-7 are success; 8+ are errors.
+if %copyresult% LSS 8 goto copied
+set /a copytries+=1
+if %copytries% LSS 3 (
+    ping -n 3 127.0.0.1 >nul
+    goto copyfiles
+)
 
-:: Robocopy exit codes 0-7 are success; 8+ are errors. Reset to 0 so the batch continues.
-if %ERRORLEVEL% LEQ 7 (cmd /c exit /b 0)
+:: It still didn't work. Keep the download, so nothing is lost and it can be tried again, note what
+:: happened, and start SoundBar anyway so it can tell the user.
+if not exist "%SB_LOGDIR%" mkdir "%SB_LOGDIR%"
+>>"%SB_LOG%" echo %date% %time% The update couldn't copy its files (robocopy code %copyresult%). The download was kept in "%SB_TEMP%".
+>"%SB_MARKER%" echo %copyresult%
+goto restart
+
+:copied
+:: Remove the files the old version listed as its own that the new version doesn't have
+{{deletes.ToString().TrimEnd()}}
 
 :: Clean up the temp directory
-rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
+rmdir /s /q "%SB_TEMP%"
 
+:restart
 :: Restart the application, and the taskbar helper if it was running
-start "" {{EscapeForBatch(exePath)}}
+start "" "%SB_EXE%"
 {{restartHelper}}
 
 :: Delete this batch file
 del "%~f0"
 """;
+        }
+
+        /// <summary>
+        /// The folders and files the update script uses, as environment variables to start it with.
+        /// </summary>
+        internal static Dictionary<string, string> UpdateScriptVariables(string sourceDir, string appDir, string tempUpdateDir, string exePath,
+            string? logPath = null, string? unfinishedMarkerPath = null)
+        {
+            // A trailing backslash right before a closing quote ("C:") would be read as an escaped quote by robocopy
+            static string Folder(string path) => path.EndsWith("\\") ? path + "." : path;
+
+            logPath ??= UpdateLogPath;
+            unfinishedMarkerPath ??= UnfinishedUpdateMarkerPath;
+            return new Dictionary<string, string>
+            {
+                ["SB_SOURCE"] = Folder(sourceDir),
+                ["SB_APP"] = Folder(appDir),
+                ["SB_TEMP"] = Folder(tempUpdateDir),
+                ["SB_EXE"] = exePath,
+                ["SB_HELPER"] = Path.Combine(appDir, Shared.TaskbarHelperInfo.ExeName),
+                ["SB_LOG"] = logPath,
+                ["SB_LOGDIR"] = Folder(Path.GetDirectoryName(logPath) ?? Path.GetTempPath()),
+                ["SB_MARKER"] = unfinishedMarkerPath,
+            };
+        }
+
+        /// <summary>
+        /// The script with its variables filled in, as Command Prompt will see it. Only for tests to read.
+        /// </summary>
+        internal static string ExpandUpdateScript(string script, IReadOnlyDictionary<string, string> variables)
+        {
+            foreach (var (name, value) in variables) script = script.Replace($"%{name}%", value);
+            return script;
         }
 
         // --- Helper classes just to read the GitHub API JSON ---

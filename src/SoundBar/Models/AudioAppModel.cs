@@ -36,9 +36,34 @@ namespace SoundBar.Models
                 {
                     _name = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(HideLabel));
+                    OnAccessibleNamesChanged();
                     AliasChanged?.Invoke(RawProcessName ?? "", value ?? "");
                 }
             }
+        }
+
+        /// <summary>
+        /// What screen readers call this row's hide button, so each one says which app it hides.
+        /// </summary>
+        public string HideLabel => string.IsNullOrWhiteSpace(_name) ? "Hide app" : $"Hide {_name}";
+
+        private string NameForScreenReaders => string.IsNullOrWhiteSpace(_name) ? "App" : _name;
+
+        /// <summary>
+        /// What screen readers call this app's volume slider. Says "muted" too, since on screen that's only a red icon.
+        /// </summary>
+        public string SliderLabel => _isMuted ? $"{NameForScreenReaders}, muted" : NameForScreenReaders;
+
+        /// <summary>
+        /// What screen readers call the app's icon, which mutes or unmutes it.
+        /// </summary>
+        public string MuteButtonLabel => _isMuted ? $"Unmute {NameForScreenReaders}" : $"Mute {NameForScreenReaders}";
+
+        private void OnAccessibleNamesChanged()
+        {
+            OnPropertyChanged(nameof(SliderLabel));
+            OnPropertyChanged(nameof(MuteButtonLabel));
         }
 
         /// <summary>
@@ -87,6 +112,7 @@ namespace SoundBar.Models
 
         private float _volume;
         private System.Threading.CancellationTokenSource? _volumeDebounce;
+        private readonly object _volumeSendLock = new();
 
         /// <summary>
         /// The current volume level, ranging from 0.0 to 1.0.
@@ -124,9 +150,15 @@ namespace SoundBar.Models
                             {
                                 // Wait just a tiny bit to see if the user is still sliding.
                                 await Task.Delay(50, token);
-                                if (!token.IsCancellationRequested)
+
+                                // Checked and sent together, so this can't send an older volume after a newer one
+                                // has been sent: a newer one always cancels this first (on the window's thread)
+                                lock (_volumeSendLock)
                                 {
-                                    _audioService.SetVolume(osName, capturedVolume);
+                                    if (!token.IsCancellationRequested)
+                                    {
+                                        _audioService.SetVolume(osName, capturedVolume);
+                                    }
                                 }
                             }
                             catch (TaskCanceledException) { }
@@ -165,6 +197,7 @@ namespace SoundBar.Models
             {
                 _isMuted = isMuted;
                 OnPropertyChanged(nameof(IsMuted));
+                OnAccessibleNamesChanged();
             }
         }
 
@@ -270,6 +303,7 @@ namespace SoundBar.Models
                     LastModified = DateTime.UtcNow;
 
                     OnPropertyChanged();
+                    OnAccessibleNamesChanged();
 
                     // Actually tell Windows to shut it up (or let it sing).
                     string osName = RawProcessName ?? DisplayName ?? "";
@@ -300,6 +334,52 @@ namespace SoundBar.Models
         public static void ClearIconCache()
         {
             _iconCache.Clear();
+        }
+
+        /// <summary>Icons not used for this long are deleted. They're just made again if the app comes back.</summary>
+        internal static readonly TimeSpan IconKeepTime = TimeSpan.FromDays(60);
+
+        /// <summary>
+        /// Notes that an icon file is still in use, by its last-changed time. Only touched once a day at most,
+        /// so it's not a disk write every time an app appears.
+        /// </summary>
+        internal static void MarkIconUsed(string path, DateTime now)
+        {
+            try
+            {
+                if (now - System.IO.File.GetLastWriteTimeUtc(path) > TimeSpan.FromDays(1))
+                    System.IO.File.SetLastWriteTimeUtc(path, now);
+            }
+            catch { } // Not worth bothering anyone over
+        }
+
+        /// <summary>
+        /// Deletes icons that haven't been used for <see cref="IconKeepTime"/>, and saves that never finished.
+        /// The folder keeps one icon per app path ever seen, and some apps (Discord, say) put their version in the
+        /// path, so without this it only ever grows.
+        /// </summary>
+        public static void TidyIconFolder(DateTime now) => TidyIconFolder(_iconDir, now);
+
+        internal static void TidyIconFolder(string folder, DateTime now)
+        {
+            try
+            {
+                if (!System.IO.Directory.Exists(folder)) return;
+                foreach (var file in new System.IO.DirectoryInfo(folder).EnumerateFiles())
+                {
+                    try
+                    {
+                        bool oldIcon = file.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase) && now - file.LastWriteTimeUtc > IconKeepTime;
+                        bool leftoverSave = file.Extension.Equals(".tmp", StringComparison.OrdinalIgnoreCase) && now - file.LastWriteTimeUtc > TimeSpan.FromDays(1);
+                        if (oldIcon || leftoverSave) file.Delete();
+                    }
+                    catch { } // In use or already gone: leave it
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't tidy the icon folder: {ex.Message}");
+            }
         }
 
         // How long to wait before trying a missing icon again, so an exe that really has no icon
@@ -401,6 +481,7 @@ namespace SoundBar.Models
                         // An empty file means a save got cut short last time, so make it again
                         if (IsUsableIconFile(targetPath))
                         {
+                            MarkIconUsed(targetPath, DateTime.UtcNow);
                             _iconCache[IconPath] = targetPath;
                             return targetPath;
                         }
