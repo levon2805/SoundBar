@@ -36,10 +36,16 @@ namespace SoundBar.Models
                 {
                     _name = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(HideLabel));
                     AliasChanged?.Invoke(RawProcessName ?? "", value ?? "");
                 }
             }
         }
+
+        /// <summary>
+        /// What screen readers call this row's hide button, so each one says which app it hides.
+        /// </summary>
+        public string HideLabel => string.IsNullOrWhiteSpace(_name) ? "Hide app" : $"Hide {_name}";
 
         /// <summary>
         /// The original, untouched display name straight from Windows.

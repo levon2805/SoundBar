@@ -1489,6 +1489,9 @@ namespace SoundBar.ViewModels
                 return;
             }
 
+            // Typing a character with AltGr, or a Windows shortcut, isn't meant for us
+            if (e.IsNotForHotkeys) return;
+
             if (pressedString == InputMuteHotkey)
             {
                 ToggleInputMute();
@@ -1635,9 +1638,24 @@ namespace SoundBar.ViewModels
                 {
                     _recordedHotkeyString = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSaveRecordedHotkey));
+                    OnPropertyChanged(nameof(RecordedHotkeyHint));
                 }
             }
         }
+
+        /// <summary>
+        /// Whether the keys just pressed in the hotkey dialog can be saved (they need Ctrl or Alt).
+        /// </summary>
+        public bool CanSaveRecordedHotkey => IsRecordingHotkey && RecordedHotkeyString != "Listening..." && HotkeyRules.IsAllowed(RecordedHotkeyString);
+
+        /// <summary>
+        /// Shown under the keys in the hotkey dialog when they can't be saved.
+        /// </summary>
+        public string RecordedHotkeyHint =>
+            RecordedHotkeyString == "Listening..." || CanSaveRecordedHotkey
+                ? ""
+                : "Add Ctrl or Alt, so the key still types normally in your apps.";
 
         private async Task CheckForUpdatesAsync()
         {
@@ -1658,15 +1676,22 @@ namespace SoundBar.ViewModels
         /// <summary>
         /// Downloads and installs the update. If it works, the app closes and restarts itself.
         /// </summary>
-        /// <returns>Null on success, otherwise a friendly message explaining what went wrong.</returns>
-        public async Task<string?> ApplyUpdate()
+        /// <param name="progress">Told how much has downloaded, from 0 to 1.</param>
+        /// <param name="cancellationToken">Cancels the download.</param>
+        /// <returns>Null on success or if it was cancelled, otherwise a friendly message explaining what went wrong.</returns>
+        public async Task<string?> ApplyUpdate(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             if (IsUpdating) return null;
 
             IsUpdating = true;
             try
             {
-                await _updateService.DownloadAndApplyUpdateAsync();
+                await _updateService.DownloadAndApplyUpdateAsync(progress, cancellationToken);
+                return null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The user cancelled, so there's nothing to tell them
                 return null;
             }
             catch (UpdateFailedException ex)

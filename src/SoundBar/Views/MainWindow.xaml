@@ -253,14 +253,21 @@
                               Width="36" Height="36"
                               Padding="0" MinWidth="0" MinHeight="0"
                               Background="Transparent"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                               BorderThickness="0"
                               FontSize="14"
                               Margin="0,0,5,0"
                               IsChecked="{x:Bind ViewModel.IsDoNotDisturbEnabled, Mode=TwoWay}"
                               Checked="DndToggleButton_Changed"
                               Unchecked="DndToggleButton_Changed"
-                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)" AutomationProperties.Name="Do Not Disturb (Mute System Sounds)"/>
+                              ToolTipService.ToolTip="Do Not Disturb (Mute System Sounds)" AutomationProperties.Name="Do Not Disturb (Mute System Sounds)">
+                    <!-- The grey is set by the style, not on the button itself, so turning Do Not Disturb off can
+                         clear the yellow and get a grey that still follows SoundBar's own light/dark setting -->
+                    <ToggleButton.Style>
+                        <Style TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+                            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </Style>
+                    </ToggleButton.Style>
+                </ToggleButton>
 
                 <Button x:Name="MinimizeButton"
                         Grid.Column="7"
@@ -335,6 +342,7 @@
                                   SelectedItem="{Binding SelectedAudioDevice, Mode=TwoWay}"
                                   DisplayMemberPath="Name"
                                   PlaceholderText="No output devices detected"
+                                  AutomationProperties.Name="Output device"
                                   Background="{ThemeResource ControlFillColorDefaultBrush}"
                                   BorderThickness="1"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -379,6 +387,7 @@
                                   SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}"
                                   DisplayMemberPath="Name"
                                   PlaceholderText="No input devices detected"
+                                  AutomationProperties.Name="Input device"
                                   Background="{ThemeResource ControlFillColorDefaultBrush}"
                                   BorderThickness="1"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -404,6 +413,7 @@
                                     Minimum="0" 
                                     Maximum="100" 
                                     Value="{Binding MasterVolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    AutomationProperties.Name="Master volume"
                                     Margin="0,0,10,0"/>
 
                             <TextBlock Grid.Column="1" 
@@ -476,7 +486,7 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
                                             BorderThickness="0" 
                                             Click="HideAppButton_Click" 
-                                            ToolTipService.ToolTip="Hide App" AutomationProperties.Name="Hide App"
+                                            ToolTipService.ToolTip="Hide App" AutomationProperties.Name="{Binding HideLabel}"
                                             Padding="0" MinWidth="20" Height="20"
                                             VerticalAlignment="Center"
                                             Margin="0,0,5,0">
@@ -532,6 +542,7 @@
                                             Minimum="0"
                                             Maximum="100"
                                             Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            AutomationProperties.Name="{Binding Name}"
                                             VerticalAlignment="Center"
                                             Margin="10,-4,10,-4"/>
 
@@ -606,6 +617,7 @@
                                 Maximum="{x:Bind ViewModel.CurrentSongDurationSeconds, Mode=OneWay}" 
                                 Value="{x:Bind ViewModel.CurrentSongPositionSeconds, Mode=TwoWay}"
                                 ThumbToolTipValueConverter="{StaticResource TimeSpanConverter}"
+                                AutomationProperties.Name="Song position"
                                 PointerCaptureLost="SongPositionSlider_PointerCaptureLost"
                                 VerticalAlignment="Center" />
 

@@ -326,7 +326,11 @@ namespace SoundBar.Views
                 {
                     _hasStartedTaskbarInfo = true;
                     // Once the window has finished showing, so the "New" message has somewhere to appear
-                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _ = StartTaskbarInfoAsync());
+                    DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
+                    {
+                        await StartTaskbarInfoAsync();
+                        await ShowUnfinishedUpdateMessageAsync();
+                    });
                 }
             }
 
@@ -430,7 +434,8 @@ namespace SoundBar.Views
                 Title = title,
                 PrimaryButtonText = "Save",
                 CloseButtonText = "Cancel",
-                XamlRoot = this.Content.XamlRoot
+                XamlRoot = this.Content.XamlRoot,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
             };
 
             var stack = new StackPanel { Spacing = 10 };
@@ -450,6 +455,21 @@ namespace SoundBar.Views
             });
             
             stack.Children.Add(recordedText);
+
+            // Says why Save is greyed out, for keys without Ctrl or Alt
+            var hint = new TextBlock { TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center };
+            hint.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Path = new PropertyPath("RecordedHotkeyHint"),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+            });
+            stack.Children.Add(hint);
+            dialog.SetBinding(ContentDialog.IsPrimaryButtonEnabledProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Path = new PropertyPath("CanSaveRecordedHotkey"),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay
+            });
+
             dialog.Content = stack;
             dialog.DataContext = ViewModel;
 
@@ -472,7 +492,7 @@ namespace SoundBar.Views
 
             if (result == ContentDialogResult.Primary)
             {
-                if (ViewModel.RecordedHotkeyString != "Listening..." && !string.IsNullOrWhiteSpace(ViewModel.RecordedHotkeyString))
+                if (ViewModel.RecordedHotkeyString != "Listening..." && SoundBar.Services.HotkeyRules.IsAllowed(ViewModel.RecordedHotkeyString))
                 {
                     ViewModel.SetHotkey(propertyName, ViewModel.RecordedHotkeyString);
                 }
@@ -652,7 +672,9 @@ namespace SoundBar.Views
                 }
                 else
                 {
-                    DndToggleButton.Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    // Back to the style's grey. The app-wide resources would give Windows' light/dark grey,
+                    // which is wrong when SoundBar is set to the other one.
+                    DndToggleButton.ClearValue(Control.ForegroundProperty);
                 }
             }
         }
@@ -899,15 +921,18 @@ namespace SoundBar.Views
         {
             var stack = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 15, Padding = new Microsoft.UI.Xaml.Thickness(0, 10, 0, 0) };
             stack.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Downloading and installing the latest version. SoundBar will restart automatically in a few moments...", TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap });
-            stack.Children.Add(new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true });
+            var progressBar = new Microsoft.UI.Xaml.Controls.ProgressBar { IsIndeterminate = true, Maximum = 100 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(progressBar, "Download progress");
+            stack.Children.Add(progressBar);
+            var percentText = new Microsoft.UI.Xaml.Controls.TextBlock { HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Collapsed };
+            stack.Children.Add(percentText);
 
             // Shown if the update takes much longer than usual, so nobody is left waiting on a stuck download
             var slowHelp = new Microsoft.UI.Xaml.Controls.StackPanel { Spacing = 4, Visibility = Microsoft.UI.Xaml.Visibility.Collapsed };
             slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.TextBlock
             {
                 Text = "This is taking longer than usual. If it doesn't finish soon, you can download the new version yourself from the GitHub release page instead.",
-                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
             });
             slowHelp.Children.Add(new Microsoft.UI.Xaml.Controls.HyperlinkButton
             {
@@ -921,8 +946,27 @@ namespace SoundBar.Views
             {
                 Title = "Updating SoundBar...",
                 Content = stack,
-                XamlRoot = this.Content.XamlRoot
+                CloseButtonText = "Cancel",
+                XamlRoot = this.Content.XamlRoot,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
             };
+
+            // Cancel (or Esc) closes the dialog, and closing it any way but by us stops the download
+            using var cancel = new System.Threading.CancellationTokenSource();
+            bool finished = false;
+            dialog.Closed += (_, _) =>
+            {
+                if (!finished) cancel.Cancel();
+            };
+
+            // Progress<T> reports back on this (the window's) thread
+            var progress = new Progress<double>(fraction =>
+            {
+                progressBar.IsIndeterminate = false;
+                progressBar.Value = fraction * 100;
+                percentText.Text = $"{(int)(fraction * 100)}%";
+                percentText.Visibility = Visibility.Visible;
+            });
 
             var slowTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             slowTimer.Tick += (_, _) =>
@@ -934,14 +978,15 @@ namespace SoundBar.Views
 
             var progressDialogTask = dialog.ShowAsync();
 
-            // On success the app closes and restarts, so we only get past this if something went wrong
+            // On success the app closes and restarts, so we only get past this if something went wrong or it was cancelled
             string? error;
             try
             {
-                error = await ViewModel.ApplyUpdate();
+                error = await ViewModel.ApplyUpdate(progress, cancel.Token);
             }
             finally
             {
+                finished = true;
                 slowTimer.Stop();
             }
             dialog.Hide();
@@ -957,9 +1002,46 @@ namespace SoundBar.Views
                     Title = "Update didn't work",
                     Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = error, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap },
                     CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot
+                    XamlRoot = this.Content.XamlRoot,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
                 };
                 await errorDialog.ShowAsync();
+            }
+        }
+
+        /// <summary>
+        /// Says so if the last update couldn't copy its files (the update script leaves a note). The app may be
+        /// partly old and partly new, so it points to trying again or downloading it by hand.
+        /// </summary>
+        private async Task ShowUnfinishedUpdateMessageAsync()
+        {
+            if (!UpdateService.TakeUnfinishedUpdateNotice()) return;
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "The last update didn't finish",
+                    Content = new TextBlock
+                    {
+                        Text = "SoundBar couldn't replace some of its files, possibly because another program had them open. " +
+                               "If anything doesn't work properly, update again from the banner, or download the latest version from the release page.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    PrimaryButtonText = "Open release page",
+                    CloseButtonText = "OK",
+                    DefaultButton = ContentDialogButton.Close,
+                    RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                    XamlRoot = this.Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    await Windows.System.Launcher.LaunchUriAsync(new Uri(ViewModel.UpdateDownloadPageUrl));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Another message was already showing, for example
+                System.Diagnostics.Debug.WriteLine($"Unfinished update message: {ex.Message}");
             }
         }
 

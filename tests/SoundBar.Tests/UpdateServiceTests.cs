@@ -10,6 +10,8 @@ using Xunit;
 
 namespace SoundBar.Tests
 {
+    // Shares UpdateService's web client with UpdateSafetyTests, so they mustn't run at the same time
+    [Collection("UpdateService")]
     public class UpdateServiceTests
     {
         private HttpMessageHandler CreateMockMessageHandler(string responseContent, HttpStatusCode statusCode)
@@ -22,7 +24,8 @@ namespace SoundBar.Tests
                     ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>()
                 )
-                .ReturnsAsync(new HttpResponseMessage()
+                // A new response each time, like a real server: the download disposes each one when it's done
+                .ReturnsAsync(() => new HttpResponseMessage()
                 {
                     StatusCode = statusCode,
                     Content = new StringContent(responseContent),
