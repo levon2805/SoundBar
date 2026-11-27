@@ -34,11 +34,17 @@ namespace SoundBar.Tests
             return path;
         }
 
-        private static string Script(string appDir = @"C:\SoundBar", params string[] stale) => UpdateService.BuildUpdateScript(
+        private const string Log = @"C:\Users\Test\AppData\Roaming\SoundBar\update.log";
+        private const string Marker = @"C:\Users\Test\AppData\Roaming\SoundBar\update-unfinished.txt";
+
+        private static string RawScript(string appDir = @"C:\SoundBar", params string[] stale) => UpdateService.BuildUpdateScript(
             @"C:\Temp\SoundBarUpdate\extracted", appDir, @"C:\Temp\SoundBarUpdate", Path.Combine(appDir, "SoundBar.exe"),
-            restartTaskbarHelper: false, processId: 4321, staleFiles: stale,
-            logPath: @"C:\Users\Test\AppData\Roaming\SoundBar\update.log",
-            unfinishedMarkerPath: @"C:\Users\Test\AppData\Roaming\SoundBar\update-unfinished.txt");
+            restartTaskbarHelper: false, processId: 4321, staleFiles: stale, logPath: Log, unfinishedMarkerPath: Marker);
+
+        /// <summary>The script with its folders filled in, as Command Prompt sees it.</summary>
+        private static string Script(string appDir = @"C:\SoundBar", params string[] stale) => UpdateService.ExpandUpdateScript(
+            RawScript(appDir, stale),
+            UpdateService.UpdateScriptVariables(@"C:\Temp\SoundBarUpdate\extracted", appDir, @"C:\Temp\SoundBarUpdate", Path.Combine(appDir, "SoundBar.exe"), Log, Marker));
 
         // --- Never deleting other people's files ---
 
@@ -164,9 +170,10 @@ namespace SoundBar.Tests
         [Fact]
         public void TheScript_WritesPercentSignsInFolderNames_SoTheyArentReadAsVariables()
         {
-            string script = Script(@"C:\100% Apps\SoundBar");
-            Assert.Contains("\"C:\\100%% Apps\\SoundBar\"", script);
-            Assert.DoesNotContain("100% Apps", script);
+            // The folder reaches the script as a variable, whose value Command Prompt takes exactly as it is
+            Assert.DoesNotContain("100%", RawScript(@"C:\100% Apps\SoundBar"));
+            var variables = UpdateService.UpdateScriptVariables(@"C:\Temp\x", @"C:\100% Apps\SoundBar", @"C:\Temp", @"C:\100% Apps\SoundBar\SoundBar.exe", Log, Marker);
+            Assert.Equal(@"C:\100% Apps\SoundBar", variables["SB_APP"]);
         }
 
         [Fact]

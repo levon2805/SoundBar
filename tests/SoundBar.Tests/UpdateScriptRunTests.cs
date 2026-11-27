@@ -12,7 +12,8 @@ namespace SoundBar.Tests
     /// </summary>
     public class UpdateScriptRunTests : IDisposable
     {
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "SoundBarScriptRun", Guid.NewGuid().ToString("N"));
+        // A non-English name, like a user called Zoë or 测试 would have, to prove those folders work
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "SoundBarScriptRun", "Zoë 测试 " + Guid.NewGuid().ToString("N"));
         private string App => Path.Combine(_root, "Downloads");
         private string Download => Path.Combine(_root, "SoundBarUpdate");
         private string Source => Path.Combine(Download, "extracted");
@@ -73,10 +74,11 @@ namespace SoundBar.Tests
             script = script.Remove(helperStart, helperEnd - helperStart);
 
             // Note that it would start SoundBar, rather than starting the made-up one
-            string start = $"start \"\" \"{Path.Combine(App, "SoundBar.exe")}\"";
+            const string start = "start \"\" \"%SB_EXE%\"";
             Assert.Contains(start, script);
-            script = script.Replace(start, $"echo started>\"{Started}\"");
+            script = script.Replace(start, "echo started>\"%SB_STARTED%\"");
 
+            var variables = UpdateService.UpdateScriptVariables(Source, App, Download, Path.Combine(App, "SoundBar.exe"), Log, Marker);
             string bat = Path.Combine(_root, "update.bat");
             File.WriteAllText(bat, script, new UTF8Encoding(false));
 
@@ -85,7 +87,19 @@ namespace SoundBar.Tests
                 FileName = "cmd.exe",
                 Arguments = $"/c \"{bat}\"",
                 CreateNoWindow = true,
-                UseShellExecute = false
+                UseShellExecute = false,
+                Environment =
+                {
+                    ["SB_SOURCE"] = variables["SB_SOURCE"],
+                    ["SB_APP"] = variables["SB_APP"],
+                    ["SB_TEMP"] = variables["SB_TEMP"],
+                    ["SB_EXE"] = variables["SB_EXE"],
+                    ["SB_HELPER"] = variables["SB_HELPER"],
+                    ["SB_LOG"] = variables["SB_LOG"],
+                    ["SB_LOGDIR"] = variables["SB_LOGDIR"],
+                    ["SB_MARKER"] = variables["SB_MARKER"],
+                    ["SB_STARTED"] = Started,
+                }
             })!;
             Assert.True(process.WaitForExit(60_000), "The update script didn't finish within a minute");
             Assert.False(File.Exists(bat), "The script should delete itself");

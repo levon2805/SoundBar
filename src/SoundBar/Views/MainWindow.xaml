@@ -13,14 +13,32 @@
                     <ResourceDictionary x:Key="Light">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8EAEAEA" />
                         <SolidColorBrush x:Key="MuteTrueBrush" Color="#C42B1C" />
+                        <SolidColorBrush x:Key="LoudnessBannerBrush" Color="#66FF0000" />
+                        <SolidColorBrush x:Key="LoudnessBannerBorderBrush" Color="#FF5555" />
+                        <SolidColorBrush x:Key="UpdateButtonBackgroundBrush" Color="#1A4CAF50" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="Dark">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8202020" />
                         <SolidColorBrush x:Key="MuteTrueBrush" Color="#FF6B6B" />
+                        <SolidColorBrush x:Key="LoudnessBannerBrush" Color="#66FF0000" />
+                        <SolidColorBrush x:Key="LoudnessBannerBorderBrush" Color="#FF5555" />
+                        <SolidColorBrush x:Key="UpdateButtonBackgroundBrush" Color="#1A4CAF50" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="Default">
                         <SolidColorBrush x:Key="DimmingOverlayBrush" Color="#D8202020" />
                         <SolidColorBrush x:Key="MuteTrueBrush" Color="#FF6B6B" />
+                        <SolidColorBrush x:Key="LoudnessBannerBrush" Color="#66FF0000" />
+                        <SolidColorBrush x:Key="LoudnessBannerBorderBrush" Color="#FF5555" />
+                        <SolidColorBrush x:Key="UpdateButtonBackgroundBrush" Color="#1A4CAF50" />
+                    </ResourceDictionary>
+                    <!-- Windows' High Contrast themes: only the colours the person has chosen. The background picture is
+                         covered completely, and muted, warnings and the update button use the highlight colour. -->
+                    <ResourceDictionary x:Key="HighContrast">
+                        <SolidColorBrush x:Key="DimmingOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                        <SolidColorBrush x:Key="MuteTrueBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        <SolidColorBrush x:Key="LoudnessBannerBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                        <SolidColorBrush x:Key="LoudnessBannerBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                        <SolidColorBrush x:Key="UpdateButtonBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
                     </ResourceDictionary>
                 </ResourceDictionary.ThemeDictionaries>
                 <SolidColorBrush x:Key="FocusTrueBrush" Color="#280078D7"/>
@@ -114,7 +132,7 @@
                         Height="32"
                         VerticalAlignment="Center"
                         Padding="8,4"
-                        Background="#1A4CAF50"
+                        Background="{ThemeResource UpdateButtonBackgroundBrush}"
                         Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                         BorderBrush="{ThemeResource SystemFillColorSuccessBrush}"
                         BorderThickness="1"
@@ -312,8 +330,8 @@
                     
                     <StackPanel Grid.Row="0">
 
-                    <Border Background="#66FF0000"
-                            BorderBrush="#FF5555"
+                    <Border Background="{ThemeResource LoudnessBannerBrush}"
+                            BorderBrush="{ThemeResource LoudnessBannerBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Margin="0,0,0,15"
@@ -1064,10 +1082,10 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Background="Transparent" BorderThickness="0" Padding="2" MinHeight="0"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" VerticalAlignment="Center"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalAlignment="Center"
                                 Click="ToggleMusicPlayerMode_Click"
                                 ToolTipService.ToolTip="Open the music player" AutomationProperties.Name="Open the music player">
-                            <Grid ColumnSpacing="8">
+                            <Grid ColumnSpacing="8" SizeChanged="NowPlayingSong_SizeChanged">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -1080,7 +1098,7 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Visibility="{x:Bind ViewModel.FallbackIconVisibility, Mode=OneWay}"/>
                                 </Grid>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel x:Name="NowPlayingSongText" Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind ViewModel.CurrentSongTitle, Mode=OneWay}" FontSize="12"
                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                                     <TextBlock Text="{x:Bind ViewModel.CurrentSongArtist, Mode=OneWay}" FontSize="11"

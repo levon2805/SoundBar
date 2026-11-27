@@ -66,12 +66,18 @@ namespace SoundBar.ViewModels
 
                     if (_selectedAudioDevice != null && !_isUpdatingDeviceFromSystem)
                     {
-                        _audioService.SetDefaultAudioDevice(_selectedAudioDevice.Id);
+                        if (!_audioService.SetDefaultAudioDevice(_selectedAudioDevice.Id))
+                            DeviceSwitchFailed?.Invoke(this, _selectedAudioDevice.Name ?? "that device");
                     }
                 }
             }
         }
         private bool _isUpdatingDeviceFromSystem = false;
+
+        /// <summary>
+        /// Windows didn't accept a new default device. Carries the device's name, so the window can say so.
+        /// </summary>
+        public event EventHandler<string>? DeviceSwitchFailed;
 
 
 
@@ -599,7 +605,8 @@ namespace SoundBar.ViewModels
 
                     if (_selectedInputDevice != null && !_isUpdatingInputDeviceFromSystem)
                     {
-                        _audioService.SetDefaultInputDevice(_selectedInputDevice.Id);
+                        if (!_audioService.SetDefaultInputDevice(_selectedInputDevice.Id))
+                            DeviceSwitchFailed?.Invoke(this, _selectedInputDevice.Name ?? "that device");
                     }
                 }
             }
@@ -840,6 +847,21 @@ namespace SoundBar.ViewModels
         internal const int MinimisedRefreshIntervalMs = 5000;
         internal const int LightweightMinimisedRefreshIntervalMs = 10000;
 
+        // When Windows is telling us about changes (see AudioChangeWatcher), the regular check is only a safety
+        // net for what it doesn't announce, like another mixer changing one app's volume, so it can be slower
+        internal const int WatchedRefreshIntervalMs = 3000;
+        internal const int WatchedLightweightRefreshIntervalMs = 5000;
+        internal const int WatchedMinimisedRefreshIntervalMs = 15000;
+        internal const int WatchedLightweightMinimisedRefreshIntervalMs = 30000;
+
+        /// <summary>
+        /// The shortest gap between two checks. Dragging the master volume sends Windows' change notification many
+        /// times a second, and each would otherwise start a full check.
+        /// </summary>
+        internal const int MinimumCheckGapMs = 250;
+
+        private AudioChangeWatcher? _changeWatcher;
+
         private volatile bool _isWindowMinimised;
 
         /// <summary>Set by the window, so the checks slow down while it's minimised and catch up when it's back.</summary>
@@ -865,7 +887,14 @@ namespace SoundBar.ViewModels
                 // A phone using the companion shows the live state, so it counts as being on screen
                 bool phoneConnected = (_companionServer?.ConnectedClientCount ?? 0) > 0;
 
-                if (_isWindowMinimised && !phoneConnected)
+                bool minimised = _isWindowMinimised && !phoneConnected;
+                if (_changeWatcher != null)
+                {
+                    if (minimised) return lightweight ? WatchedLightweightMinimisedRefreshIntervalMs : WatchedMinimisedRefreshIntervalMs;
+                    return lightweight ? WatchedLightweightRefreshIntervalMs : WatchedRefreshIntervalMs;
+                }
+
+                if (minimised)
                     return lightweight ? LightweightMinimisedRefreshIntervalMs : MinimisedRefreshIntervalMs;
                 return lightweight ? LightweightRefreshIntervalMs : RefreshIntervalMs;
             }
@@ -1358,15 +1387,39 @@ namespace SoundBar.ViewModels
             // Make sure the startup shortcut is there if it should be (also cleans up old registry keys)
             RepairStartupShortcut();
 
+            // Hear about changes as Windows makes them (only with the real audio service, not in tests)
+            if (_audioService is WindowsAudioMixerService)
+            {
+                try { _changeWatcher = new AudioChangeWatcher(WakePolling); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"No change notifications: {ex.Message}"); }
+            }
+
             // Start the monitoring loop
             StartPolling();
 
             // Load Custom Background Image
             _ = LoadBackgroundImageAsync();
 
-            // Check for updates
+            // Check for updates, now and then once a day: most people leave SoundBar running for weeks.
+            // The timer looks every hour, so a PC that slept through the 24 hours checks soon after it wakes.
             UpdateCheck = CheckForUpdatesAsync();
+            _updateCheckTimer = new System.Threading.Timer(_ =>
+            {
+                if (!UpdateAvailable && IsUpdateCheckDue(_lastUpdateCheck, DateTime.UtcNow)) _ = CheckForUpdatesAsync();
+            }, null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+
+            // Tidy away app icons that haven't been needed for a while, in the background
+            _ = Task.Run(() => AudioAppModel.TidyIconFolder(DateTime.UtcNow));
         }
+
+        private System.Threading.Timer? _updateCheckTimer;
+        private DateTime _lastUpdateCheck = DateTime.MinValue;
+
+        /// <summary>How often to look for a new version while SoundBar keeps running.</summary>
+        internal static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(24);
+
+        /// <summary>Whether it's time to look for a new version again.</summary>
+        internal static bool IsUpdateCheckDue(DateTime lastCheck, DateTime now) => now - lastCheck >= UpdateCheckInterval;
 
         /// <summary>The startup update check, so tests can wait for it to finish.</summary>
         internal Task UpdateCheck { get; private set; } = Task.CompletedTask;
@@ -1670,6 +1723,7 @@ namespace SoundBar.ViewModels
 
         private async Task CheckForUpdatesAsync()
         {
+            _lastUpdateCheck = DateTime.UtcNow;
             bool hasUpdate = await _updateService.CheckForUpdatesAsync();
 #if DEBUG
             hasUpdate = true;
@@ -1971,8 +2025,14 @@ namespace SoundBar.ViewModels
                     try
                     {
                         // Wait until the next check is due, or until something needs it sooner
-                        // (the window coming back from minimised, a phone connecting, a setting changing)
-                        await _pollingWake.WaitAsync(RefreshIntervalNowMs, token);
+                        // (Windows announcing a change, the window coming back from minimised, a phone connecting,
+                        // a setting changing). Several wake-ups close together only cause one check.
+                        long checkedAt = Environment.TickCount64;
+                        if (await _pollingWake.WaitAsync(RefreshIntervalNowMs, token))
+                        {
+                            long sinceLast = Environment.TickCount64 - checkedAt;
+                            if (sinceLast < MinimumCheckGapMs) await Task.Delay((int)(MinimumCheckGapMs - sinceLast), token);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -2850,6 +2910,12 @@ namespace SoundBar.ViewModels
         {
             if (_isDisposed) return;
             _isDisposed = true;
+
+            _updateCheckTimer?.Dispose();
+            _updateCheckTimer = null;
+
+            _changeWatcher?.Dispose();
+            _changeWatcher = null;
 
             // Don't lose a slider change that was still waiting to be saved
             if (_isSettingsSavePending)

@@ -682,9 +682,20 @@ namespace SoundBar.Tests
                 Assert.Equal(2, viewModel.MediaBarStyleIndex);
                 Assert.Equal(visible, viewModel.NowPlayingMediaBarVisibility);
 
-                // The button shows one icon for the real state (it reads this PC's own media, so either can be true)
-                Assert.Equal(viewModel.IsMediaPlaying ? "Pause" : "Play", viewModel.PlayPauseLabel);
-                Assert.Equal(viewModel.IsMediaPlaying ? (char)0xE769 : (char)0xE768, viewModel.PlayPauseGlyph.Single());
+                // The button shows one icon for the real state. It reads this PC's own media, so either can be true,
+                // and it may still be loading in the background, so compare against a reading that holds still.
+                bool matches = false;
+                for (int attempt = 0; attempt < 40 && !matches; attempt++)
+                {
+                    bool playing = viewModel.IsMediaPlaying;
+                    string label = viewModel.PlayPauseLabel;
+                    char glyph = viewModel.PlayPauseGlyph.Single();
+                    matches = playing == viewModel.IsMediaPlaying
+                        && label == (playing ? "Pause" : "Play")
+                        && glyph == (playing ? (char)0xE769 : (char)0xE768);
+                    if (!matches) System.Threading.Thread.Sleep(50);
+                }
+                Assert.True(matches, "The play button didn't match the media state");
             }
             finally
             {

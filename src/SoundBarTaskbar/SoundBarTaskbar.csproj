@@ -9,7 +9,7 @@
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>SoundBarTaskbar</RootNamespace>
     <AssemblyName>SoundBarTaskbar</AssemblyName>
     <!-- The name Task Manager shows -->

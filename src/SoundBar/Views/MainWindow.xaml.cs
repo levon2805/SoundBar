@@ -30,6 +30,7 @@ namespace SoundBar.Views
         private readonly SettingsService _settingsService;
         private AppWindow _appWindow;
         private IntPtr _hWnd;
+        private MinimumWindowSize? _minimumSize;
 
         /// <summary>
         /// What the user wants the pin to be. We track this ourselves rather than asking Windows,
@@ -64,6 +65,7 @@ namespace SoundBar.Views
             // Apply initial theme and listen for changes
             ApplyTheme(ViewModel.SelectedTheme);
             ViewModel.ThemeChanged += ViewModel_ThemeChanged;
+            ViewModel.DeviceSwitchFailed += ViewModel_DeviceSwitchFailed;
 
             // Handle layout changes for I/O strip
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -73,6 +75,7 @@ namespace SoundBar.Views
 
             IntPtr hWnd = WindowNative.GetWindowHandle(this);
             _hWnd = hWnd;
+            _minimumSize = new MinimumWindowSize(hWnd); // Too thin and the buttons pile on top of each other
             WindowId wndId = Win32Interop.GetWindowIdFromWindow(hWnd);
             _appWindow = AppWindow.GetFromWindowId(wndId);
             
@@ -537,6 +540,38 @@ namespace SoundBar.Views
             CreateDesktopShortcut();
         }
 
+        // Windows didn't accept the device picked in the list. Say so, rather than the list just doing nothing.
+        private void ViewModel_DeviceSwitchFailed(object? sender, string deviceName)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Couldn't switch device",
+                        Content = new TextBlock
+                        {
+                            Text = $"Windows didn't switch to {deviceName}. You can choose it in Windows' Sound settings instead.",
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        PrimaryButtonText = "Open Sound settings",
+                        CloseButtonText = "OK",
+                        DefaultButton = ContentDialogButton.Primary,
+                        RequestedTheme = ((FrameworkElement)this.Content).ActualTheme,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:sound"));
+                }
+                catch (Exception ex)
+                {
+                    // Another message was already showing, for example
+                    System.Diagnostics.Debug.WriteLine($"Device switch message: {ex.Message}");
+                }
+            });
+        }
+
         private void ViewModel_ThemeChanged(object? sender, AppTheme theme)
         {
             ApplyTheme(theme);
@@ -545,6 +580,9 @@ namespace SoundBar.Views
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
             SaveWindowSettings();
+
+            _minimumSize?.Dispose();
+            _minimumSize = null;
 
             SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
             SongPositionSlider.RemoveHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(SongPositionSlider_KeyDown));
@@ -560,6 +598,7 @@ namespace SoundBar.Views
             if (ViewModel != null)
             {
                 ViewModel.ThemeChanged -= ViewModel_ThemeChanged;
+                ViewModel.DeviceSwitchFailed -= ViewModel_DeviceSwitchFailed;
                 ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 ViewModel.Dispose();
             }
@@ -1389,6 +1428,19 @@ namespace SoundBar.Views
         private void MediaMute_Click(object sender, RoutedEventArgs e)
         {
             MediaHelper.Mute();
+        }
+
+        /// <summary>
+        /// On a narrow window the song's title would shrink to a letter or two, so show just the album art instead.
+        /// The space it gets doesn't depend on the text, so hiding it can't make it flicker back.
+        /// </summary>
+        private void NowPlayingSong_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            const double artAndGap = 34 + 8;
+            const double minTextWidth = 48;
+            NowPlayingSongText.Visibility = e.NewSize.Width - artAndGap >= minTextWidth
+                ? Microsoft.UI.Xaml.Visibility.Visible
+                : Microsoft.UI.Xaml.Visibility.Collapsed;
         }
 
         private void ToggleMusicPlayerMode_Click(object sender, RoutedEventArgs e)

@@ -336,6 +336,52 @@ namespace SoundBar.Models
             _iconCache.Clear();
         }
 
+        /// <summary>Icons not used for this long are deleted. They're just made again if the app comes back.</summary>
+        internal static readonly TimeSpan IconKeepTime = TimeSpan.FromDays(60);
+
+        /// <summary>
+        /// Notes that an icon file is still in use, by its last-changed time. Only touched once a day at most,
+        /// so it's not a disk write every time an app appears.
+        /// </summary>
+        internal static void MarkIconUsed(string path, DateTime now)
+        {
+            try
+            {
+                if (now - System.IO.File.GetLastWriteTimeUtc(path) > TimeSpan.FromDays(1))
+                    System.IO.File.SetLastWriteTimeUtc(path, now);
+            }
+            catch { } // Not worth bothering anyone over
+        }
+
+        /// <summary>
+        /// Deletes icons that haven't been used for <see cref="IconKeepTime"/>, and saves that never finished.
+        /// The folder keeps one icon per app path ever seen, and some apps (Discord, say) put their version in the
+        /// path, so without this it only ever grows.
+        /// </summary>
+        public static void TidyIconFolder(DateTime now) => TidyIconFolder(_iconDir, now);
+
+        internal static void TidyIconFolder(string folder, DateTime now)
+        {
+            try
+            {
+                if (!System.IO.Directory.Exists(folder)) return;
+                foreach (var file in new System.IO.DirectoryInfo(folder).EnumerateFiles())
+                {
+                    try
+                    {
+                        bool oldIcon = file.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase) && now - file.LastWriteTimeUtc > IconKeepTime;
+                        bool leftoverSave = file.Extension.Equals(".tmp", StringComparison.OrdinalIgnoreCase) && now - file.LastWriteTimeUtc > TimeSpan.FromDays(1);
+                        if (oldIcon || leftoverSave) file.Delete();
+                    }
+                    catch { } // In use or already gone: leave it
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Couldn't tidy the icon folder: {ex.Message}");
+            }
+        }
+
         // How long to wait before trying a missing icon again, so an exe that really has no icon
         // doesn't get re-read every second
         private static readonly TimeSpan IconRetryInterval = TimeSpan.FromSeconds(30);
@@ -435,6 +481,7 @@ namespace SoundBar.Models
                         // An empty file means a save got cut short last time, so make it again
                         if (IsUsableIconFile(targetPath))
                         {
+                            MarkIconUsed(targetPath, DateTime.UtcNow);
                             _iconCache[IconPath] = targetPath;
                             return targetPath;
                         }

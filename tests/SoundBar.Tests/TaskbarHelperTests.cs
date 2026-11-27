@@ -411,20 +411,22 @@ namespace SoundBar.Tests
     /// <summary>The script that installs updates has to deal with the taskbar helper too.</summary>
     public class UpdateScriptTests
     {
-        private static string Script(bool helperRunning) => UpdateService.BuildUpdateScript(
-            @"C:\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Temp\SoundBarUpdate", @"C:\SoundBar\SoundBar.exe", helperRunning);
+        private static string Script(bool helperRunning) => UpdateService.ExpandUpdateScript(
+            UpdateService.BuildUpdateScript(@"C:\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Temp\SoundBarUpdate", @"C:\SoundBar\SoundBar.exe", helperRunning),
+            UpdateService.UpdateScriptVariables(@"C:\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Temp\SoundBarUpdate", @"C:\SoundBar\SoundBar.exe"));
 
         [Fact]
-        public void SwitchesToUtf8_BeforeUsingAnyPath()
+        public void KeepsNonEnglishFolderNamesOutOfTheScript()
         {
             // The update unpacks under the user's Temp folder, so a name like Zoë ends up in the paths.
-            // Command Prompt starts in the old code page and wouldn't find those folders without this.
+            // Windows 10's Command Prompt doesn't reliably read those from a batch file, so they're passed in
+            // as variables and the script itself is plain English text.
             string script = UpdateService.BuildUpdateScript(
-                @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate\extracted", @"C:\SoundBar", @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate",
-                @"C:\SoundBar\SoundBar.exe", restartTaskbarHelper: false);
+                @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate\extracted", @"C:\Users\测试\SoundBar", @"C:\Users\Zoë\AppData\Local\Temp\SoundBarUpdate",
+                @"C:\Users\测试\SoundBar\SoundBar.exe", restartTaskbarHelper: true, staleFiles: new[] { "old.dll" });
 
-            int utf8 = script.IndexOf("chcp 65001", StringComparison.Ordinal);
-            Assert.True(utf8 > 0 && utf8 < script.IndexOf("Zoë", StringComparison.Ordinal));
+            Assert.All(script, c => Assert.True(c < 128, $"Non-ASCII character '{c}' in the script"));
+            Assert.Contains("robocopy \"%SB_SOURCE%\" \"%SB_APP%\"", script);
         }
 
         [Fact]

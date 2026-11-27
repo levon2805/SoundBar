@@ -286,7 +286,7 @@ namespace SoundBar.Services
             File.WriteAllText(batPath, BuildUpdateScript(sourceDir, currentAppDir, tempUpdateDir, currentExePath, helperWasRunning,
                 Environment.ProcessId, staleFiles, UpdateLogPath, UnfinishedUpdateMarkerPath));
 
-            // Fire and forget the batch script
+            // Fire and forget the batch script, handing it the folders as environment variables
             var processInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
@@ -294,6 +294,8 @@ namespace SoundBar.Services
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
+            foreach (var (name, value) in UpdateScriptVariables(sourceDir, currentAppDir, tempUpdateDir, currentExePath, UpdateLogPath, UnfinishedUpdateMarkerPath))
+                processInfo.Environment[name] = value;
             using (Process.Start(processInfo)) { }
 
             // Goodbye old version! The batch script will take it from here.
@@ -358,7 +360,7 @@ namespace SoundBar.Services
         /// <summary>
         /// The files the installed version listed as its own (in <see cref="FileListName"/>) that the new version
         /// doesn't have, and that are still there. Only these are deleted, so anything else in the folder is safe.
-        /// With no list (anything installed before v4.5.2), nothing is deleted and old files are just left behind.
+        /// With no list (anything installed before v4.5.1), nothing is deleted and old files are just left behind.
         /// </summary>
         internal static List<string> FindStaleFiles(string appDir, IReadOnlyCollection<string> newFiles)
         {
@@ -409,21 +411,13 @@ namespace SoundBar.Services
         internal static string BuildUpdateScript(string sourceDir, string appDir, string tempUpdateDir, string exePath, bool restartTaskbarHelper,
             int processId = 0, IReadOnlyList<string>? staleFiles = null, string? logPath = null, string? unfinishedMarkerPath = null)
         {
-            static string EscapeForBatch(string path)
-            {
-                string p = path.EndsWith("\\") ? path + "\\" : path;
-                // %% is how a batch file writes a plain %, so a folder like "100% Apps" isn't read as a variable
-                return "\"" + p.Replace("\"", "\"\"").Replace("%", "%%") + "\"";
-            }
-
-            logPath ??= UpdateLogPath;
-            unfinishedMarkerPath ??= UnfinishedUpdateMarkerPath;
-            string logDir = Path.GetDirectoryName(logPath) ?? Path.GetTempPath();
-
+            // The folders reach the script as environment variables (see UpdateScriptVariables), never written
+            // into it. A user name like Zoë or 测试 is in several of them, and Windows 10's Command Prompt doesn't
+            // reliably read non-English letters from a batch file, even after switching it to UTF-8. Values of
+            // variables are taken exactly as they are, % signs and all.
             string helperImage = Shared.TaskbarHelperInfo.ImageName;
-            string helperPath = Path.Combine(appDir, Shared.TaskbarHelperInfo.ExeName);
             string restartHelper = restartTaskbarHelper
-                ? $"if exist {EscapeForBatch(helperPath)} start \"\" {EscapeForBatch(helperPath)}"
+                ? "if exist \"%SB_HELPER%\" start \"\" \"%SB_HELPER%\""
                 : ":: (The taskbar helper wasn't running, so it isn't started)";
 
             string waitFilter = processId > 0 ? $"PID eq {processId}" : "IMAGENAME eq SoundBar.exe";
@@ -431,15 +425,16 @@ namespace SoundBar.Services
             var deletes = new System.Text.StringBuilder();
             foreach (string name in staleFiles ?? Array.Empty<string>())
             {
-                string full = EscapeForBatch(Path.Combine(appDir, name));
+                // The names come from SoundBar's own file list, and never hold a % (FindStaleFiles drops those)
+                string full = $"\"%SB_APP%\\{name}\"";
                 deletes.AppendLine($"if exist {full} del /f /q {full}");
             }
             if (deletes.Length == 0) deletes.AppendLine(":: (No old files to remove)");
 
             return $$"""
 @echo off
-:: The script is saved as UTF-8. Without this, Command Prompt reads it in the old code page and
-:: can't find folders with accented or non-English letters (the update unpacks under the user's name).
+:: Every folder comes from an environment variable (SB_...), so this file itself is plain English text.
+:: The UTF-8 switch is kept too, for the file names of the old files removed below.
 chcp 65001 >nul
 echo Updating SoundBar... Please wait.
 
@@ -477,7 +472,7 @@ if "%ERRORLEVEL%"=="0" (
 :: A locked file (antivirus scanning it, say) makes robocopy fail, so try up to 3 times.
 set /a copytries=0
 :copyfiles
-robocopy {{EscapeForBatch(sourceDir)}} {{EscapeForBatch(appDir)}} /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
+robocopy "%SB_SOURCE%" "%SB_APP%" /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XF "config.json" "*.log" /XD "Backgrounds"
 set copyresult=%ERRORLEVEL%
 :: Robocopy exit codes 0-7 are success; 8+ are errors.
 if %copyresult% LSS 8 goto copied
@@ -489,9 +484,9 @@ if %copytries% LSS 3 (
 
 :: It still didn't work. Keep the download, so nothing is lost and it can be tried again, note what
 :: happened, and start SoundBar anyway so it can tell the user.
-if not exist {{EscapeForBatch(logDir)}} mkdir {{EscapeForBatch(logDir)}}
->>{{EscapeForBatch(logPath)}} echo %date% %time% The update couldn't copy its files (robocopy code %copyresult%). The download was kept in {{EscapeForBatch(tempUpdateDir)}}.
->{{EscapeForBatch(unfinishedMarkerPath)}} echo %copyresult%
+if not exist "%SB_LOGDIR%" mkdir "%SB_LOGDIR%"
+>>"%SB_LOG%" echo %date% %time% The update couldn't copy its files (robocopy code %copyresult%). The download was kept in "%SB_TEMP%".
+>"%SB_MARKER%" echo %copyresult%
 goto restart
 
 :copied
@@ -499,16 +494,49 @@ goto restart
 {{deletes.ToString().TrimEnd()}}
 
 :: Clean up the temp directory
-rmdir /s /q {{EscapeForBatch(tempUpdateDir)}}
+rmdir /s /q "%SB_TEMP%"
 
 :restart
 :: Restart the application, and the taskbar helper if it was running
-start "" {{EscapeForBatch(exePath)}}
+start "" "%SB_EXE%"
 {{restartHelper}}
 
 :: Delete this batch file
 del "%~f0"
 """;
+        }
+
+        /// <summary>
+        /// The folders and files the update script uses, as environment variables to start it with.
+        /// </summary>
+        internal static Dictionary<string, string> UpdateScriptVariables(string sourceDir, string appDir, string tempUpdateDir, string exePath,
+            string? logPath = null, string? unfinishedMarkerPath = null)
+        {
+            // A trailing backslash right before a closing quote ("C:") would be read as an escaped quote by robocopy
+            static string Folder(string path) => path.EndsWith("\\") ? path + "." : path;
+
+            logPath ??= UpdateLogPath;
+            unfinishedMarkerPath ??= UnfinishedUpdateMarkerPath;
+            return new Dictionary<string, string>
+            {
+                ["SB_SOURCE"] = Folder(sourceDir),
+                ["SB_APP"] = Folder(appDir),
+                ["SB_TEMP"] = Folder(tempUpdateDir),
+                ["SB_EXE"] = exePath,
+                ["SB_HELPER"] = Path.Combine(appDir, Shared.TaskbarHelperInfo.ExeName),
+                ["SB_LOG"] = logPath,
+                ["SB_LOGDIR"] = Folder(Path.GetDirectoryName(logPath) ?? Path.GetTempPath()),
+                ["SB_MARKER"] = unfinishedMarkerPath,
+            };
+        }
+
+        /// <summary>
+        /// The script with its variables filled in, as Command Prompt will see it. Only for tests to read.
+        /// </summary>
+        internal static string ExpandUpdateScript(string script, IReadOnlyDictionary<string, string> variables)
+        {
+            foreach (var (name, value) in variables) script = script.Replace($"%{name}%", value);
+            return script;
         }
 
         // --- Helper classes just to read the GitHub API JSON ---

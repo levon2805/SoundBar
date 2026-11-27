@@ -68,7 +68,8 @@ namespace SoundBar.Services
         /// Tells Windows to switch all audio over to a different playback device.
         /// </summary>
         /// <param name="deviceId">The unique system identifier for the device.</param>
-        void SetDefaultAudioDevice(string deviceId);
+        /// <returns>False if Windows didn't accept the change.</returns>
+        bool SetDefaultAudioDevice(string deviceId);
 
         /// <summary>
         /// Clears internal caches to force a full re-evaluation of audio sessions.
@@ -86,7 +87,8 @@ namespace SoundBar.Services
         /// Tells Windows to switch the default recording device to a different microphone.
         /// </summary>
         /// <param name="deviceId">The unique system identifier for the input device.</param>
-        void SetDefaultInputDevice(string deviceId);
+        /// <returns>False if Windows didn't accept the change.</returns>
+        bool SetDefaultInputDevice(string deviceId);
 
         /// <summary>
         /// Checks if the default microphone is currently muted.
