@@ -20,6 +20,8 @@
     <NoWarn>NU1701</NoWarn>
     <ApplicationIcon>Assets\SoundBar.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- Program.cs has SoundBar's own Main, which hands a second launch to the running copy before anything starts -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>

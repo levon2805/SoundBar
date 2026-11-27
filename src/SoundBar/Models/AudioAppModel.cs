@@ -37,6 +37,7 @@ namespace SoundBar.Models
                     _name = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(HideLabel));
+                    OnAccessibleNamesChanged();
                     AliasChanged?.Invoke(RawProcessName ?? "", value ?? "");
                 }
             }
@@ -46,6 +47,24 @@ namespace SoundBar.Models
         /// What screen readers call this row's hide button, so each one says which app it hides.
         /// </summary>
         public string HideLabel => string.IsNullOrWhiteSpace(_name) ? "Hide app" : $"Hide {_name}";
+
+        private string NameForScreenReaders => string.IsNullOrWhiteSpace(_name) ? "App" : _name;
+
+        /// <summary>
+        /// What screen readers call this app's volume slider. Says "muted" too, since on screen that's only a red icon.
+        /// </summary>
+        public string SliderLabel => _isMuted ? $"{NameForScreenReaders}, muted" : NameForScreenReaders;
+
+        /// <summary>
+        /// What screen readers call the app's icon, which mutes or unmutes it.
+        /// </summary>
+        public string MuteButtonLabel => _isMuted ? $"Unmute {NameForScreenReaders}" : $"Mute {NameForScreenReaders}";
+
+        private void OnAccessibleNamesChanged()
+        {
+            OnPropertyChanged(nameof(SliderLabel));
+            OnPropertyChanged(nameof(MuteButtonLabel));
+        }
 
         /// <summary>
         /// The original, untouched display name straight from Windows.
@@ -93,6 +112,7 @@ namespace SoundBar.Models
 
         private float _volume;
         private System.Threading.CancellationTokenSource? _volumeDebounce;
+        private readonly object _volumeSendLock = new();
 
         /// <summary>
         /// The current volume level, ranging from 0.0 to 1.0.
@@ -130,9 +150,15 @@ namespace SoundBar.Models
                             {
                                 // Wait just a tiny bit to see if the user is still sliding.
                                 await Task.Delay(50, token);
-                                if (!token.IsCancellationRequested)
+
+                                // Checked and sent together, so this can't send an older volume after a newer one
+                                // has been sent: a newer one always cancels this first (on the window's thread)
+                                lock (_volumeSendLock)
                                 {
-                                    _audioService.SetVolume(osName, capturedVolume);
+                                    if (!token.IsCancellationRequested)
+                                    {
+                                        _audioService.SetVolume(osName, capturedVolume);
+                                    }
                                 }
                             }
                             catch (TaskCanceledException) { }
@@ -171,6 +197,7 @@ namespace SoundBar.Models
             {
                 _isMuted = isMuted;
                 OnPropertyChanged(nameof(IsMuted));
+                OnAccessibleNamesChanged();
             }
         }
 
@@ -276,6 +303,7 @@ namespace SoundBar.Models
                     LastModified = DateTime.UtcNow;
 
                     OnPropertyChanged();
+                    OnAccessibleNamesChanged();
 
                     // Actually tell Windows to shut it up (or let it sing).
                     string osName = RawProcessName ?? DisplayName ?? "";

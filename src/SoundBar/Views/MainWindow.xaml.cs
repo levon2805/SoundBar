@@ -499,12 +499,12 @@ namespace SoundBar.Views
             }
         }
 
-        private void AppIcon_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        // Clicking an app's icon (or Space/Enter on it) mutes or unmutes it
+        private void AppIcon_Click(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement elem && elem.DataContext is AudioAppModel app)
             {
                 app.IsMuted = !app.IsMuted;
-                e.Handled = true;
             }
         }
 
@@ -531,6 +531,8 @@ namespace SoundBar.Views
             this.Closed += MainWindow_Closed;
 
             SongPositionSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed), true);
+            // The slider handles the arrow keys itself, so listen for them even once it has
+            SongPositionSlider.AddHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(SongPositionSlider_KeyDown), true);
 
             CreateDesktopShortcut();
         }
@@ -545,6 +547,8 @@ namespace SoundBar.Views
             SaveWindowSettings();
 
             SongPositionSlider.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SongPositionSlider_PointerPressed));
+            SongPositionSlider.RemoveHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(SongPositionSlider_KeyDown));
+            _keyboardSeekTimer?.Stop();
 
             _appWindow.Changed -= AppWindow_Changed;
             if (_backgroundResizeTimer != null)
@@ -578,20 +582,9 @@ namespace SoundBar.Views
 
                 if (!System.IO.File.Exists(lnkPath))
                 {
-                    string currentExePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "SoundBar.exe");
-                    string currentAppDir = System.IO.Path.GetDirectoryName(currentExePath) ?? AppDomain.CurrentDomain.BaseDirectory;
-
-                    // Single quotes in paths (e.g. C:\Users\O'Brien) must be doubled for PowerShell
-                    static string Ps(string value) => value.Replace("'", "''");
-
-                    var processInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "powershell.exe",
-                        Arguments = $"-NoProfile -Command \"$wshell = New-Object -ComObject WScript.Shell; $s = $wshell.CreateShortcut('{Ps(lnkPath)}'); $s.TargetPath = '{Ps(currentExePath)}'; $s.WorkingDirectory = '{Ps(currentAppDir)}'; $s.Save()\"",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-                    using var shortcutProcess = System.Diagnostics.Process.Start(processInfo);
+                    // Through Windows' own shortcut object, rather than a hidden PowerShell window
+                    // (antivirus tools are suspicious of apps that start one)
+                    ViewModel.CreateDesktopShortcut();
                 }
             }
             catch
@@ -1380,17 +1373,17 @@ namespace SoundBar.Views
 
         private void MediaPrevious_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.PreviousTrack();
+            ViewModel.MediaPrevious();
         }
 
         private void MediaPlayPause_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.PlayPause();
+            ViewModel.MediaPlayPause();
         }
 
         private void MediaNext_Click(object sender, RoutedEventArgs e)
         {
-            MediaHelper.NextTrack();
+            ViewModel.MediaNext();
         }
 
         private void MediaMute_Click(object sender, RoutedEventArgs e)
@@ -1412,6 +1405,42 @@ namespace SoundBar.Views
         {
             ViewModel.IsUserScrubbing = false;
             ViewModel.SeekToScrubPosition();
+        }
+
+        private DispatcherTimer? _keyboardSeekTimer;
+
+        // Moving the position bar with the keyboard seeks too. It waits until the keys have stopped for a moment,
+        // so holding an arrow key seeks once at the end rather than on every step.
+        private void SongPositionSlider_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Windows.System.VirtualKey.Left:
+                case Windows.System.VirtualKey.Right:
+                case Windows.System.VirtualKey.Up:
+                case Windows.System.VirtualKey.Down:
+                case Windows.System.VirtualKey.PageUp:
+                case Windows.System.VirtualKey.PageDown:
+                case Windows.System.VirtualKey.Home:
+                case Windows.System.VirtualKey.End:
+                    break;
+                default:
+                    return;
+            }
+
+            ViewModel.IsUserScrubbing = true; // Stops the playing song moving the bar back meanwhile
+            if (_keyboardSeekTimer == null)
+            {
+                _keyboardSeekTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                _keyboardSeekTimer.Tick += (_, _) =>
+                {
+                    _keyboardSeekTimer.Stop();
+                    ViewModel.IsUserScrubbing = false;
+                    ViewModel.SeekToScrubPosition();
+                };
+            }
+            _keyboardSeekTimer.Stop();
+            _keyboardSeekTimer.Start();
         }
 
         // ------------------------------------------------------------------

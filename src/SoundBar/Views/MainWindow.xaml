@@ -123,8 +123,8 @@
                         Visibility="{x:Bind ViewModel.ClassicUpdateButtonVisibility, Mode=OneWay}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.UpdateBannerText, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE896;" FontSize="10" VerticalAlignment="Center"/>
-                        <TextBlock Text="Update Available" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock FontFamily="{ThemeResource SymbolThemeFontFamily}" Text="&#xE896;" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Update Available" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
                 
@@ -512,11 +512,15 @@
                                              KeyDown="TextBox_KeyDown"
                                              ToolTipService.ToolTip="Click to rename"/>
 
-                                    <Image Grid.Row="1" Grid.Column="1"
-                                           Source="{Binding AppIcon}" Width="20" Height="20" Stretch="Uniform"
-                                           VerticalAlignment="Center"
-                                           Tapped="AppIcon_Tapped"
-                                           AutomationProperties.Name="{Binding Name}">
+                                    <!-- A button rather than just a picture, so the keyboard and screen readers can reach it too:
+                                         Space mutes, Shift+F10 or the Menu key renames -->
+                                    <Button Grid.Row="1" Grid.Column="1"
+                                            Background="Transparent" BorderThickness="0"
+                                            Padding="0" MinWidth="0" MinHeight="0"
+                                            VerticalAlignment="Center"
+                                            Click="AppIcon_Click"
+                                            AutomationProperties.Name="{Binding MuteButtonLabel}">
+                                        <Image Source="{Binding AppIcon}" Width="20" Height="20" Stretch="Uniform"/>
                                         <ToolTipService.ToolTip>
                                             <ToolTip>
                                                 <StackPanel>
@@ -526,7 +530,7 @@
                                             </ToolTip>
                                         </ToolTipService.ToolTip>
                                         <!-- Rename from here too, so it still works when names only show on hover -->
-                                        <Image.ContextFlyout>
+                                        <Button.ContextFlyout>
                                             <Flyout Opening="RenameFlyout_Opening" Opened="RenameFlyout_Opened" Closed="RenameFlyout_Closed">
                                                 <StackPanel Spacing="6" Width="220">
                                                     <TextBlock Text="Rename" Style="{StaticResource SettingsTitleStyle}"/>
@@ -534,15 +538,15 @@
                                                              AutomationProperties.Name="App name"/>
                                                 </StackPanel>
                                             </Flyout>
-                                        </Image.ContextFlyout>
-                                    </Image>
+                                        </Button.ContextFlyout>
+                                    </Button>
 
                                     <!-- Negative top/bottom margin trims the slider's built-in padding so the row stays short -->
                                     <Slider Grid.Row="1" Grid.Column="2"
                                             Minimum="0"
                                             Maximum="100"
                                             Value="{Binding VolumePercentage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                            AutomationProperties.Name="{Binding Name}"
+                                            AutomationProperties.Name="{Binding SliderLabel}"
                                             VerticalAlignment="Center"
                                             Margin="10,-4,10,-4"/>
 
@@ -618,6 +622,7 @@
                                 Value="{x:Bind ViewModel.CurrentSongPositionSeconds, Mode=TwoWay}"
                                 ThumbToolTipValueConverter="{StaticResource TimeSpanConverter}"
                                 AutomationProperties.Name="Song position"
+                                IsEnabled="{x:Bind ViewModel.CanSeek, Mode=OneWay}"
                                 PointerCaptureLost="SongPositionSlider_PointerCaptureLost"
                                 VerticalAlignment="Center" />
 
@@ -1079,7 +1084,7 @@
                                     <TextBlock Text="{x:Bind ViewModel.CurrentSongTitle, Mode=OneWay}" FontSize="12"
                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                                     <TextBlock Text="{x:Bind ViewModel.CurrentSongArtist, Mode=OneWay}" FontSize="11"
-                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                                 </StackPanel>
                             </Grid>
                         </Button>
@@ -1570,11 +1575,12 @@
             <!-- Footer (hidden while Settings is open: the About card shows the version there, and this would sit over the cards) -->
             <StackPanel x:Name="FooterPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,5" Spacing="8">
                 <!-- App Version (Global) - click to open this version's release notes.
-                     Just the number in a quiet colour, so it stays out of the way and clears the media buttons on narrow windows. -->
+                     Just the number, small, so it stays out of the way and clears the media buttons on narrow windows.
+                     Secondary rather than tertiary grey: the paler one is too faint to read at this size in light mode. -->
                 <HyperlinkButton Content="{x:Bind ViewModel.AppVersionShortText, Mode=OneWay}"
-                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                  AutomationProperties.Name="{x:Bind ViewModel.AppVersionText, Mode=OneWay}"
-                                 FontSize="10"
+                                 FontSize="11"
                                  Padding="4,2"
                                  MinHeight="0" MinWidth="0"
                                  VerticalAlignment="Center"

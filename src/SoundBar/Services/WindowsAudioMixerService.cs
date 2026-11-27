@@ -16,6 +16,11 @@ namespace SoundBar.Services
     {
         private readonly ConcurrentDictionary<int, (string DisplayName, string RawProcessName, bool IsBackground, string? IconPath, DateTime LastChecked)> _processCache = new();
 
+        // Volume and mute changes for each app (and the master volume) go to Windows in the order they were made,
+        // so an older value can't land after a newer one during a fast slider drag
+        private readonly Helpers.KeyedSerialQueue _writes = new();
+        private const string MasterVolumeKey = "\0master";
+
         // Device names barely ever change, and reading them means opening each device's property store,
         // so we remember them instead of asking every second. The refresh button clears this.
         private readonly ConcurrentDictionary<string, string> _deviceNameCache = new();
@@ -330,7 +335,7 @@ namespace SoundBar.Services
 
         public void SetMasterVolume(float level)
         {
-            Task.Run(() =>
+            _writes.Enqueue(MasterVolumeKey, () =>
             {
                 try
                 {
@@ -599,7 +604,7 @@ namespace SoundBar.Services
 
         private void PerformActionOnSession(string targetProcessName, Action<SimpleAudioVolume> action)
         {
-            Task.Run(() =>
+            _writes.Enqueue(targetProcessName, () =>
             {
                 try
                 {

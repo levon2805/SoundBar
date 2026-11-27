@@ -24,16 +24,11 @@ namespace SoundBar
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            // Check if we are the main instance
-            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("SoundBarApp");
-            
+            // Program.Main has already handed any second launch over to the running copy, so this is normally us.
+            // If another copy registered in the moment since, just close rather than open a second window.
+            var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey(Program.InstanceKey);
             if (!mainInstance.IsCurrent)
             {
-                // We are a secondary instance! Send our launch args to the main instance
-                var currentArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
-                mainInstance.RedirectActivationToAsync(currentArgs).AsTask().GetAwaiter().GetResult();
-                
-                // Terminate this duplicate instance
                 System.Environment.Exit(0);
                 return;
             }

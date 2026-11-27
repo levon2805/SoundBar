@@ -1222,6 +1222,8 @@ namespace SoundBar.ViewModels
 
         // Master Volume Property
         private float _masterVolume;
+        private readonly object _masterVolumeSendLock = new();
+
         public float MasterVolume
         {
             get => _masterVolume;
@@ -1249,9 +1251,14 @@ namespace SoundBar.ViewModels
                         try
                         {
                             await System.Threading.Tasks.Task.Delay(50, token);
-                            if (!token.IsCancellationRequested)
+
+                            // Checked and sent together, so an older volume can't be sent after a newer one
+                            lock (_masterVolumeSendLock)
                             {
-                                _audioService.SetMasterVolume(capturedVolume);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    _audioService.SetMasterVolume(capturedVolume);
+                                }
                             }
                         }
                         catch (System.Threading.Tasks.TaskCanceledException) { }
@@ -1469,13 +1476,10 @@ namespace SoundBar.ViewModels
 
         private void HotkeyService_KeyPressed(object? sender, HotkeyEventArgs e)
         {
-            // The keyboard hook calls us on the UI thread, once for every key pressed anywhere in Windows.
-            // Handling it right here (rather than queueing it for later) is what lets e.Handled actually
-            // stop the hotkey reaching the app you're in, and keeps ordinary typing cheap.
-            if (_dispatcherQueue == null || _dispatcherQueue.HasThreadAccess)
-                HandleHotkey(e);
-            else
-                RunOnUIThread(() => HandleHotkey(e));
+            // Called on the keyboard hook's own thread, once for every key pressed anywhere in Windows.
+            // Decide here, straight away, whether the key is ours (that's what lets e.Handled stop it reaching
+            // the app you're in), but leave the actual change to the window's thread.
+            HandleHotkey(e);
         }
 
         private void HandleHotkey(HotkeyEventArgs e)
@@ -1485,7 +1489,7 @@ namespace SoundBar.ViewModels
             if (IsRecordingHotkey)
             {
                 // Deliberately not marked as handled, so Escape still closes the recording dialog
-                RecordedHotkeyString = pressedString;
+                RunOnUIThread(() => RecordedHotkeyString = pressedString);
                 return;
             }
 
@@ -1494,7 +1498,7 @@ namespace SoundBar.ViewModels
 
             if (pressedString == InputMuteHotkey)
             {
-                ToggleInputMute();
+                RunOnUIThread(ToggleInputMute);
                 e.Handled = true;
                 return;
             }
@@ -1518,22 +1522,28 @@ namespace SoundBar.ViewModels
             }
             catch { }
 
-            foreach (var activeApp in Apps)
+            // The snapshot is a plain copy of the list, so it's safe to read from this thread
+            var matches = AppsSnapshot.Where(app => BelongsToProcess(app, activePid, activeName)).ToArray();
+            if (matches.Length == 0)
             {
-                if (!BelongsToProcess(activeApp, activePid, activeName)) continue;
-
-                if (isVolumeUp)
-                    activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
-                else if (isVolumeDown)
-                    activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
-                else
-                    activeApp.IsMuted = !activeApp.IsMuted;
-
-                e.Handled = true;
+                // The app may have only just started playing, so check now rather than waiting for the next look
+                WakePolling();
+                return;
             }
 
-            // The app may have only just started playing, so check now rather than waiting for the next look
-            if (!e.Handled) WakePolling();
+            e.Handled = true;
+            RunOnUIThread(() =>
+            {
+                foreach (var activeApp in matches)
+                {
+                    if (isVolumeUp)
+                        activeApp.VolumePercentage = Math.Min(100, activeApp.VolumePercentage + 5);
+                    else if (isVolumeDown)
+                        activeApp.VolumePercentage = Math.Max(0, activeApp.VolumePercentage - 5);
+                    else
+                        activeApp.IsMuted = !activeApp.IsMuted;
+                }
+            });
         }
 
         private string ParseHotkeyToString(Windows.System.VirtualKey key, HotkeyModifiers modifiers)
@@ -1613,7 +1623,8 @@ namespace SoundBar.ViewModels
             }
         }
 
-        private bool _isRecordingHotkey;
+        // Read by the keyboard hook's thread too
+        private volatile bool _isRecordingHotkey;
         public bool IsRecordingHotkey
         {
             get => _isRecordingHotkey;
@@ -2179,6 +2190,7 @@ namespace SoundBar.ViewModels
                 appToRemove.AliasChanged -= HandleAliasChanged;
                 Apps.Remove(appToRemove);
                 appToRemove.Dispose();
+                AppsSnapshot = Apps.ToArray(); // So the hotkeys stop acting on it straight away
             }
         }
 
@@ -2451,6 +2463,11 @@ namespace SoundBar.ViewModels
             }
         }
 
+        /// <summary>
+        /// Whether the song position bar can be moved. Live streams report no length, so there's nowhere to move to.
+        /// </summary>
+        public bool CanSeek => _currentSongDurationSeconds > 0;
+
         private double _currentSongDurationSeconds = 1;
         public double CurrentSongDurationSeconds
         {
@@ -2461,6 +2478,7 @@ namespace SoundBar.ViewModels
                 {
                     _currentSongDurationSeconds = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(CanSeek));
                     CurrentSongDurationText = Helpers.TimeSpanConverter.Format(value);
                 }
             }
@@ -2574,6 +2592,15 @@ namespace SoundBar.ViewModels
         // Bumped on every media change, so a slow artwork load can't overwrite a newer song's art
         private int _thumbnailVersion;
         private byte[]? _currentThumbnailBytes;
+
+        /// <summary>Plays or pauses the player shown in the music player (or the media key, if there's none).</summary>
+        public void MediaPlayPause() => _ = _mediaInfoService.PlayPauseAsync();
+
+        /// <summary>Next track in the player shown in the music player.</summary>
+        public void MediaNext() => _ = _mediaInfoService.NextAsync();
+
+        /// <summary>Previous track in the player shown in the music player.</summary>
+        public void MediaPrevious() => _ = _mediaInfoService.PreviousAsync();
 
         private void MediaInfoService_MediaInfoChanged(object? sender, MediaInfoEventArgs e)
         {

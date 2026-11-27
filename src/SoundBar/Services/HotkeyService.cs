@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Runtime.InteropServices;
 using Windows.System;
 
@@ -74,22 +75,60 @@ namespace SoundBar.Services
 
     /// <summary>
     /// Implements a global low-level keyboard hook to listen for hotkeys even when the app is in the background.
+    /// The hook runs on its own thread. Windows gives a hook about a second to answer each key press, and quietly
+    /// removes one that keeps missing it. On the window's thread, anything that kept the window busy for a moment
+    /// (a big redraw, waking from sleep) could do that, and every hotkey stopped until SoundBar was restarted.
     /// </summary>
+    /// <remarks>
+    /// <see cref="KeyPressed"/> is raised on that thread, once for every key pressed anywhere in Windows. Handlers
+    /// must be quick and must not touch anything on screen: hand any real work to the window's thread.
+    /// </remarks>
     public class HotkeyService : IDisposable
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_SYSKEYDOWN = 0x0104;
+        private const uint WM_QUIT = 0x0012;
 
         private LowLevelKeyboardProc _proc;
         private IntPtr _hookID = IntPtr.Zero;
+        private readonly Thread _thread;
+        private uint _threadId;
 
         public event EventHandler<HotkeyEventArgs>? KeyPressed;
 
         public HotkeyService()
         {
             _proc = HookCallback;
-            _hookID = SetHook(_proc);
+
+            // Not disposed: if the thread is slow to start, it still signals this after we've stopped waiting
+            var ready = new ManualResetEventSlim();
+            _thread = new Thread(() =>
+            {
+                _threadId = GetCurrentThreadId();
+                _hookID = SetHook(_proc);
+                ready.Set();
+
+                // A hook only gets called while its thread is waiting for messages
+                while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
+                {
+                    TranslateMessage(ref msg);
+                    DispatchMessage(ref msg);
+                }
+
+                if (_hookID != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(_hookID);
+                    _hookID = IntPtr.Zero;
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "SoundBar keyboard hook",
+                Priority = ThreadPriority.AboveNormal // Answer key presses promptly, even when the PC is busy
+            };
+            _thread.Start();
+            ready.Wait(TimeSpan.FromSeconds(5));
         }
 
         private IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -191,11 +230,12 @@ namespace SoundBar.Services
 
         public void Dispose()
         {
-            if (_hookID != IntPtr.Zero)
+            // Ask the hook's thread to stop; it removes the hook on its way out
+            if (_threadId != 0 && PostThreadMessage(_threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero))
             {
-                UnhookWindowsHookEx(_hookID);
-                _hookID = IntPtr.Zero;
+                _thread.Join(TimeSpan.FromSeconds(2));
             }
+            _threadId = 0;
             GC.KeepAlive(_proc);
         }
 
@@ -216,6 +256,33 @@ namespace SoundBar.Services
 
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSG
+        {
+            public IntPtr hwnd;
+            public uint message;
+            public IntPtr wParam;
+            public IntPtr lParam;
+            public uint time;
+            public int ptX;
+            public int ptY;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetMessage(out MSG msg, IntPtr hWnd, uint filterMin, uint filterMax);
+
+        [DllImport("user32.dll")]
+        private static extern bool TranslateMessage(ref MSG msg);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr DispatchMessage(ref MSG msg);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();

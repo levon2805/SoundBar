@@ -42,6 +42,32 @@ namespace SoundBar.Services
             public SemaphoreSlim SendLock { get; } = new(1, 1);
         }
         private readonly ConcurrentDictionary<string, bool> _pairedClients = new();
+
+        /// <summary>
+        /// A random key the album art and app icon addresses must carry. It's only ever sent to paired phones
+        /// (inside the addresses in the state they're sent), so someone else on the same Wi-Fi can't fetch the
+        /// cover of whatever you're playing just by asking. A new one is made each time the server starts.
+        /// </summary>
+        private string _mediaKey = NewMediaKey();
+
+        private static string NewMediaKey() => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+
+        /// <summary>
+        /// Whether a request for album art or an app icon carried the right key. Compared in constant time,
+        /// so the key can't be worked out a character at a time from how long the answer takes.
+        /// </summary>
+        internal static bool HasMediaKey(string? given, string expected)
+        {
+            if (string.IsNullOrEmpty(given) || string.IsNullOrEmpty(expected)) return false;
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
+        }
+
+        /// <summary>The album art address for a phone, with the key it needs.</summary>
+        internal static string MakeAlbumArtUrl(string artId, string key) => $"/api/albumart?id={artId}&k={key}";
+
+        /// <summary>An app icon's address for a phone, with the key it needs.</summary>
+        internal static string MakeIconUrl(string iconPath, string key) => $"/api/icon?path={Uri.EscapeDataString(iconPath)}&k={key}";
         private readonly PairingAttemptTracker _pairingAttempts = new();
 
         private readonly IAudioMixerService _audioService;
@@ -142,6 +168,7 @@ namespace SoundBar.Services
 
             // Generate a fresh four-digit pairing code
             PairingCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000, 10000).ToString();
+            _mediaKey = NewMediaKey();
             _cts = new CancellationTokenSource();
 
             try
@@ -520,6 +547,14 @@ namespace SoundBar.Services
                     return;
                 }
 
+                // Pictures of what's playing and which apps are open are only for paired phones
+                if ((path == "/api/albumart" || path == "/api/icon") && !HasMediaKey(context.Request.QueryString["k"], _mediaKey))
+                {
+                    context.Response.StatusCode = 403;
+                    context.Response.Close();
+                    return;
+                }
+
                 if (path == "/api/albumart")
                 {
                     // If the song changed since the phone asked, it gets the new artwork, which it's about to ask for anyway
@@ -838,15 +873,15 @@ namespace SoundBar.Services
                         break;
 
                     case "mediaPlayPause":
-                        MediaHelper.PlayPause();
+                        _ = _mediaInfoService.PlayPauseAsync();
                         break;
 
                     case "mediaNext":
-                        MediaHelper.NextTrack();
+                        _ = _mediaInfoService.NextAsync();
                         break;
 
                     case "mediaPrevious":
-                        MediaHelper.PreviousTrack();
+                        _ = _mediaInfoService.PreviousAsync();
                         break;
 
                     case "mediaSeek":
@@ -946,7 +981,7 @@ namespace SoundBar.Services
                         RawProcessName = app.RawProcessName ?? "",
                         Volume = app.VolumePercentage,
                         IsMuted = app.IsMuted,
-                        IconUrl = !string.IsNullOrEmpty(app.IconPath) ? $"/api/icon?path={Uri.EscapeDataString(app.IconPath)}" : null
+                        IconUrl = !string.IsNullOrEmpty(app.IconPath) ? MakeIconUrl(app.IconPath, _mediaKey) : null
                     });
                 }
             }
@@ -968,7 +1003,7 @@ namespace SoundBar.Services
                 {
                     Title = _currentTitle,
                     Artist = _currentArtist,
-                    AlbumArtUrl = art != null ? $"/api/albumart?id={art.Id}" : null,
+                    AlbumArtUrl = art != null ? MakeAlbumArtUrl(art.Id, _mediaKey) : null,
                     PositionSeconds = livePosition,
                     DurationSeconds = _currentDurationSeconds,
                     IsPlaying = _currentIsPlaying
